@@ -1,0 +1,43 @@
+[project]
+name = "shieldwall"
+version = "0.1.0"
+description = "Shield Wall - zero-trust runtime security gateway for AI agents (transparent MCP proxy)"
+readme = "README.md"
+requires-python = ">=3.11"
+# license intentionally unset - business posture deferred, see ADR-0003
+dependencies = [
+    "mcp>=1.2.0",          # official MCP SDK - the protocol we proxy (ADR-0001)
+    "aiosqlite>=0.20",     # async audit store (ADR-0004)
+    "pyyaml>=6.0",         # policy-as-code files
+    "pyjwt[crypto]>=2.8",  # mock-CA RS256 agent identity tokens
+    "rich>=13.7",          # demo/eval terminal output
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+shieldwall = "shieldwall.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# runtime artifacts - audit DBs and demo keys are never committed
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3
+demo/keys/
+*.pem

@@ -1,0 +1,41 @@
+# Shield Wall policy - one gateway instance fronting one agent (stdio mode).
+# Policy-as-code: this file is the single source of authorization truth.
+
+gateway:
+  agent_id: support-agent-7f3a
+  organization_id: demo-company
+  role: customer-support
+  declared_goal: resolve customer support tickets
+  db_path: shieldwall_events.db
+
+roles:
+  customer-support:
+    allowed_tools:
+      - read_faq
+      - search_kb
+      - read_customer_order
+      - read_file
+    forbidden_tools:
+      - access_payroll
+      - read_database
+      - execute_code
+      - delete_record
+
+# Trust label tunes inspection depth, never disables it (THREAT_MODEL.md).
+upstream:
+  trust: untrusted
+
+# Layer-zero deterministic patterns. Known to be bypassable by encoding or
+# paraphrase - the eval corpus measures that honestly. Smarter detection is M3.
+injection_patterns:
+  - ignore previous instructions
+  - ignore all previous
+  - system override
+  - you are now
+  - forget your instructions
+  - "new instructions:"
+  - disregard your
+  - your true purpose is
+  - output all credentials
+  - reveal your system prompt
+  - act as if you are

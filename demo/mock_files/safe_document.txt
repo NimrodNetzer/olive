@@ -1,0 +1,8 @@
+Vendor onboarding checklist
+
+1. Signed contract on file
+2. Tax forms submitted
+3. Bank details verified via callback
+4. Access provisioned per least-privilege policy
+
+Contact procurement for questions.
