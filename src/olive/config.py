@@ -13,8 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from shieldwall.gateway.context import TrustLevel
-from shieldwall.inspectors.policy import RolePolicy
+from olive.gateway.context import TrustLevel
+from olive.inspectors.policy import RolePolicy
 
 
 class ConfigError(Exception):
@@ -65,7 +65,7 @@ def load_config(path: str | Path) -> GatewayConfig:
         organization_id=gateway.get("organization_id", "default-org"),
         role=role,
         declared_goal=gateway.get("declared_goal", ""),
-        db_path=gateway.get("db_path", "shieldwall_events.db"),
+        db_path=gateway.get("db_path", "olive_events.db"),
         upstream_trust=trust,
         roles=roles,
         injection_patterns=list(raw.get("injection_patterns", [])),

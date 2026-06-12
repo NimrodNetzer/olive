@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from shieldwall.gateway.context import Direction, SecurityContext
-from shieldwall.gateway.pipeline import ALLOW, Decision, Verdict
+from olive.gateway.context import Direction, SecurityContext
+from olive.gateway.pipeline import ALLOW, Decision, Verdict
 
 
 @dataclass(frozen=True, slots=True)

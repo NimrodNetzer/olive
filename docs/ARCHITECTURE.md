@@ -1,12 +1,12 @@
 # Architecture
 
-Shield Wall is a **transparent MCP proxy**. To the agent's MCP client it looks
+Olive is a **transparent MCP proxy**. To the agent's MCP client it looks
 like a normal MCP server; to the real tool server it looks like a normal MCP
 client. Everything that crosses it is inspected in both directions.
 
 ```
                         ┌──────────────────────────────────────────────┐
-                        │                SHIELD WALL                   │
+                        │                OLIVE                   │
   ┌──────────┐  MCP     │  ┌──────────────────────────────┐    MCP     │  ┌────────────┐
   │  Agent   │ ───────► │  │     FAST PATH (inline)       │  ────────► │  │  Upstream  │
   │ (client) │          │  │  SecurityContext per call    │            │  │ MCP server │
@@ -34,7 +34,7 @@ only signal the circuit breaker, which applies deterministic quarantine.
 
 ## Components
 
-### Gateway proxy — `src/shieldwall/gateway/proxy.py`
+### Gateway proxy — `src/olive/gateway/proxy.py`
 - Presents an MCP server (stdio transport first; streamable HTTP in M2).
 - Holds an MCP `ClientSession` to the upstream server (spawned subprocess).
 - Forwards `initialize`, `tools/list`, `tools/call`.
@@ -50,7 +50,7 @@ only signal the circuit breaker, which applies deterministic quarantine.
 - `tools/list` responses are also recorded; description-poisoning inspection
   is roadmapped (M4 corpus category exists from day one).
 
-### SecurityContext — `src/shieldwall/gateway/context.py`
+### SecurityContext — `src/olive/gateway/context.py`
 One frozen object per inspected message. Fields: `agent_id`, `session_id`,
 `role`, `declared_goal`, `tool`, `arguments_hash` (SHA-256, never raw),
 `direction` (`outbound`/`inbound`), `call_number`, `session_tool_history`,
@@ -58,7 +58,7 @@ One frozen object per inspected message. Fields: `agent_id`, `session_id`,
 whole system reasons about — "can *this* agent use *this* tool at *this*
 point in the session", not just "is the tool allowlisted".
 
-### Inspector pipeline — `src/shieldwall/gateway/pipeline.py`
+### Inspector pipeline — `src/olive/gateway/pipeline.py`
 - `Inspector` protocol: `async inspect(ctx, content) -> Verdict`.
 - `Verdict(decision, rule, evidence, confidence)`;
   decisions: `allow | block | hold | quarantine`.
@@ -68,7 +68,7 @@ point in the session", not just "is the tool allowlisted".
   recorded as evidence.
 - Inspectors are pure plugins; adding one never requires touching the proxy.
 
-### Inspectors — `src/shieldwall/inspectors/`
+### Inspectors — `src/olive/inspectors/`
 - `policy.py` (outbound): allowed/forbidden tool check per role from
   `policies/*.yaml`. Unknown tools are blocked (default deny).
 - `patterns.py` (inbound): deterministic injection-phrase matching,
@@ -83,14 +83,14 @@ policy. Labels tune inspection *depth*, never disable it (threat model rule 1):
 untrusted sources always get full content inspection; trusted sources still
 get layer-zero checks.
 
-### Identity — `src/shieldwall/identity/tokens.py`
+### Identity — `src/olive/identity/tokens.py`
 Mock CA: local RSA keypair, real JWT signing/verification (RS256). Payload:
 agent_id, org, role, session_id, capabilities, expiry. In stdio mode (M1) the
 gateway is configured per-agent via policy file; cryptographic enforcement on
 the wire lands with HTTP transport (M2). The module is real and unit-tested
 from day one so the enforcement wiring is a transport change, not a redesign.
 
-### Event store — `src/shieldwall/store/events.py`
+### Event store — `src/olive/store/events.py`
 SQLite via `aiosqlite` (ADR-0004), behind a small interface so it can be
 swapped later.
 
@@ -114,14 +114,14 @@ CREATE TABLE incidents (
 
 Raw payloads are never stored — hashes + bounded evidence excerpts only.
 
-### Circuit breaker (M2) — `src/shieldwall/gateway/breaker.py`
+### Circuit breaker (M2) — `src/olive/gateway/breaker.py`
 In-memory session blocklist checked before any pipeline work; trip on
 sentinel signal or repeated blocks; reversible human release. Quarantined
 sessions get `quarantined` responses to every call.
 
 ## Layering rule (keeps the business split clean — ADR-0003)
 
-`src/shieldwall/` (gateway core) must never import from intelligence/fleet
+`src/olive/` (gateway core) must never import from intelligence/fleet
 layers. Telemetry flows out through a queue; quarantine signals flow back in
 through the circuit breaker's narrow interface. That seam is the potential
 open-core boundary.

@@ -4,7 +4,7 @@ description: Verifies test coverage and end-to-end behavior before a milestone o
 tools: Read, Grep, Glob, Bash
 ---
 
-You are the QA lead for Shield Wall.
+You are the QA lead for Olive.
 
 Checklist, executed not assumed:
 1. Run `pytest` — full suite. Report failures verbatim.

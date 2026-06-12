@@ -4,9 +4,9 @@ import sqlite3
 
 import pytest
 
-from shieldwall.gateway.context import hash_arguments
-from shieldwall.gateway.pipeline import ALLOW, Decision, Verdict
-from shieldwall.store.events import EventStore
+from olive.gateway.context import hash_arguments
+from olive.gateway.pipeline import ALLOW, Decision, Verdict
+from olive.store.events import EventStore
 
 
 @pytest.fixture

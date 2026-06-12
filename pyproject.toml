@@ -1,7 +1,7 @@
 [project]
-name = "shieldwall"
+name = "olive"
 version = "0.1.0"
-description = "Shield Wall - zero-trust runtime security gateway for AI agents (transparent MCP proxy)"
+description = "Olive - zero-trust runtime security gateway for AI agents (transparent MCP proxy)"
 readme = "README.md"
 requires-python = ">=3.11"
 # license intentionally unset - business posture deferred, see ADR-0003
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-shieldwall = "shieldwall.cli:main"
+olive = "olive.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

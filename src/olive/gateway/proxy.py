@@ -1,4 +1,4 @@
-"""The Shield Wall gateway - a transparent, bidirectional MCP proxy.
+"""The Olive gateway - a transparent, bidirectional MCP proxy.
 
 Presents an MCP server to the agent's client; holds an MCP ClientSession to
 the real upstream tool server. Every tools/call is inspected outbound before
@@ -28,10 +28,10 @@ import mcp.types as types
 from mcp.client.session import ClientSession
 from mcp.server.lowlevel import Server
 
-from shieldwall.config import GatewayConfig
-from shieldwall.gateway.context import Direction, SecurityContext, hash_arguments
-from shieldwall.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
-from shieldwall.store.events import EventStore
+from olive.config import GatewayConfig
+from olive.gateway.context import Direction, SecurityContext, hash_arguments
+from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
+from olive.store.events import EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
     "policy.": "privilege-escalation",
@@ -81,7 +81,7 @@ def _blocked_result(
 ) -> types.CallToolResult:
     # Sanitized on purpose: rule + incident id only, never evidence.
     message = (
-        f"[Shield Wall] {direction} message blocked by rule '{verdict.rule}'. "
+        f"[Olive] {direction} message blocked by rule '{verdict.rule}'. "
         f"Incident {incident_id} has been logged."
     )
     return types.CallToolResult(
@@ -90,7 +90,7 @@ def _blocked_result(
     )
 
 
-class ShieldWallGateway:
+class OliveGateway:
     def __init__(
         self, config: GatewayConfig, store: EventStore, pipeline: InspectorPipeline
     ) -> None:
@@ -186,7 +186,7 @@ class ShieldWallGateway:
         return result
 
     def build_server(self, upstream: ClientSession) -> Server:
-        server: Server = Server("shieldwall")
+        server: Server = Server("olive")
 
         @server.list_tools()
         async def list_tools() -> list[types.Tool]:

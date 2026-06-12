@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from shieldwall.config import ConfigError, load_config
+from olive.config import ConfigError, load_config
 
 ROOT = Path(__file__).parent.parent
 

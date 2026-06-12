@@ -5,7 +5,7 @@ from datetime import timedelta
 import jwt as pyjwt
 import pytest
 
-from shieldwall.identity.tokens import IdentityError, MockCA, verify_token
+from olive.identity.tokens import IdentityError, MockCA, verify_token
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +46,7 @@ def test_wrong_key_rejected(ca):
 
 def test_unsigned_token_rejected(ca):
     forged = pyjwt.encode(
-        {"sub": "support-agent", "aud": "shieldwall-gateway"}, key="", algorithm="none"
+        {"sub": "support-agent", "aud": "olive-gateway"}, key="", algorithm="none"
     )
     with pytest.raises(IdentityError):
         verify_token(forged, ca.public_key_pem())

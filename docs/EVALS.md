@@ -1,6 +1,6 @@
 # Evaluation Strategy
 
-A security product without numbers is marketing. Shield Wall's detection is
+A security product without numbers is marketing. Olive's detection is
 **measured, continuously, against a maintained attack corpus** — and the
 corpus itself is a long-term moat: it grows with every incident and every
 red-team bypass, and competitors can't copy operational history.

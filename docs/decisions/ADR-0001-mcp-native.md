@@ -10,7 +10,7 @@ agent↔tool protocol, and a gateway is only credible if a real client (Claude
 Code, Cursor, any MCP host) can be pointed at it unchanged.
 
 ## Decision
-Shield Wall is a transparent MCP proxy built on the official `mcp` Python SDK.
+Olive is a transparent MCP proxy built on the official `mcp` Python SDK.
 It presents an MCP server to the client and acts as an MCP client to the
 upstream. No custom tool-call protocol, ever. stdio transport first;
 streamable HTTP in M2.

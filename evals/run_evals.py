@@ -1,4 +1,4 @@
-"""Eval runner - measures Shield Wall's detection honestly.
+"""Eval runner - measures Olive's detection honestly.
 
 Runs every corpus case through the REAL inspector pipeline (assembled by the
 same function the gateway uses - no eval-only shortcuts) and reports
@@ -22,9 +22,9 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from shieldwall.cli import build_pipeline
-from shieldwall.config import load_config
-from shieldwall.gateway.context import SecurityContext, hash_arguments
+from olive.cli import build_pipeline
+from olive.config import load_config
+from olive.gateway.context import SecurityContext, hash_arguments
 
 ROOT = Path(__file__).parent.parent
 CORPUS = Path(__file__).parent / "corpus"
@@ -80,7 +80,7 @@ async def run() -> int:
     for r in results:
         by_category[r.case["category"]].append(r)
 
-    table = Table(title="Shield Wall detection evals", header_style="bold")
+    table = Table(title="Olive detection evals", header_style="bold")
     for col in ("category", "cases", "as expected", "known misses", "regressions"):
         table.add_column(col, justify="right")
     table.columns[0].justify = "left"

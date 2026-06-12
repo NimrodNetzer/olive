@@ -1,4 +1,4 @@
-# Shield Wall policy - one gateway instance fronting one agent (stdio mode).
+# Olive policy - one gateway instance fronting one agent (stdio mode).
 # Policy-as-code: this file is the single source of authorization truth.
 
 gateway:
@@ -6,7 +6,7 @@ gateway:
   organization_id: demo-company
   role: customer-support
   declared_goal: resolve customer support tickets
-  db_path: shieldwall_events.db
+  db_path: olive_events.db
 
 roles:
   customer-support:

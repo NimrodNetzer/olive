@@ -1,6 +1,6 @@
-"""Shield Wall CLI.
+"""Olive CLI.
 
-    shieldwall run --config policies/default.yaml -- python demo/tools_server.py
+    olive run --config policies/default.yaml -- python demo/tools_server.py
 
 Spawns the upstream MCP server as a subprocess, then serves MCP over stdio
 to whatever client launched us. stdout is the protocol channel - all
@@ -17,12 +17,12 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server.stdio import stdio_server
 
-from shieldwall.config import GatewayConfig, load_config
-from shieldwall.gateway.pipeline import InspectorPipeline
-from shieldwall.gateway.proxy import ShieldWallGateway
-from shieldwall.inspectors.patterns import PatternInspector
-from shieldwall.inspectors.policy import PolicyInspector
-from shieldwall.store.events import EventStore
+from olive.config import GatewayConfig, load_config
+from olive.gateway.pipeline import InspectorPipeline
+from olive.gateway.proxy import OliveGateway
+from olive.inspectors.patterns import PatternInspector
+from olive.inspectors.policy import PolicyInspector
+from olive.store.events import EventStore
 
 
 def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
@@ -45,9 +45,9 @@ async def run_gateway(
     store = EventStore(db_path)
     await store.open()
     try:
-        gateway = ShieldWallGateway(config, store, build_pipeline(config))
+        gateway = OliveGateway(config, store, build_pipeline(config))
         print(
-            f"[shieldwall] session {gateway.session_id} | agent {config.agent_id} "
+            f"[olive] session {gateway.session_id} | agent {config.agent_id} "
             f"| role {config.role} | upstream trust: {config.upstream_trust}",
             file=sys.stderr,
         )
@@ -64,7 +64,7 @@ async def run_gateway(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="shieldwall")
+    parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
 
     run = sub.add_parser("run", help="run the gateway in front of an upstream MCP server")
@@ -81,7 +81,7 @@ def main() -> None:
     if not upstream:
         parser.error(
             "missing upstream server command,"
-            " e.g.: shieldwall run --config p.yaml -- python server.py"
+            " e.g.: olive run --config p.yaml -- python server.py"
         )
 
     asyncio.run(run_gateway(args.config, upstream, args.db))

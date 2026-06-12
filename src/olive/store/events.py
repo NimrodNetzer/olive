@@ -16,8 +16,8 @@ from pathlib import Path
 
 import aiosqlite
 
-from shieldwall.gateway.context import SecurityContext
-from shieldwall.gateway.pipeline import Verdict
+from olive.gateway.context import SecurityContext
+from olive.gateway.pipeline import Verdict
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from shieldwall.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict, bound_evidence
+from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict, bound_evidence
 
 
 class AllowAll:

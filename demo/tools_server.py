@@ -1,4 +1,4 @@
-"""Demo MCP tool server - the upstream Shield Wall protects.
+"""Demo MCP tool server - the upstream Olive protects.
 
 A real MCP server (FastMCP, stdio). Simulates an internal tool surface:
 FAQ, knowledge base, orders, payroll, and file reads - including a poisoned

@@ -1,5 +1,5 @@
 """Walking-skeleton demo: a real MCP client talking to real tools THROUGH
-Shield Wall.
+Olive.
 
 Spawns the gateway (which spawns the demo tool server), then drives an MCP
 client through three flows:
@@ -51,14 +51,14 @@ async def run() -> None:
     if DB_PATH.exists():
         DB_PATH.unlink()
 
-    console.rule("[bold]SHIELD WALL - walking skeleton demo")
+    console.rule("[bold]OLIVE - walking skeleton demo")
     console.print("Gateway: real MCP proxy (stdio) | upstream: demo-tools server\n")
 
     params = StdioServerParameters(
         command=sys.executable,
         args=[
             "-m",
-            "shieldwall.cli",
+            "olive.cli",
             "run",
             "--config",
             str(CONFIG),

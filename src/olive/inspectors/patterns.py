@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from shieldwall.gateway.context import Direction, SecurityContext
-from shieldwall.gateway.pipeline import ALLOW, Decision, Verdict, bound_evidence
+from olive.gateway.context import Direction, SecurityContext
+from olive.gateway.pipeline import ALLOW, Decision, Verdict, bound_evidence
 
 
 def _normalize(text: str) -> str:

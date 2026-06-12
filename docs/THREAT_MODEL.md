@@ -22,7 +22,7 @@ this document, update the document first (via ADR if the change is structural).
 - All MCP `tools/call` arguments from the client (the agent may already be
   compromised).
 - **All tool results** — text, resource contents, structured content. This is
-  the highest-risk surface and the reason Shield Wall exists.
+  the highest-risk surface and the reason Olive exists.
 - **All MCP server metadata, including tool names and descriptions.** Tool
   descriptions are injected into the agent's context by every MCP client,
   which makes *tool-description poisoning* a first-class injection vector —

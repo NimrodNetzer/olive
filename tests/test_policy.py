@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from shieldwall.gateway.pipeline import Decision
-from shieldwall.inspectors.policy import PolicyInspector, RolePolicy
+from olive.gateway.pipeline import Decision
+from olive.inspectors.policy import PolicyInspector, RolePolicy
 
 ROLES = {
     "customer-support": RolePolicy(

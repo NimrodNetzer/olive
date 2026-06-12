@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from shieldwall.gateway.context import Direction, SecurityContext, hash_arguments
+from olive.gateway.context import Direction, SecurityContext, hash_arguments
 
 
 @pytest.fixture

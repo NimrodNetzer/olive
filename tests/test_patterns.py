@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shieldwall.inspectors.patterns import PatternInspector
+from olive.inspectors.patterns import PatternInspector
 
 PATTERNS = ["ignore previous instructions", "you are now"]
 

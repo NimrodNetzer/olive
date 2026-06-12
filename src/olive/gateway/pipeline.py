@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from shieldwall.gateway.context import Direction, SecurityContext
+from olive.gateway.context import Direction, SecurityContext
 
 EVIDENCE_LIMIT = 200
 

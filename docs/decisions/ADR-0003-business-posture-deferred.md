@@ -10,7 +10,7 @@ choose yet.
 
 ## Decision
 Defer the open vs. closed decision. Enforce one structural rule now so both
-options stay viable: **the gateway core (`src/shieldwall/`) never imports
+options stay viable: **the gateway core (`src/olive/`) never imports
 from intelligence/fleet layers.** Telemetry leaves through a queue;
 quarantine signals return through the circuit breaker's narrow interface.
 That seam is the potential open-core boundary.

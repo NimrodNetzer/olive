@@ -1,6 +1,6 @@
-# Shield Wall
+# Olive
 
-Zero-trust runtime security gateway for AI agents. Shield Wall is a transparent
+Zero-trust runtime security gateway for AI agents. Olive is a transparent
 MCP proxy that sits between an agent and its tools, inspects every tool call
 **and every tool response**, and blocks, holds, or quarantines malicious
 behavior — with every decision fully auditable. The product loop is:
@@ -16,12 +16,12 @@ docs/                  Vision, threat model, architecture, roadmap, evals strate
 docs/decisions/        ADRs — one per irreversible/architectural decision
 .claude/agents/        The agent company: architect, security-reviewer, red-team, qa
 policies/              Policy-as-code (roles, tool allowlists, trust labels, patterns)
-src/shieldwall/
+src/olive/
   gateway/             MCP proxy core: proxy, inspector pipeline, SecurityContext
   inspectors/          Pluggable inspectors (policy, patterns; LLM sentinels in M3)
   identity/            Agent identity tokens (mock CA JWT for now)
   store/               SQLite event + incident audit log
-  cli.py               `shieldwall` entry point
+  cli.py               `olive` entry point
 demo/                  Demo MCP tool server + scripted demo run (NOT the product)
 evals/                 Attack corpus + eval runner — detection is measured, not assumed
 tests/                 pytest unit + integration suites

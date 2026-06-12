@@ -1,17 +1,15 @@
-# Shield Wall
+# Olive
 
 **Zero-trust runtime security gateway for AI agents.**
 
-Shield Wall is a transparent [MCP](https://modelcontextprotocol.io) proxy that
+Olive is a transparent [MCP](https://modelcontextprotocol.io) proxy that
 sits between an AI agent and its tools. It inspects every tool call **and
 every tool response**, blocks unauthorized actions before they execute, stops
 prompt injections hidden in tool output before they ever reach the agent, and
 writes an auditable event for every decision.
 
-> Repo codename: `olive` · Product name: Shield Wall
-
 ```
-agent (any MCP client) ──► SHIELD WALL ──► real MCP tool server
+agent (any MCP client) ──► OLIVE ──► real MCP tool server
                             │  outbound: policy (default deny)
                             │  inbound:  content inspection
                             └─► SQLite audit trail (events + incidents)
@@ -32,7 +30,7 @@ python demo/run_demo.py
 python evals/run_evals.py
 
 # run the gateway yourself in front of any stdio MCP server
-shieldwall run --config policies/default.yaml -- python demo/tools_server.py
+olive run --config policies/default.yaml -- python demo/tools_server.py
 ```
 
 ## What the demo shows

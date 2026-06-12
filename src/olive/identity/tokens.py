@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 _ALGORITHM = "RS256"
-_AUDIENCE = "shieldwall-gateway"
+_AUDIENCE = "olive-gateway"
 
 
 class IdentityError(Exception):

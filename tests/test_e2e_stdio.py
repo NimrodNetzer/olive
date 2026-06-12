@@ -28,7 +28,7 @@ async def gateway_session(db_path: Path):
         command=sys.executable,
         args=[
             "-m",
-            "shieldwall.cli",
+            "olive.cli",
             "run",
             "--config",
             str(ROOT / "policies" / "default.yaml"),
@@ -66,7 +66,7 @@ async def test_walking_skeleton(tmp_path):
         payroll = await session.call_tool("access_payroll", {"scope": "all"})
         assert payroll.isError
         assert "PAYROLL" not in text_of(payroll)
-        assert "Shield Wall" in text_of(payroll)
+        assert "Olive" in text_of(payroll)
 
         # 3. poisoned document blocked inbound - injection never reaches client
         poisoned = await session.call_tool("read_file", {"name": "external_brief.txt"})

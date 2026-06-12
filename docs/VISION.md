@@ -24,7 +24,7 @@ By 2027:
 4. Compliance regimes (EU AI Act enforcement, SOC2-for-agents expectations)
    start demanding **auditable decision trails** for autonomous actions.
 
-Shield Wall is built so that when the market realizes it needs live protection
+Olive is built so that when the market realizes it needs live protection
 against agents, the solution already exists and speaks the native protocol.
 
 ## Competitive landscape — honest version
@@ -37,7 +37,7 @@ The space is real and already moving:
 - **Open-source MCP gateways exist** (multiple proxies/guardrail projects).
   A generic pattern-matching proxy is a *feature*, not a company.
 
-## Differentiation — where Shield Wall wins
+## Differentiation — where Olive wins
 
 1. **MCP-native, drop-in.** A transparent proxy: point any MCP client at it,
    zero changes to agent or tool server. Five minutes to protected.
@@ -74,6 +74,6 @@ to be revisited after the first external demos:
 - Competitor moves in the open-source MCP gateway space.
 
 **Structural rule that keeps both options alive:** the core gateway
-(`src/shieldwall/`) must never depend on the intelligence/fleet layers. The
+(`src/olive/`) must never depend on the intelligence/fleet layers. The
 split line — open gateway core vs. commercial intelligence, fleet management,
 incident workflow, compliance reporting — must always be a clean cut.
