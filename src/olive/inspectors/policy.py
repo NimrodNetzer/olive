@@ -17,6 +17,8 @@ from olive.gateway.pipeline import ALLOW, Decision, Verdict
 class RolePolicy:
     allowed_tools: frozenset[str] = field(default_factory=frozenset)
     forbidden_tools: frozenset[str] = field(default_factory=frozenset)
+    # None = unlimited. Enforced by the rate limiter, not this inspector.
+    max_calls_per_minute: int | None = None
 
 
 class PolicyInspector:

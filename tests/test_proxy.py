@@ -9,6 +9,7 @@ from olive.config import GatewayConfig
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway, extract_inspectable_text
+from olive.gateway.ratelimit import RateLimiter
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector, RolePolicy
 from olive.store.events import EventStore
@@ -49,12 +50,20 @@ def make_config() -> GatewayConfig:
     )
 
 
-def make_gateway(store: EventStore, max_blocks: int = 3) -> OliveGateway:
+def make_gateway(
+    store: EventStore, max_blocks: int = 3, rate_limit: int | None = None
+) -> OliveGateway:
     config = make_config()
     pipeline = InspectorPipeline(
         [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
     )
-    return OliveGateway(config, store, pipeline, breaker=CircuitBreaker(max_blocks=max_blocks))
+    return OliveGateway(
+        config,
+        store,
+        pipeline,
+        breaker=CircuitBreaker(max_blocks=max_blocks),
+        rate_limiter=RateLimiter(rate_limit),
+    )
 
 
 @pytest.fixture
@@ -235,3 +244,55 @@ async def test_upstream_errors_do_not_count_toward_quarantine(store):
     result = await gw.handle_call_tool(upstream, "read_faq", {})
     assert "quarantined" not in _text(result).lower()
     assert len(upstream.calls) == 4
+
+
+async def test_rate_limit_throttles_excess_calls(store):
+    gw = make_gateway(store, rate_limit=2)
+    upstream = StubUpstream()
+    assert not (await gw.handle_call_tool(upstream, "read_faq", {})).isError
+    assert not (await gw.handle_call_tool(upstream, "read_faq", {})).isError
+    throttled = await gw.handle_call_tool(upstream, "read_faq", {})
+
+    assert throttled.isError
+    assert "rate limit" in _text(throttled).lower()
+    assert upstream.calls == ["read_faq", "read_faq"], "throttled call must not forward"
+
+
+async def test_throttle_is_audited_but_mints_no_incident(store):
+    gw = make_gateway(store, rate_limit=1)
+    upstream = StubUpstream()
+    await gw.handle_call_tool(upstream, "read_faq", {})  # allowed (outbound+inbound)
+    await gw.handle_call_tool(upstream, "read_faq", {})  # throttled
+
+    summary = await store.summary()
+    assert summary.incidents == 0, "a throttle is not a security incident"
+    # the throttle still leaves an auditable blocked event
+    assert summary.blocked >= 1
+
+
+async def test_throttle_does_not_quarantine_a_chatty_session(store):
+    gw = make_gateway(store, max_blocks=2, rate_limit=1)
+    upstream = StubUpstream()
+    await gw.handle_call_tool(upstream, "read_faq", {})  # allowed
+    await gw.handle_call_tool(upstream, "read_faq", {})  # throttled
+    await gw.handle_call_tool(upstream, "read_faq", {})  # throttled
+
+    # throttles must not trip the breaker
+    result = await gw.handle_call_tool(upstream, "read_faq", {})
+    assert "quarantined" not in _text(result).lower()
+
+
+async def test_forbidden_call_is_recorded_even_when_rate_limited(store):
+    """Security review: a flood must not let a forbidden call hide behind a
+    throttle. Policy runs before the rate limiter, so the forbidden attempt is
+    always an incident and counts toward containment."""
+    gw = make_gateway(store, rate_limit=1)
+    upstream = StubUpstream()
+    await gw.handle_call_tool(upstream, "read_faq", {})  # consumes the rate budget
+    result = await gw.handle_call_tool(upstream, "access_payroll", {})  # over limit
+
+    assert result.isError
+    assert "rate limit" not in _text(result).lower(), "must be a policy block, not a throttle"
+    assert upstream.calls == ["read_faq"], "forbidden call never forwarded"
+    summary = await store.summary()
+    assert summary.incidents == 1, "forbidden attempt must still be an incident"

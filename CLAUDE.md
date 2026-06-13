@@ -68,6 +68,12 @@ This project is run like a company of agents with human supervision:
   and the end-to-end demo flow.
 - Nothing merges without tests.
 
+### Commit attribution
+
+Commits are authored by the human founder only. Do **not** add a
+`Co-Authored-By: Claude` (or any AI/assistant) trailer, and do not list Claude
+Code or Anthropic as a contributor or co-founder anywhere in the project.
+
 ## Agent roster (`.claude/agents/`)
 
 | Agent | Use when |

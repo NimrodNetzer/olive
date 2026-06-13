@@ -10,6 +10,10 @@ gateway:
 
 roles:
   customer-support:
+    # Per-role throttle (M2): a session over this rate is denied calls until it
+    # slows down. A throttle is not an attack - it never mints an incident or
+    # quarantines the session. Omit for unlimited.
+    max_calls_per_minute: 60
     allowed_tools:
       - read_faq
       - search_kb

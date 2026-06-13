@@ -31,6 +31,7 @@ from olive.config import GatewayConfig
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.context import Direction, SecurityContext, hash_arguments
 from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
+from olive.gateway.ratelimit import RateLimiter
 from olive.store.events import EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
@@ -102,6 +103,15 @@ def _quarantined_result(incident_id: str) -> types.CallToolResult:
     )
 
 
+def _throttled_result() -> types.CallToolResult:
+    # A throttle, not a security block: tell the agent to slow down, no incident.
+    message = "[Olive] rate limit exceeded for this session; call denied. Retry shortly."
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)],
+        isError=True,
+    )
+
+
 class OliveGateway:
     def __init__(
         self,
@@ -109,6 +119,7 @@ class OliveGateway:
         store: EventStore,
         pipeline: InspectorPipeline,
         breaker: CircuitBreaker | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._config = config
         self._store = store
@@ -118,6 +129,11 @@ class OliveGateway:
         # it sequences call numbers, snapshots history, and contains sessions.
         self._breaker = breaker or CircuitBreaker(
             max_blocks=config.max_blocks_before_quarantine
+        )
+        # The rate limit comes from the role this gateway fronts (None = off).
+        role_limit = config.roles.get(config.role)
+        self._rate_limiter = rate_limiter or RateLimiter(
+            role_limit.max_calls_per_minute if role_limit else None
         )
 
     @property
@@ -178,6 +194,13 @@ class OliveGateway:
         verdict = Verdict(decision=Decision.QUARANTINE, rule="breaker.quarantined")
         await self._store.log_event(ctx, verdict, latency_ms, incident_id)
 
+    async def _log_throttled(self, ctx: SecurityContext, started: float) -> None:
+        # A throttle is audited as a block event but mints no incident and does
+        # not count toward quarantine (it is not an attack).
+        latency_ms = int((perf_counter() - started) * 1000)
+        verdict = Verdict(decision=Decision.BLOCK, rule="ratelimit.exceeded")
+        await self._store.log_event(ctx, verdict, latency_ms, None)
+
     async def handle_call_tool(
         self, upstream: ClientSession, name: str, arguments: dict | None
     ) -> types.CallToolResult:
@@ -195,13 +218,23 @@ class OliveGateway:
 
         call_number, history = ticket.call_number, ticket.history
 
-        # Outbound: authorize before the upstream ever sees the call.
+        # Outbound authorization FIRST: a forbidden call must always be recorded
+        # as the security block it is (incident + breaker), regardless of
+        # rate-limit state - otherwise a flood could mask a forbidden attempt
+        # behind a throttle and dodge containment.
         out_ctx = self._build_context(name, arguments, "outbound", call_number, history)
         out_verdict = await self._pipeline.run(out_ctx, content=None)
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
             await self._breaker.record_block(self._session_id, incident_id)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
+
+        # Throttle policy-allowed calls before the (expensive) upstream contact.
+        # Not a security block - audited, but no incident and no trip.
+        if not await self._rate_limiter.check_and_record(self._session_id):
+            await self._log_throttled(out_ctx, started)
+            return _throttled_result()
+
         await self._record(out_ctx, out_verdict, started, "deterministic")
         await self._breaker.record_allowed_call(self._session_id, name)
         history = (*history, name)

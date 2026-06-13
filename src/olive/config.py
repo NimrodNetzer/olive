@@ -45,10 +45,21 @@ def load_config(path: str | Path) -> GatewayConfig:
     except KeyError as exc:
         raise ConfigError(f"policy file missing required section: {exc}") from exc
 
+    def _rate_limit(name: str, spec: dict) -> int | None:
+        rate = spec.get("max_calls_per_minute")
+        if rate is None:
+            return None
+        if not isinstance(rate, int) or isinstance(rate, bool) or rate < 1:
+            raise ConfigError(
+                f"role '{name}' max_calls_per_minute must be an integer >= 1, got {rate!r}"
+            )
+        return rate
+
     roles = {
         name: RolePolicy(
             allowed_tools=frozenset(spec.get("allowed_tools", [])),
             forbidden_tools=frozenset(spec.get("forbidden_tools", [])),
+            max_calls_per_minute=_rate_limit(name, spec),
         )
         for name, spec in roles_raw.items()
     }

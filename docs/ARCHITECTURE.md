@@ -135,6 +135,16 @@ In-memory and per-process for now: in stdio mode that is exactly one session.
 A cross-process admin surface for release lands with the HTTP transport (M2);
 today release is an in-process method.
 
+### Rate limiter — `src/olive/gateway/ratelimit.py`
+Deterministic per-session sliding-window throttle; the limit value comes from
+the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
+quarantine check and before the pipeline/upstream. A throttle is **not** an
+attack: an over-limit call is denied and audited as a `ratelimit.exceeded`
+event, but mints **no incident** and does **not** count toward the breaker's
+quarantine threshold — a chatty-but-legitimate agent must not be contained as
+if hostile. Its own lock, never nested with the breaker's, so the two cannot
+deadlock.
+
 ## Layering rule (keeps the business split clean — ADR-0003)
 
 `src/olive/` (gateway core) must never import from intelligence/fleet
@@ -145,7 +155,7 @@ open-core boundary.
 ## What deliberately does not exist yet
 
 - Streamable HTTP transport, wire JWT enforcement, multi-upstream
-  aggregation/namespacing, rate limiting, cross-process release (rest of M2).
+  aggregation/namespacing, cross-process release (rest of M2).
 - Tool-description/schema inspection and rug-pull diffing (M3).
 - LLM sentinels, incident reporter (M6).
 - Larger corpus + CI regression gate (M5). Dashboard (M5/showable).
