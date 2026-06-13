@@ -45,3 +45,19 @@ def test_missing_sections_rejected(tmp_path):
     bad.write_text("gateway: {agent_id: a, role: r}\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="roles"):
         load_config(bad)
+
+
+def test_default_containment_threshold():
+    config = load_config(ROOT / "policies" / "default.yaml")
+    assert config.max_blocks_before_quarantine == 3
+
+
+def test_invalid_containment_threshold_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: []}}\n"
+        "containment: {max_blocks_before_quarantine: 0}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="max_blocks_before_quarantine"):
+        load_config(bad)

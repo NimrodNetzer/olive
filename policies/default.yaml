@@ -25,6 +25,11 @@ roles:
 upstream:
   trust: untrusted
 
+# Deterministic containment (ADR-0006): after this many blocked calls in a
+# session, the whole session is quarantined until a human releases it.
+containment:
+  max_blocks_before_quarantine: 3
+
 # Layer-zero deterministic patterns. Known to be bypassable by encoding or
 # paraphrase - the eval corpus measures that honestly. Smarter detection is M3.
 injection_patterns:

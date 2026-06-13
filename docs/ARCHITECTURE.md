@@ -114,10 +114,26 @@ CREATE TABLE incidents (
 
 Raw payloads are never stored — hashes + bounded evidence excerpts only.
 
-### Circuit breaker (M2) — `src/olive/gateway/breaker.py`
-In-memory session blocklist checked before any pipeline work; trip on
-sentinel signal or repeated blocks; reversible human release. Quarantined
-sessions get `quarantined` responses to every call.
+### Session state — `src/olive/gateway/session.py`
+One mutable `SessionState` per session: status (`active`/`quarantined`), call
+counter, tool history, block count, first/last seen, and the quarantine reason
++ tripping incident id. Pure data; the circuit breaker is the only mutator.
+
+### Circuit breaker — `src/olive/gateway/breaker.py`
+The single concurrency authority over session state: it owns the in-memory
+session map and one lock, so advancing a call (next call number + history
+snapshot) and deciding whether to trip are atomic together. Checked **before
+any pipeline work or upstream contact**; a quarantined session's calls are
+denied with `Decision.QUARANTINE`. Trips deterministically when a session
+reaches `max_blocks_before_quarantine` security blocks (config); the same
+`trip()` entry point is what M6 sentinel signals will call. **Reversible human
+release** resets the session to active. Quarantined calls are logged as
+`quarantine` events referencing the tripping incident — no incident-per-call
+spam, but never a silent decision (ADR-0006).
+
+In-memory and per-process for now: in stdio mode that is exactly one session.
+A cross-process admin surface for release lands with the HTTP transport (M2);
+today release is an in-process method.
 
 ## Layering rule (keeps the business split clean — ADR-0003)
 
@@ -128,6 +144,8 @@ open-core boundary.
 
 ## What deliberately does not exist yet
 
-- Streamable HTTP transport, multi-upstream aggregation/namespacing (M2).
-- LLM sentinels, incident reporter (M3).
-- CI regression gate on eval corpus (M4). Dashboard (M5).
+- Streamable HTTP transport, wire JWT enforcement, multi-upstream
+  aggregation/namespacing, rate limiting, cross-process release (rest of M2).
+- Tool-description/schema inspection and rug-pull diffing (M3).
+- LLM sentinels, incident reporter (M6).
+- Larger corpus + CI regression gate (M5). Dashboard (M5/showable).

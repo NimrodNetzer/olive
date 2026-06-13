@@ -31,6 +31,7 @@ class GatewayConfig:
     upstream_trust: TrustLevel
     roles: dict[str, RolePolicy] = field(default_factory=dict)
     injection_patterns: list[str] = field(default_factory=list)
+    max_blocks_before_quarantine: int = 3
 
 
 def load_config(path: str | Path) -> GatewayConfig:
@@ -60,6 +61,12 @@ def load_config(path: str | Path) -> GatewayConfig:
     if role not in roles:
         raise ConfigError(f"gateway role '{role}' has no policy in roles section")
 
+    max_blocks = raw.get("containment", {}).get("max_blocks_before_quarantine", 3)
+    if not isinstance(max_blocks, int) or isinstance(max_blocks, bool) or max_blocks < 1:
+        raise ConfigError(
+            f"max_blocks_before_quarantine must be an integer >= 1, got {max_blocks!r}"
+        )
+
     return GatewayConfig(
         agent_id=gateway["agent_id"],
         organization_id=gateway.get("organization_id", "default-org"),
@@ -69,4 +76,5 @@ def load_config(path: str | Path) -> GatewayConfig:
         upstream_trust=trust,
         roles=roles,
         injection_patterns=list(raw.get("injection_patterns", [])),
+        max_blocks_before_quarantine=max_blocks,
     )

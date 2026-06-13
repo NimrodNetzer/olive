@@ -19,7 +19,6 @@ Security notes (reviewed against THREAT_MODEL.md):
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
 from time import perf_counter
@@ -29,6 +28,7 @@ from mcp.client.session import ClientSession
 from mcp.server.lowlevel import Server
 
 from olive.config import GatewayConfig
+from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.context import Direction, SecurityContext, hash_arguments
 from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
 from olive.store.events import EventStore
@@ -90,23 +90,48 @@ def _blocked_result(
     )
 
 
+def _quarantined_result(incident_id: str) -> types.CallToolResult:
+    # The session, not just this call, is contained. No rule/evidence echoed.
+    message = (
+        "[Olive] session quarantined; this call was denied without execution. "
+        f"See incident {incident_id}. A human release is required to resume."
+    )
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)],
+        isError=True,
+    )
+
+
 class OliveGateway:
     def __init__(
-        self, config: GatewayConfig, store: EventStore, pipeline: InspectorPipeline
+        self,
+        config: GatewayConfig,
+        store: EventStore,
+        pipeline: InspectorPipeline,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         self._config = config
         self._store = store
         self._pipeline = pipeline
         self._session_id = f"sess-{uuid.uuid4().hex[:8]}"
-        # Session counters are shared across concurrently-dispatched requests;
-        # the lock keeps call numbers unique and history snapshots consistent.
-        self._state_lock = asyncio.Lock()
-        self._call_number = 0
-        self._tool_history: list[str] = []
+        # The breaker is the single concurrency authority over session state:
+        # it sequences call numbers, snapshots history, and contains sessions.
+        self._breaker = breaker or CircuitBreaker(
+            max_blocks=config.max_blocks_before_quarantine
+        )
 
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def breaker(self) -> CircuitBreaker:
+        return self._breaker
+
+    async def release_session(self, session_id: str | None = None) -> bool:
+        """Reversible human release of a quarantined session (ADR-0006).
+        A cross-process admin surface for this lands with HTTP transport."""
+        return await self._breaker.release(session_id or self._session_id)
 
     def _build_context(
         self,
@@ -143,27 +168,47 @@ class OliveGateway:
         await self._store.log_event(ctx, verdict, latency_ms, incident_id)
         return incident_id
 
+    async def _log_quarantined(
+        self, ctx: SecurityContext, started: float, incident_id: str | None
+    ) -> None:
+        # A quarantined session's denied calls are audited as `quarantine`
+        # events referencing the incident that tripped the breaker - no new
+        # incident per call (ADR-0006), but never a silent decision (rule 5).
+        latency_ms = int((perf_counter() - started) * 1000)
+        verdict = Verdict(decision=Decision.QUARANTINE, rule="breaker.quarantined")
+        await self._store.log_event(ctx, verdict, latency_ms, incident_id)
+
     async def handle_call_tool(
         self, upstream: ClientSession, name: str, arguments: dict | None
     ) -> types.CallToolResult:
         started = perf_counter()
-        async with self._state_lock:
-            self._call_number += 1
-            call_number = self._call_number
-            history = tuple(self._tool_history)
+        ticket = await self._breaker.begin_call(self._session_id)
+
+        # Containment first: a quarantined session is denied before any
+        # inspector runs and before the upstream is ever contacted.
+        if ticket.quarantined:
+            ctx = self._build_context(
+                name, arguments, "outbound", ticket.call_number, ticket.history
+            )
+            await self._log_quarantined(ctx, started, ticket.incident_id)
+            return _quarantined_result(ticket.incident_id or "unrecorded")
+
+        call_number, history = ticket.call_number, ticket.history
 
         # Outbound: authorize before the upstream ever sees the call.
         out_ctx = self._build_context(name, arguments, "outbound", call_number, history)
         out_verdict = await self._pipeline.run(out_ctx, content=None)
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
+            await self._breaker.record_block(self._session_id, incident_id)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
         await self._record(out_ctx, out_verdict, started, "deterministic")
-        async with self._state_lock:
-            self._tool_history.append(name)
-            history = tuple(self._tool_history)
+        await self._breaker.record_allowed_call(self._session_id, name)
+        history = (*history, name)
 
-        # Forward. An upstream failure fails closed.
+        # Forward. An upstream failure fails closed but is an operational
+        # error, not an attack: it is audited yet does NOT count toward
+        # containment (a flaky tool must not quarantine the session).
         try:
             result = await upstream.call_tool(name, arguments)
         except Exception as exc:  # noqa: BLE001
@@ -181,6 +226,7 @@ class OliveGateway:
         in_verdict = await self._pipeline.run(in_ctx, content=extract_inspectable_text(result))
         if not in_verdict.allowed:
             incident_id = await self._record(in_ctx, in_verdict, started, "pattern")
+            await self._breaker.record_block(self._session_id, incident_id)
             return _blocked_result("inbound", in_verdict, incident_id or "unrecorded")
         await self._record(in_ctx, in_verdict, started, "pattern")
         return result

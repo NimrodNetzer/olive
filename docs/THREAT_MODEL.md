@@ -63,6 +63,11 @@ this document, update the document first (via ADR if the change is structural).
 - Inspector failure results in `block`, never silent pass-through (fail closed).
 - Raw arguments/response bodies are never persisted — hashes and bounded
   evidence excerpts only.
+- A session that accumulates repeated security blocks is **quarantined** by the
+  circuit breaker (ADR-0006): every subsequent call is denied deterministically
+  *before* any inspector runs and *before* the upstream is contacted, until a
+  human releases it. Containment is message-independent — it stops the probing
+  session, not just the individual payload.
 
 ## Explicit non-guarantees (current milestone)
 
@@ -70,12 +75,22 @@ this document, update the document first (via ADR if the change is structural).
 - Deterministic patterns do **not** stop semantic, encoded, homoglyph, or
   novel injections — they are layer zero only (unicode NFKC folding and
   format-character stripping are applied, lookalike-character substitution is
-  not). LLM sentinels (M3) and the eval harness (M4) address this; until
+  not). LLM sentinels (M6) and the eval harness (M5) address this; until
   then, detection coverage is limited and must be described honestly.
 - Tool descriptions from `tools/list` are **audited** (a hash of all
   names+descriptions is logged per listing, making rug-pull swaps detectable
   in the event trail) but **not yet content-inspected** before reaching the
-  agent. Inspection lands in M4.
+  agent. Inspection lands in M3.
+- Containment state (session status, quarantine) is **in-memory and
+  per-process** (ADR-0006). In stdio mode that is the whole session, so
+  quarantine is effective for the run; but state does not survive a restart and
+  there is no cross-process admin surface to release a session yet — that lands
+  with the HTTP transport (M2). Release is currently reachable only in-process.
+- A call admitted by the breaker *immediately before* a concurrent block trips
+  quarantine may still complete (a small TOCTOU window under parallel
+  dispatch). Its response is still inbound-inspected, so this does not bypass
+  content inspection — it only means containment stops the *next* call, not an
+  already-in-flight one.
 - No cryptographic agent identity enforcement on the wire yet (mock-CA JWT
   module exists; transport enforcement lands with HTTP transport, M2).
 - No detection of multi-day slow-burn campaigns or covert channels hidden in

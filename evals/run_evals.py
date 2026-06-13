@@ -120,7 +120,7 @@ async def run() -> int:
     )
     console.print(
         "[dim]Layer-zero deterministic patterns only (M1). Known misses are the\n"
-        "backlog the M3 sentinels and M4 corpus expansion exist to close.[/dim]"
+        "backlog the M6 sentinels and M5 corpus expansion exist to close.[/dim]"
     )
 
     for r in fixed:

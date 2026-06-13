@@ -6,6 +6,7 @@ import mcp.types as types
 import pytest
 
 from olive.config import GatewayConfig
+from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway, extract_inspectable_text
 from olive.inspectors.patterns import PatternInspector
@@ -48,17 +49,32 @@ def make_config() -> GatewayConfig:
     )
 
 
-@pytest.fixture
-async def gateway(tmp_path):
+def make_gateway(store: EventStore, max_blocks: int = 3) -> OliveGateway:
     config = make_config()
-    store = EventStore(tmp_path / "events.db")
-    await store.open()
     pipeline = InspectorPipeline(
         [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
     )
-    gw = OliveGateway(config, store, pipeline)
-    yield gw, store
+    return OliveGateway(config, store, pipeline, breaker=CircuitBreaker(max_blocks=max_blocks))
+
+
+@pytest.fixture
+async def gateway(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    await store.open()
+    yield make_gateway(store), store
     await store.close()
+
+
+@pytest.fixture
+async def store(tmp_path):
+    s = EventStore(tmp_path / "events.db")
+    await s.open()
+    yield s
+    await s.close()
+
+
+def _text(result) -> str:
+    return "".join(b.text for b in result.content if isinstance(b, types.TextContent))
 
 
 async def test_allowed_call_passes_through(gateway):
@@ -164,3 +180,58 @@ def test_extract_covers_all_text_surfaces():
     assert "visible text" in extracted
     assert "embedded text" in extracted
     assert "structured text" in extracted
+
+
+async def test_repeated_blocks_quarantine_the_session(store):
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream()
+    # Two forbidden calls reach the containment threshold.
+    await gw.handle_call_tool(upstream, "access_payroll", {})
+    await gw.handle_call_tool(upstream, "access_payroll", {})
+
+    # A now-otherwise-allowed call is denied by containment, before the upstream.
+    result = await gw.handle_call_tool(upstream, "read_faq", {})
+    assert result.isError
+    assert "quarantined" in _text(result).lower()
+    assert upstream.calls == [], "quarantined session must not reach the upstream"
+
+
+async def test_quarantined_calls_do_not_mint_new_incidents(store):
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream()
+    await gw.handle_call_tool(upstream, "access_payroll", {})  # INC-0001
+    await gw.handle_call_tool(upstream, "access_payroll", {})  # INC-0002, trips
+    await gw.handle_call_tool(upstream, "read_faq", {})  # quarantined, no incident
+    await gw.handle_call_tool(upstream, "read_faq", {})  # quarantined, no incident
+
+    summary = await store.summary()
+    assert summary.incidents == 2, "quarantined calls reference the tripping incident"
+    # but every denied call is still audited as an event
+    assert summary.blocked >= 4
+
+
+async def test_human_release_resumes_the_session(store):
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream()
+    await gw.handle_call_tool(upstream, "access_payroll", {})
+    await gw.handle_call_tool(upstream, "access_payroll", {})  # trips
+
+    assert await gw.release_session() is True
+    result = await gw.handle_call_tool(upstream, "read_faq", {})
+    assert not result.isError
+    assert upstream.calls == ["read_faq"], "released session resumes forwarding"
+
+
+async def test_upstream_errors_do_not_count_toward_quarantine(store):
+    """A flaky tool server must not get a session quarantined as if it attacked."""
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream(raises=True)
+    await gw.handle_call_tool(upstream, "read_faq", {})
+    await gw.handle_call_tool(upstream, "read_faq", {})
+    await gw.handle_call_tool(upstream, "read_faq", {})
+
+    # Still active: the next call is attempted against the upstream, not denied
+    # by containment.
+    result = await gw.handle_call_tool(upstream, "read_faq", {})
+    assert "quarantined" not in _text(result).lower()
+    assert len(upstream.calls) == 4

@@ -4,7 +4,7 @@ Zero-trust runtime security gateway for AI agents. Olive is a transparent
 MCP proxy that sits between an agent and its tools, inspects every tool call
 **and every tool response**, and blocks, holds, or quarantines malicious
 behavior — with every decision fully auditable. The product loop is:
-**Govern → Detect → Contain → Reproduce → Repair → Verify.**
+**Govern → Detect → Contain → Reproduce → Repair → Verify → Learn.**
 
 Read `docs/VISION.md` for the product thesis, `docs/THREAT_MODEL.md` before
 touching any enforcement code, and `docs/ARCHITECTURE.md` for the system design.
