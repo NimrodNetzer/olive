@@ -33,7 +33,7 @@ class StubUpstream:
         )
 
 
-def make_config() -> GatewayConfig:
+def make_config(rate_limit: int | None = None) -> GatewayConfig:
     return GatewayConfig(
         agent_id="test-agent",
         organization_id="test-org",
@@ -45,6 +45,7 @@ def make_config() -> GatewayConfig:
             "customer-support": RolePolicy(
                 allowed_tools=frozenset({"read_faq", "read_file"}),
                 forbidden_tools=frozenset({"access_payroll"}),
+                max_calls_per_minute=rate_limit,
             )
         },
         injection_patterns=["ignore previous instructions"],
@@ -54,7 +55,7 @@ def make_config() -> GatewayConfig:
 def make_gateway(
     store: EventStore, max_blocks: int = 3, rate_limit: int | None = None
 ) -> OliveGateway:
-    config = make_config()
+    config = make_config(rate_limit=rate_limit)
     pipeline = InspectorPipeline(
         [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
     )
@@ -63,7 +64,7 @@ def make_gateway(
         store,
         pipeline,
         breaker=CircuitBreaker(max_blocks=max_blocks),
-        rate_limiter=RateLimiter(rate_limit),
+        rate_limiter=RateLimiter(),
     )
 
 
@@ -339,3 +340,53 @@ async def test_role_comes_from_identity_not_config(store):
     assert result.isError, "unknown role must be blocked by default-deny policy"
     summary = await store.summary()
     assert summary.incidents == 1
+
+
+async def test_containment_is_per_identity_session(store):
+    """One gateway, two agents: quarantining one must not affect the other."""
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream()
+    a = IdentityClaims(
+        agent_id="agent-a", organization="o", role="customer-support",
+        session_id="sess-a", verified=True,
+    )
+    b = IdentityClaims(
+        agent_id="agent-b", organization="o", role="customer-support",
+        session_id="sess-b", verified=True,
+    )
+    # Trip agent A with two forbidden calls.
+    await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)
+    await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)
+
+    a_blocked = await gw.handle_call_tool(upstream, "read_faq", {}, identity=a)
+    assert "quarantined" in _text(a_blocked).lower()
+
+    b_ok = await gw.handle_call_tool(upstream, "read_faq", {}, identity=b)
+    assert not b_ok.isError, "agent B's session must be unaffected by A's quarantine"
+
+
+async def test_rate_limit_is_per_identity_role(store):
+    """Different roles carry different limits through the same gateway/limiter."""
+    config = make_config(rate_limit=1)
+    config.roles["chatty"] = RolePolicy(allowed_tools=frozenset({"read_faq"}))  # unlimited
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    gw = OliveGateway(config, store, pipeline, rate_limiter=RateLimiter())
+    upstream = StubUpstream()
+
+    strict = IdentityClaims(
+        agent_id="s", organization="o", role="customer-support",
+        session_id="sess-strict", verified=True,
+    )
+    loose = IdentityClaims(
+        agent_id="l", organization="o", role="chatty",
+        session_id="sess-loose", verified=True,
+    )
+    await gw.handle_call_tool(upstream, "read_faq", {}, identity=strict)  # uses its 1 budget
+    throttled = await gw.handle_call_tool(upstream, "read_faq", {}, identity=strict)
+    assert "rate limit" in _text(throttled).lower()
+
+    # the unlimited role is unaffected
+    for _ in range(5):
+        assert not (await gw.handle_call_tool(upstream, "read_faq", {}, identity=loose)).isError

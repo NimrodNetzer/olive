@@ -139,11 +139,9 @@ class OliveGateway:
         self._breaker = breaker or CircuitBreaker(
             max_blocks=config.max_blocks_before_quarantine
         )
-        # The rate limit comes from the identity's role (None = off).
-        role_limit = config.roles.get(self._identity.role)
-        self._rate_limiter = rate_limiter or RateLimiter(
-            role_limit.max_calls_per_minute if role_limit else None
-        )
+        # The limit is resolved per call from the request identity's role
+        # (multi-tenant safe); the limiter itself is just a keyed window.
+        self._rate_limiter = rate_limiter or RateLimiter()
 
     @property
     def session_id(self) -> str:
@@ -164,6 +162,7 @@ class OliveGateway:
 
     def _build_context(
         self,
+        identity: IdentityClaims,
         tool: str,
         arguments: dict | None,
         direction: Direction,
@@ -171,10 +170,10 @@ class OliveGateway:
         history: tuple[str, ...],
     ) -> SecurityContext:
         return SecurityContext(
-            agent_id=self._identity.agent_id,
-            session_id=self._session_id,
-            organization_id=self._identity.organization,
-            role=self._identity.role,
+            agent_id=identity.agent_id,
+            session_id=identity.session_id,
+            organization_id=identity.organization,
+            role=identity.role,
             declared_goal=self._config.declared_goal,
             tool=tool,
             arguments_hash=hash_arguments(arguments),
@@ -214,17 +213,31 @@ class OliveGateway:
         verdict = Verdict(decision=Decision.BLOCK, rule="ratelimit.exceeded")
         await self._store.log_event(ctx, verdict, latency_ms, None)
 
+    def _rate_limit_for(self, role: str) -> int | None:
+        policy = self._config.roles.get(role)
+        return policy.max_calls_per_minute if policy else None
+
     async def handle_call_tool(
-        self, upstream: ClientSession, name: str, arguments: dict | None
+        self,
+        upstream: ClientSession,
+        name: str,
+        arguments: dict | None,
+        identity: IdentityClaims | None = None,
     ) -> types.CallToolResult:
+        # Identity is resolved per call: HTTP passes the request's verified
+        # identity; stdio falls back to the gateway's construction identity.
+        # The breaker and rate limiter key on this session, so containment is
+        # per-agent even when one gateway fronts many.
+        identity = identity or self._identity
+        sid = identity.session_id
         started = perf_counter()
-        ticket = await self._breaker.begin_call(self._session_id)
+        ticket = await self._breaker.begin_call(sid)
 
         # Containment first: a quarantined session is denied before any
         # inspector runs and before the upstream is ever contacted.
         if ticket.quarantined:
             ctx = self._build_context(
-                name, arguments, "outbound", ticket.call_number, ticket.history
+                identity, name, arguments, "outbound", ticket.call_number, ticket.history
             )
             await self._log_quarantined(ctx, started, ticket.incident_id)
             return _quarantined_result(ticket.incident_id or "unrecorded")
@@ -235,21 +248,23 @@ class OliveGateway:
         # as the security block it is (incident + breaker), regardless of
         # rate-limit state - otherwise a flood could mask a forbidden attempt
         # behind a throttle and dodge containment.
-        out_ctx = self._build_context(name, arguments, "outbound", call_number, history)
+        out_ctx = self._build_context(identity, name, arguments, "outbound", call_number, history)
         out_verdict = await self._pipeline.run(out_ctx, content=None)
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
-            await self._breaker.record_block(self._session_id, incident_id)
+            await self._breaker.record_block(sid, incident_id)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
 
         # Throttle policy-allowed calls before the (expensive) upstream contact.
-        # Not a security block - audited, but no incident and no trip.
-        if not await self._rate_limiter.check_and_record(self._session_id):
+        # The limit is the identity's role limit. Not a security block - audited,
+        # but no incident and no trip.
+        limit = self._rate_limit_for(identity.role)
+        if not await self._rate_limiter.check_and_record(sid, limit):
             await self._log_throttled(out_ctx, started)
             return _throttled_result()
 
         await self._record(out_ctx, out_verdict, started, "deterministic")
-        await self._breaker.record_allowed_call(self._session_id, name)
+        await self._breaker.record_allowed_call(sid, name)
         history = (*history, name)
 
         # Forward. An upstream failure fails closed but is an operational
@@ -258,7 +273,9 @@ class OliveGateway:
         try:
             result = await upstream.call_tool(name, arguments)
         except Exception as exc:  # noqa: BLE001
-            in_ctx = self._build_context(name, arguments, "inbound", call_number, history)
+            in_ctx = self._build_context(
+                identity, name, arguments, "inbound", call_number, history
+            )
             verdict = Verdict(
                 decision=Decision.BLOCK,
                 rule="gateway.upstream_error",
@@ -268,11 +285,11 @@ class OliveGateway:
             return _blocked_result("inbound", verdict, incident_id or "unrecorded")
 
         # Inbound: inspect the full result before it reaches the agent.
-        in_ctx = self._build_context(name, arguments, "inbound", call_number, history)
+        in_ctx = self._build_context(identity, name, arguments, "inbound", call_number, history)
         in_verdict = await self._pipeline.run(in_ctx, content=extract_inspectable_text(result))
         if not in_verdict.allowed:
             incident_id = await self._record(in_ctx, in_verdict, started, "pattern")
-            await self._breaker.record_block(self._session_id, incident_id)
+            await self._breaker.record_block(sid, incident_id)
             return _blocked_result("inbound", in_verdict, incident_id or "unrecorded")
         await self._record(in_ctx, in_verdict, started, "pattern")
         return result
@@ -289,7 +306,9 @@ class OliveGateway:
             # the hash of names+descriptions makes rug-pull swaps detectable
             # in the event trail today.
             descriptions = {t.name: t.description or "" for t in upstream_tools.tools}
-            ctx = self._build_context("tools/list", descriptions, "inbound", 0, ())
+            ctx = self._build_context(
+                self._identity, "tools/list", descriptions, "inbound", 0, ()
+            )
             await self._record(ctx, ALLOW, started, "none")
             return upstream_tools.tools
 

@@ -99,6 +99,13 @@ Config now holds role *policies*, not *who is connecting*. HTTP feeds the token
 from the `Authorization: Bearer` header via the SDK's bearer auth (next slice);
 stdio uses the unverified config fallback.
 
+Identity is resolved **per call**: `handle_call_tool` takes the request's
+`IdentityClaims` (stdio falls back to the construction identity). The breaker
+and rate limiter key on that identity's `session_id`, and the rate limit is
+resolved from that identity's role — so one gateway can front many agents with
+independent containment and per-role throttles. The limiter is a pure keyed
+sliding window; the limit is supplied per call.
+
 ### Event store — `src/olive/store/events.py`
 SQLite via `aiosqlite` (ADR-0004), behind a small interface so it can be
 swapped later.

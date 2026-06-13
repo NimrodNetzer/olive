@@ -18,34 +18,33 @@ from time import monotonic
 
 
 class RateLimiter:
-    def __init__(self, max_per_minute: int | None, window_seconds: float = 60.0) -> None:
-        if max_per_minute is not None and max_per_minute < 1:
-            raise ValueError("max_per_minute must be >= 1 or None")
-        self._max = max_per_minute
+    def __init__(self, window_seconds: float = 60.0) -> None:
         self._window = window_seconds
         self._calls: dict[str, deque[float]] = {}
         self._lock = asyncio.Lock()
 
-    @property
-    def enabled(self) -> bool:
-        return self._max is not None
-
-    async def check_and_record(self, key: str, now: float | None = None) -> bool:
-        """Return True and record the call if under the limit; return False
-        (recording nothing) if the window is already full.
+    async def check_and_record(
+        self, key: str, limit: int | None, now: float | None = None
+    ) -> bool:
+        """Return True and record the call if under `limit`; return False
+        (recording nothing) if the window is already full. `limit=None` means
+        unlimited. The limit is passed per call so one limiter can serve many
+        roles, each with its own limit, keyed independently.
 
         A denied call is *not* recorded, so being over-limit does not keep
         extending the window - standard sliding-window behaviour.
         """
-        if self._max is None:
+        if limit is None:
             return True
+        if limit < 1:
+            raise ValueError("limit must be >= 1 or None")
         ts = monotonic() if now is None else now
         async with self._lock:
             window = self._calls.setdefault(key, deque())
             cutoff = ts - self._window
             while window and window[0] <= cutoff:
                 window.popleft()
-            if len(window) >= self._max:
+            if len(window) >= limit:
                 return False
             window.append(ts)
             return True
