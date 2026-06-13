@@ -11,6 +11,8 @@ dependencies = [
     "pyyaml>=6.0",         # policy-as-code files
     "pyjwt[crypto]>=2.8",  # mock-CA RS256 agent identity tokens
     "rich>=13.7",          # demo/eval terminal output
+    "starlette>=0.40",     # HTTP transport app + bearer auth middleware (ADR-0007)
+    "uvicorn>=0.30",       # ASGI server for `olive serve`
 ]
 
 [project.optional-dependencies]

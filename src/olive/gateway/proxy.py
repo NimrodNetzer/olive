@@ -20,6 +20,7 @@ Security notes (reviewed against THREAT_MODEL.md):
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from time import perf_counter
 
 import mcp.types as types
@@ -294,7 +295,14 @@ class OliveGateway:
         await self._record(in_ctx, in_verdict, started, "pattern")
         return result
 
-    def build_server(self, upstream: ClientSession) -> Server:
+    def build_server(
+        self,
+        upstream: ClientSession,
+        identity_resolver: Callable[[], IdentityClaims | None] | None = None,
+    ) -> Server:
+        # identity_resolver lets the transport supply the request's verified
+        # identity (HTTP reads the bearer token); when it returns None - or no
+        # resolver is given (stdio) - the construction identity is used.
         server: Server = Server("olive")
 
         @server.list_tools()
@@ -317,6 +325,7 @@ class OliveGateway:
         # the upstream evolves mid-session.
         @server.call_tool(validate_input=False)
         async def call_tool(name: str, arguments: dict | None) -> types.CallToolResult:
-            return await self.handle_call_tool(upstream, name, arguments)
+            identity = identity_resolver() if identity_resolver else None
+            return await self.handle_call_tool(upstream, name, arguments, identity=identity)
 
         return server

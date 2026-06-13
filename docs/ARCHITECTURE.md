@@ -35,7 +35,8 @@ only signal the circuit breaker, which applies deterministic quarantine.
 ## Components
 
 ### Gateway proxy — `src/olive/gateway/proxy.py`
-- Presents an MCP server (stdio transport first; streamable HTTP in M2).
+- Presents an MCP server over **stdio** (`olive run`) or **streamable HTTP**
+  (`olive serve`, see transport below).
 - Holds an MCP `ClientSession` to the upstream server (spawned subprocess).
 - Forwards `initialize`, `tools/list`, `tools/call`.
 - On `tools/call`:
@@ -106,6 +107,23 @@ resolved from that identity's role — so one gateway can front many agents with
 independent containment and per-role throttles. The limiter is a pure keyed
 sliding window; the limit is supplied per call.
 
+### HTTP transport — `src/olive/transport/http.py`
+`olive serve` exposes the gateway over streamable HTTP with **bearer-token
+identity enforcement on the wire** (ADR-0007):
+- `OliveTokenVerifier` (an SDK `TokenVerifier`) verifies the `Authorization:
+  Bearer` token against the CA public key and maps it to claims. The MCP
+  endpoint sits behind the SDK's bearer auth + `RequireAuthMiddleware`, so a
+  missing/invalid token is **401 before the gateway is reached** (fail closed).
+- `build_server(upstream, identity_resolver=...)` lets the transport feed each
+  request's verified identity (read from the auth contextvar); the gateway then
+  enforces as that identity. Stdio passes no resolver and uses its construction
+  identity.
+- A capability-gated admin endpoint `POST /admin/release/{session_id}` performs
+  reversible session release (requires the `olive:release` capability in the
+  token) — the cross-process release surface for quarantined sessions.
+- Core gateway code holds no SDK-auth imports; that coupling lives only here,
+  keeping the layering rule (ADR-0003) intact.
+
 ### Event store — `src/olive/store/events.py`
 SQLite via `aiosqlite` (ADR-0004), behind a small interface so it can be
 swapped later.
@@ -170,8 +188,7 @@ open-core boundary.
 
 ## What deliberately does not exist yet
 
-- Streamable HTTP transport, wire JWT enforcement, multi-upstream
-  aggregation/namespacing, cross-process release (rest of M2).
+- Multi-upstream aggregation/namespacing (rest of M2).
 - Tool-description/schema inspection and rug-pull diffing (M3).
 - LLM sentinels, incident reporter (M6).
 - Larger corpus + CI regression gate (M5). Dashboard (M5/showable).

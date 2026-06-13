@@ -91,15 +91,28 @@ this document, update the document first (via ADR if the change is structural).
   dispatch). Its response is still inbound-inspected, so this does not bypass
   content inspection — it only means containment stops the *next* call, not an
   already-in-flight one.
-- Identity is now a verified, transport-independent object the gateway enforces
-  as (ADR-0007): a signed token's claims drive `agent_id`/`org`/`role`, and
-  **role is identity-bound** (a forged or unbacked role is rejected / hits
-  default-deny). But token verification only happens where a token is supplied —
-  i.e. on the **HTTP transport (next M2 slice)**. In **stdio** mode the gateway
-  still runs under a config-derived **unverified** identity (`verified=False`);
-  this is acceptable only because stdio is single-tenant and spawned by a
-  trusting client. Capability attenuation (token capabilities ∩ role) is carried
-  but not yet enforced (later M2 slice).
+- Identity is a verified, transport-independent object the gateway enforces as
+  (ADR-0007): a signed token's claims drive `agent_id`/`org`/`role`, and **role
+  is identity-bound** (a forged or unbacked role is rejected / hits
+  default-deny). Over **HTTP (`olive serve`) this is enforced on the wire**:
+  every request must carry a CA-signed bearer token; a missing/invalid/expired/
+  forged token is 401 *before the gateway is reached* (fail closed). In **stdio**
+  mode the gateway still runs under a config-derived **unverified** identity
+  (`verified=False`); acceptable only because stdio is single-tenant and spawned
+  by a trusting client.
+- Capability attenuation (token capabilities ∩ role) is carried but **not yet
+  enforced** for tool calls (later M2/M3 slice); today capabilities only gate the
+  admin release endpoint (`olive:release`).
+- The breaker and rate limiter key on the token's `session_id`. The issuing CA
+  must mint **unique** session ids; two tokens sharing a session id would share
+  containment state. (Namespacing by org+agent is a planned hardening.)
+- Per-session breaker/rate-limiter state is held in-memory and is **not yet
+  evicted**; over a long-lived multi-session HTTP process this grows unbounded.
+  Idle-session eviction is a planned hardening (the SDK already idle-times the
+  transport session; our enforcement state must be tied to it).
+- Token verification trusts the configured CA public key (`--ca-pubkey`); a
+  compromised CA key or a misconfigured public key undermines identity. The mock
+  CA is for dev; production needs a real key-managed CA.
 - No detection of multi-day slow-burn campaigns or covert channels hidden in
   *allowed* traffic.
 - No protection against a malicious human operator with local file access.
