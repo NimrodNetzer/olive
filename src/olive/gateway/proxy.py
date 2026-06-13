@@ -20,7 +20,6 @@ Security notes (reviewed against THREAT_MODEL.md):
 from __future__ import annotations
 
 import json
-import uuid
 from time import perf_counter
 
 import mcp.types as types
@@ -32,6 +31,7 @@ from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.context import Direction, SecurityContext, hash_arguments
 from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
 from olive.gateway.ratelimit import RateLimiter
+from olive.identity.claims import IdentityClaims, unverified_from_config
 from olive.store.events import EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
@@ -120,18 +120,27 @@ class OliveGateway:
         pipeline: InspectorPipeline,
         breaker: CircuitBreaker | None = None,
         rate_limiter: RateLimiter | None = None,
+        identity: IdentityClaims | None = None,
     ) -> None:
         self._config = config
         self._store = store
         self._pipeline = pipeline
-        self._session_id = f"sess-{uuid.uuid4().hex[:8]}"
+        # Identity is the verified (or, for stdio fallback, config-derived)
+        # subject the gateway enforces as. Role comes from here, not config, so
+        # it cannot be self-asserted once tokens are required (ADR-0007).
+        self._identity = identity or unverified_from_config(
+            agent_id=config.agent_id,
+            organization=config.organization_id,
+            role=config.role,
+        )
+        self._session_id = self._identity.session_id
         # The breaker is the single concurrency authority over session state:
         # it sequences call numbers, snapshots history, and contains sessions.
         self._breaker = breaker or CircuitBreaker(
             max_blocks=config.max_blocks_before_quarantine
         )
-        # The rate limit comes from the role this gateway fronts (None = off).
-        role_limit = config.roles.get(config.role)
+        # The rate limit comes from the identity's role (None = off).
+        role_limit = config.roles.get(self._identity.role)
         self._rate_limiter = rate_limiter or RateLimiter(
             role_limit.max_calls_per_minute if role_limit else None
         )
@@ -139,6 +148,10 @@ class OliveGateway:
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def identity(self) -> IdentityClaims:
+        return self._identity
 
     @property
     def breaker(self) -> CircuitBreaker:
@@ -158,10 +171,10 @@ class OliveGateway:
         history: tuple[str, ...],
     ) -> SecurityContext:
         return SecurityContext(
-            agent_id=self._config.agent_id,
+            agent_id=self._identity.agent_id,
             session_id=self._session_id,
-            organization_id=self._config.organization_id,
-            role=self._config.role,
+            organization_id=self._identity.organization,
+            role=self._identity.role,
             declared_goal=self._config.declared_goal,
             tool=tool,
             arguments_hash=hash_arguments(arguments),

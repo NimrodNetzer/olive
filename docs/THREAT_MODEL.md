@@ -91,8 +91,15 @@ this document, update the document first (via ADR if the change is structural).
   dispatch). Its response is still inbound-inspected, so this does not bypass
   content inspection — it only means containment stops the *next* call, not an
   already-in-flight one.
-- No cryptographic agent identity enforcement on the wire yet (mock-CA JWT
-  module exists; transport enforcement lands with HTTP transport, M2).
+- Identity is now a verified, transport-independent object the gateway enforces
+  as (ADR-0007): a signed token's claims drive `agent_id`/`org`/`role`, and
+  **role is identity-bound** (a forged or unbacked role is rejected / hits
+  default-deny). But token verification only happens where a token is supplied —
+  i.e. on the **HTTP transport (next M2 slice)**. In **stdio** mode the gateway
+  still runs under a config-derived **unverified** identity (`verified=False`);
+  this is acceptable only because stdio is single-tenant and spawned by a
+  trusting client. Capability attenuation (token capabilities ∩ role) is carried
+  but not yet enforced (later M2 slice).
 - No detection of multi-day slow-burn campaigns or covert channels hidden in
   *allowed* traffic.
 - No protection against a malicious human operator with local file access.

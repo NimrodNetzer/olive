@@ -10,6 +10,7 @@ from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway, extract_inspectable_text
 from olive.gateway.ratelimit import RateLimiter
+from olive.identity.claims import IdentityClaims
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector, RolePolicy
 from olive.store.events import EventStore
@@ -296,3 +297,45 @@ async def test_forbidden_call_is_recorded_even_when_rate_limited(store):
     assert upstream.calls == ["read_faq"], "forbidden call never forwarded"
     summary = await store.summary()
     assert summary.incidents == 1, "forbidden attempt must still be an incident"
+
+
+def _gateway_with_identity(store: EventStore, identity: IdentityClaims) -> OliveGateway:
+    config = make_config()
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    return OliveGateway(config, store, pipeline, identity=identity)
+
+
+async def test_gateway_enforces_as_the_verified_identity(store, tmp_path):
+    import sqlite3
+
+    identity = IdentityClaims(
+        agent_id="attested-agent",
+        organization="org-7",
+        role="customer-support",
+        session_id="sess-xyz",
+        capabilities=("read_faq",),
+        verified=True,
+    )
+    gw = _gateway_with_identity(store, identity)
+    assert gw.session_id == "sess-xyz"
+    await gw.handle_call_tool(StubUpstream(), "read_faq", {})
+
+    db = sqlite3.connect(tmp_path / "events.db")
+    rows = db.execute("SELECT DISTINCT agent_id, session_id, role FROM events").fetchall()
+    db.close()
+    assert ("attested-agent", "sess-xyz", "customer-support") in rows
+
+
+async def test_role_comes_from_identity_not_config(store):
+    # An identity asserting a role with no policy is denied (default deny):
+    # the role cannot be used to reach tools the config never granted it.
+    identity = IdentityClaims(
+        agent_id="a", organization="o", role="admin", session_id="s", verified=True
+    )
+    gw = _gateway_with_identity(store, identity)
+    result = await gw.handle_call_tool(StubUpstream(), "read_faq", {})
+    assert result.isError, "unknown role must be blocked by default-deny policy"
+    summary = await store.summary()
+    assert summary.incidents == 1

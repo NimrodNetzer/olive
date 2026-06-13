@@ -83,12 +83,21 @@ policy. Labels tune inspection *depth*, never disable it (threat model rule 1):
 untrusted sources always get full content inspection; trusted sources still
 get layer-zero checks.
 
-### Identity — `src/olive/identity/tokens.py`
-Mock CA: local RSA keypair, real JWT signing/verification (RS256). Payload:
-agent_id, org, role, session_id, capabilities, expiry. In stdio mode (M1) the
-gateway is configured per-agent via policy file; cryptographic enforcement on
-the wire lands with HTTP transport (M2). The module is real and unit-tested
-from day one so the enforcement wiring is a transport change, not a redesign.
+### Identity — `src/olive/identity/`
+- `tokens.py` — Mock CA: local RSA keypair, real JWT signing/verification
+  (RS256, algorithm pinned, expiry + audience checked). Payload: agent_id, org,
+  role, session_id, capabilities, expiry.
+- `claims.py` — `IdentityClaims`, the transport-independent identity the gateway
+  is built around (ADR-0007). `claims_from_token` verifies a signed token and
+  maps it to claims (`verified=True`); `unverified_from_config` is the stdio
+  local-dev fallback (`verified=False`). Verification failure is fail-closed.
+
+The gateway enforces *as* an `IdentityClaims`: **role comes from identity, not
+config**, so once tokens are required a role cannot be self-asserted (a forged
+`role: admin` is rejected at verification; an unbacked role hits default-deny).
+Config now holds role *policies*, not *who is connecting*. HTTP feeds the token
+from the `Authorization: Bearer` header via the SDK's bearer auth (next slice);
+stdio uses the unverified config fallback.
 
 ### Event store — `src/olive/store/events.py`
 SQLite via `aiosqlite` (ADR-0004), behind a small interface so it can be
