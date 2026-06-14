@@ -48,8 +48,10 @@ only signal the circuit breaker, which applies deterministic quarantine.
      block returns a sanitized error result; the poisoned content never
      reaches the agent.
   5. Log events (and incident if blocked) either way.
-- `tools/list` responses are also recorded; description-poisoning inspection
-  is roadmapped (M4 corpus category exists from day one).
+- `tools/list` declarations (name + description + schema) are content-inspected
+  per tool (M3); a poisoned tool is withheld from the listing and logged as a
+  `tool-poisoning` incident. Rug-pull (cross-session description diffing) is the
+  next M3 slice.
 
 ### SecurityContext — `src/olive/gateway/context.py`
 One frozen object per inspected message. Fields: `agent_id`, `session_id`,

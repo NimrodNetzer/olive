@@ -77,10 +77,14 @@ this document, update the document first (via ADR if the change is structural).
   format-character stripping are applied, lookalike-character substitution is
   not). LLM sentinels (M6) and the eval harness (M5) address this; until
   then, detection coverage is limited and must be described honestly.
-- Tool descriptions from `tools/list` are **audited** (a hash of all
-  names+descriptions is logged per listing, making rug-pull swaps detectable
-  in the event trail) but **not yet content-inspected** before reaching the
-  agent. Inspection lands in M3.
+- Tool declarations from `tools/list` (name + description + input schema) are
+  now **content-inspected** before reaching the agent (M3): a tool whose
+  declaration trips a layer-zero pattern is **withheld** from the listing and
+  logged as a `tool-poisoning` incident, and a hash of all names+descriptions is
+  still recorded per listing. Limits: detection is layer-zero only, so
+  **semantic** description poisoning (no trigger words) is still missed (M6
+  sentinels), and **rug-pull** detection — flagging a description that *changes*
+  between sessions — is not yet implemented (next M3 slice).
 - Containment state (session status, quarantine) is **in-memory and
   per-process** (ADR-0006). In stdio mode that is the whole session, so
   quarantine is effective for the run; but state does not survive a restart and

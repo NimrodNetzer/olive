@@ -42,15 +42,16 @@ Proves: **Govern → Detect → Block → Log.**
 
 Adds **Contain** to the cycle.
 
-## M3 — Complete MCP-surface protection
+## M3 — Complete MCP-surface protection  ← current
 
 Inspect the whole MCP surface, not just `tools/call` content:
 
-- Tool names, tool descriptions, tool schemas, resources, prompts.
-- Detect **changes in tool descriptions between sessions** (rug-pull / MCP
-  description-poisoning attacks).
-- `tools/list` diffing wired into the inbound pipeline (today it is audited but
-  not content-inspected).
+- ✅ Tool names, descriptions, and schemas content-inspected at `tools/list`;
+  poisoned tools are withheld from the agent and logged (`tool-poisoning`).
+- ⬜ Detect **changes in tool descriptions between sessions** (rug-pull / MCP
+  description-poisoning) — persist a per-(upstream, tool) baseline and flag
+  drift.
+- ⬜ Extend inspection to resources and prompts offered by upstreams.
 
 ## M4 — Contextual authorization
 

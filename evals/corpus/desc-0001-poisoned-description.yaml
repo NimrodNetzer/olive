@@ -14,5 +14,7 @@ context:
 expected: block
 status: known-miss
 notes: >
-  The gateway does not yet inspect tools/list responses (M4) and the payload
-  is semantic. Tracked as the MCP-specific attack class from THREAT_MODEL.md.
+  M3 now inspects tools/list declarations, but this payload is semantic (no
+  trigger words), so layer-zero patterns still miss it. Closing this needs the
+  M6 injection sentinel. Tracked as the MCP-specific attack class from
+  THREAT_MODEL.md; see desc-0002 for the trigger-phrase variant we do catch.

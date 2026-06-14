@@ -49,6 +49,13 @@ def _attack_type(verdict: Verdict) -> str:
     return "unknown"
 
 
+def _inspectable_tool_text(tool: types.Tool) -> str:
+    """Every textual surface of a tool declaration the agent's context ingests:
+    name, description, and input schema (a poisoned parameter description is an
+    injection vector too). Serialize the whole declaration so nothing is missed."""
+    return tool.model_dump_json()
+
+
 def extract_inspectable_text(result: types.CallToolResult) -> str:
     """Collect every textual surface of a tool result for inspection.
 
@@ -187,13 +194,21 @@ class OliveGateway:
         )
 
     async def _record(
-        self, ctx: SecurityContext, verdict: Verdict, started: float, detection_method: str
+        self,
+        ctx: SecurityContext,
+        verdict: Verdict,
+        started: float,
+        detection_method: str,
+        attack_type: str | None = None,
     ) -> str | None:
         latency_ms = int((perf_counter() - started) * 1000)
         incident_id: str | None = None
         if not verdict.allowed:
             incident_id = await self._store.create_incident(
-                ctx, verdict, attack_type=_attack_type(verdict), detection_method=detection_method
+                ctx,
+                verdict,
+                attack_type=attack_type or _attack_type(verdict),
+                detection_method=detection_method,
             )
         await self._store.log_event(ctx, verdict, latency_ms, incident_id)
         return incident_id
@@ -312,16 +327,38 @@ class OliveGateway:
         async def list_tools() -> list[types.Tool]:
             started = perf_counter()
             upstream_tools = await upstream.list_tools()
-            # Tool descriptions reach the agent's context and are NOT yet
-            # content-inspected (M4 gap, THREAT_MODEL.md). Audit them anyway:
-            # the hash of names+descriptions makes rug-pull swaps detectable
-            # in the event trail today.
+            identity = (identity_resolver() if identity_resolver else None) or self._identity
+
+            # M3: tool names/descriptions/schemas are injected into the agent's
+            # context by every MCP client, so they are untrusted content. Inspect
+            # each tool; a poisoned one is WITHHELD from the listing (never
+            # reaching the agent) and logged as an incident. Clean tools pass.
+            safe: list[types.Tool] = []
+            for tool in upstream_tools.tools:
+                tool_ctx = self._build_context(
+                    identity,
+                    tool.name,
+                    {"name": tool.name, "description": tool.description or ""},
+                    "inbound",
+                    0,
+                    (),
+                )
+                verdict = await self._pipeline.run(tool_ctx, content=_inspectable_tool_text(tool))
+                if verdict.allowed:
+                    safe.append(tool)
+                else:
+                    await self._record(
+                        tool_ctx, verdict, started, "pattern", attack_type="tool-poisoning"
+                    )
+
+            # One aggregate audit row for the listing surface; hashing all
+            # names+descriptions keeps rug-pull swaps detectable in the trail.
             descriptions = {t.name: t.description or "" for t in upstream_tools.tools}
-            ctx = self._build_context(
-                self._identity, "tools/list", descriptions, "inbound", 0, ()
+            summary_ctx = self._build_context(
+                identity, "tools/list", descriptions, "inbound", 0, ()
             )
-            await self._record(ctx, ALLOW, started, "none")
-            return upstream_tools.tools
+            await self._record(summary_ctx, ALLOW, started, "pattern")
+            return safe
 
         # validate_input=False: the gateway is transparent; schema validation
         # belongs to the upstream. Re-validating here would also desync if
