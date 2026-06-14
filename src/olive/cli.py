@@ -30,6 +30,14 @@ from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector
 from olive.store.events import EventStore
 
+# Capability a token must carry to approve a remediation fix (ADR-0013). Distinct
+# from olive:approve (release one held call) - approving a security fix to ship is
+# a strictly larger authority, and capabilities never imply one another.
+REMEDIATE_SCOPE = "olive:remediate"
+
+_ROOT = Path(__file__).resolve().parents[2]
+_EVALS = _ROOT / "evals" / "run_evals.py"
+
 
 def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
     """The one place the inspector chain is assembled - evals use it too,
@@ -171,6 +179,121 @@ async def reset_baselines(config_path: str, db_override: str | None, tool: str |
         await store.close()
 
 
+def _run_eval_gate(*, update_baseline: bool = False) -> tuple[int, dict | None]:
+    """Run the deterministic eval gate as a subprocess and return (exit_code,
+    metrics). The remediation ledger records the *real* result of this run - there
+    is no in-process path that could forge a pass (ADR-0013). Metrics come from the
+    runner's `--json` line; None if it could not be parsed (treated as a fail)."""
+    import json
+    import subprocess
+
+    argv = [sys.executable, str(_EVALS)]
+    argv.append("--update-baseline" if update_baseline else "--json")
+    proc = subprocess.run(argv, cwd=str(_ROOT), capture_output=True, text=True)
+    print(proc.stderr, file=sys.stderr, end="")
+    metrics: dict | None = None
+    for line in reversed(proc.stdout.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if "gate_passed" in parsed:
+            metrics = parsed
+            break
+    return proc.returncode, metrics
+
+
+async def run_cycle(args: argparse.Namespace) -> int:
+    """Drive one remediation cycle (ADR-0013). Deterministic at every step:
+    `verify` records the real gate result, `approve` requires a verified
+    olive:remediate token, `learn` refuses without a recorded approval. The ledger
+    lives on the intelligence side of the open-core seam (ADR-0003); imported here
+    locally so the stdio/serve paths never pay for it."""
+    from olive.intelligence.remediation import (
+        RemediationError,
+        RemediationLedger,
+        RemediationState,
+        hash_patch,
+    )
+
+    config = load_config(args.config)
+    ledger = RemediationLedger(args.db or config.db_path)
+    await ledger.open()
+    try:
+        action = args.cycle_command
+        if action == "open":
+            cycle = await ledger.open_cycle(args.incident, args.case)
+            print(cycle.cycle_id)  # stdout: the new id, for scripting
+        elif action == "propose":
+            cycle = await ledger.propose_fix(
+                args.cycle, patch_hash=hash_patch(args.patch), patch_summary=args.summary
+            )
+        elif action == "verify":
+            # Check the cycle is verifiable before spending a full eval run; the
+            # ledger re-checks too, so this is just to avoid wasted work.
+            current = await ledger.get(args.cycle)
+            if current.state is not RemediationState.FIX_PROPOSED:
+                want = RemediationState.FIX_PROPOSED
+                raise RemediationError(f"{args.cycle} is {current.state}; verify requires {want}")
+            code, metrics = _run_eval_gate()
+            passed = code == 0 and metrics is not None and metrics.get("gate_passed") is True
+            cycle = await ledger.record_verification(
+                args.cycle,
+                gate_passed=passed,
+                detected=(metrics or {}).get("detected", -1),
+                false_positives=(metrics or {}).get("false_positives", -1),
+            )
+        elif action == "approve":
+            from olive.identity.claims import claims_from_token
+            from olive.identity.tokens import IdentityError
+
+            try:
+                # One-shot CLI driver: a synchronous read of a small PEM file is
+                # fine here (the eval gate subprocess beside it blocks too).
+                pubkey = Path(args.ca_pubkey).read_bytes()  # noqa: ASYNC240
+                claims = claims_from_token(args.token, pubkey)
+            except IdentityError as exc:
+                print(f"[olive] approval rejected: invalid token ({exc})", file=sys.stderr)
+                return 1
+            if REMEDIATE_SCOPE not in claims.capabilities:
+                print(
+                    f"[olive] approval rejected: token lacks '{REMEDIATE_SCOPE}' capability",
+                    file=sys.stderr,
+                )
+                return 1
+            cycle = await ledger.approve(args.cycle, approved_by=claims.agent_id)
+        elif action == "learn":
+            cycle = await ledger.learn(args.cycle)
+            # The human gate has passed; lock the win in by re-pinning the baseline
+            # to the (already-merged, case-promoted) corpus. Reuses ADR-0011's only
+            # baseline-moving act - the cycle tool never edits the corpus itself.
+            code, _ = _run_eval_gate(update_baseline=True)
+            if code != 0:
+                # The cycle is LEARNED (approval passed), but the baseline re-pin
+                # did not complete - exit non-zero so automation re-runs it.
+                print(cycle.render(), file=sys.stderr)
+                print(
+                    "[olive] baseline update returned non-zero; re-run "
+                    "`python evals/run_evals.py --update-baseline`",
+                    file=sys.stderr,
+                )
+                return 1
+        elif action == "show":
+            cycle = await ledger.get(args.cycle)
+        else:  # pragma: no cover - argparse restricts the choices
+            raise RemediationError(f"unknown cycle action {action!r}")
+        print(cycle.render(), file=sys.stderr)
+        return 0
+    except RemediationError as exc:
+        print(f"[olive] {exc}", file=sys.stderr)
+        return 1
+    finally:
+        await ledger.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -211,7 +334,50 @@ def main() -> None:
     reset.add_argument("--db", default=None, help="override audit DB path from the policy file")
     reset.add_argument("--tool", default=None, help="a single tool name (default: all)")
 
+    cycle = sub.add_parser(
+        "cycle", help="drive one remediation cycle (Reproduce->Repair->Verify->Learn, ADR-0013)"
+    )
+    cycle.add_argument("--config", required=True, help="policy YAML file")
+    cycle.add_argument("--db", default=None, help="override audit DB path from the policy file")
+    cyc = cycle.add_subparsers(dest="cycle_command", required=True)
+
+    c_open = cyc.add_parser("open", help="start a cycle from a reproduced incident")
+    c_open.add_argument("--incident", required=True, help="the incident id being remediated")
+    c_open.add_argument("--case", required=True, help="the reproduced corpus case id")
+
+    c_propose = cyc.add_parser("propose", help="record a builder's proposed fix (diff hash)")
+    c_propose.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
+    c_propose.add_argument("--patch", required=True, help="path to the proposed diff/patch file")
+    c_propose.add_argument("--summary", required=True, help="bounded one-line summary of the fix")
+
+    c_verify = cyc.add_parser(
+        "verify", help="run the deterministic eval gate and record the result"
+    )
+    c_verify.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
+
+    c_approve = cyc.add_parser("approve", help="human approval, gated on an olive:remediate token")
+    c_approve.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
+    c_approve.add_argument(
+        "--ca-pubkey", required=True, help="PEM file of the issuing CA public key"
+    )
+    c_approve.add_argument(
+        "--token", required=True, help="CA-signed token carrying olive:remediate"
+    )
+
+    c_learn = cyc.add_parser("learn", help="lock the win in (requires a recorded approval)")
+    c_learn.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
+
+    c_show = cyc.add_parser("show", help="print a cycle's current state")
+    c_show.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
+
     args = parser.parse_args()
+
+    if args.command == "cycle":
+        try:
+            sys.exit(asyncio.run(run_cycle(args)))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
 
     if args.command == "reset-baselines":
         try:

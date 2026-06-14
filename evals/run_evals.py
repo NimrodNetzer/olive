@@ -152,7 +152,7 @@ def _gate(metrics: dict, baseline: dict) -> list[str]:
     return failures
 
 
-async def run(update_baseline: bool = False) -> int:
+async def run(update_baseline: bool = False, as_json: bool = False) -> int:
     pipelines: dict = {}
 
     cases = [yaml.safe_load(p.read_text(encoding="utf-8")) for p in sorted(CORPUS.glob("*.yaml"))]
@@ -264,8 +264,30 @@ async def run(update_baseline: bool = False) -> int:
     for line in gate_failures:
         console.print(f"[red]GATE[/red] {line}")
 
-    return 1 if (regressions or gate_failures) else 0
+    passed = not (regressions or gate_failures)
+    if as_json:
+        # A single machine-readable line for `olive cycle verify` (ADR-0013): the
+        # remediation ledger records the real gate result, never an agent's claim.
+        # Emitted last and the only line that parses as a JSON object with these
+        # keys, so the caller can locate it regardless of the rich table output.
+        print(
+            json.dumps(
+                {
+                    "detected": metrics["detected"],
+                    "false_positives": metrics["false_positives"],
+                    "gate_passed": passed,
+                }
+            )
+        )
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(run(update_baseline="--update-baseline" in sys.argv)))
+    sys.exit(
+        asyncio.run(
+            run(
+                update_baseline="--update-baseline" in sys.argv,
+                as_json="--json" in sys.argv,
+            )
+        )
+    )

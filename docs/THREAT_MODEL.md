@@ -9,6 +9,9 @@ this document, update the document first (via ADR if the change is structural).
 - Credentials and secrets reachable through tools or embedded in tool servers.
 - The agent's own behavior: its instructions, memory, and goal integrity.
 - The audit trail (events/incidents DB) — integrity and confidentiality.
+- The **remediation cycle ledger** (`remediation_cycles`, ADR-0013) — its
+  integrity is what guarantees a fix was actually verified by the gate and
+  approved by a human before its baseline win was locked in.
 
 ## Trusted components
 
@@ -120,6 +123,17 @@ this document, update the document first (via ADR if the change is structural).
   enforced** for tool calls (later M2/M3 slice); today capabilities gate the
   admin endpoints only (`olive:release` for session release, `olive:approve`
   for releasing a held call — distinct scopes, neither implies the other).
+- **Remediation cycle (M7, ADR-0013):** the loop never auto-applies a fix — a
+  fix reaching production is always a human action in version control. The
+  ledger's `verify` transition is writable only from the real eval-gate result
+  and `learn` (the baseline lock-in) is refused without a recorded
+  capability-gated (`olive:remediate`) approval, so no LLM can self-verify or
+  self-approve a change to the security system. Residual risk: a **malicious
+  human operator** who holds an `olive:remediate` token *and* can write the DB
+  can still approve a bad baseline change — the same insider class as a
+  malicious `olive:approve` holder. The cycle narrows the blast radius (fixes are
+  proposed as diffs, re-tested, and the approver is recorded) but does not
+  eliminate insider risk; `olive:remediate` must be issued narrowly.
 - **Contextual authz limits (M4, ADR-0010):** resource scoping only applies to
   tools with a declared extractor and to predicates over the *scoping id* and
   *classification* — **content-aware** authorization (e.g. "the body contains no

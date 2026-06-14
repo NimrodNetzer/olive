@@ -202,6 +202,26 @@ over HTTP, release is reachable via the capability-gated admin endpoint. Idle
 memory; **quarantined sessions are never evicted** (idling must not clear a
 quarantine).
 
+### Remediation cycle ledger — `src/olive/intelligence/remediation.py`
+The first department loop (ADR-0013): a deterministic, auditable state machine
+that walks one incident through `reproduced → fix-proposed → verified → approved
+→ learned` (+ terminal `rejected`). It is driven by the `olive cycle` CLI and
+backs the back half of the security cycle (Reproduce → Repair → Verify → Learn).
+
+The two consequential transitions cannot be reached by an LLM: **verify** is
+writable only from the real `evals/run_evals.py` gate result (the CLI runs it as
+a subprocess; there is no path to inject a pass), and **learn** refuses unless a
+capability-gated (`olive:remediate`) human approval is already recorded. This
+extends ADR-0005 to the remediation loop.
+
+Lives on the **intelligence side of the open-core seam** (ADR-0003): it owns its
+own `aiosqlite` access to the same DB file and references the incident by its
+`incident_id` string only — it never imports `IncidentReport` into core, and the
+gateway core never imports it. `cli.py` (the composition root) wires it in with a
+local import, like `serve_http` does for the HTTP stack. Rule 3 holds: the table
+stores the proposed diff's SHA-256 + a bounded ≤200-char summary, never the diff
+body.
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
@@ -220,6 +240,8 @@ through the circuit breaker's narrow interface. That seam is the potential
 open-core boundary.
 
 ## What deliberately does not exist yet
-- Tool-description/schema inspection and rug-pull diffing (M3).
-- LLM sentinels, incident reporter (M6).
-- Larger corpus + CI regression gate (M5). Dashboard (M5/showable).
+- Operating modes (Normal/Suspicious/Siege) and the Command & Coordination
+  hierarchy (deferred within/after M7 — ADR-0013 builds the loop, not the org).
+- Auto-apply/auto-deploy of a proposed fix — permanently human-gated by design.
+- Cross-session/fleet behavioral baselines and the enterprise control plane.
+- Dashboard (showable).

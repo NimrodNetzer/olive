@@ -126,7 +126,7 @@ deterministic code enforces):
 - **Identity / Tool-Usage / Agent-Communication Sentinels** remain future work
   as the surface grows.
 
-## M7 — The first complete department cycle
+## M7 — The first complete department cycle  🚧 in progress
 
 A small, real version of the full vision — the loop nobody else runs end to end:
 
@@ -148,6 +148,26 @@ Completes **Reproduce → Repair → Verify → Learn & strengthen**. This is wh
 Olive begins evolving from an MCP firewall into the security organization the
 vision describes — including the operating modes (Normal / Suspicious / Siege)
 and the Command & Coordination hierarchy.
+
+**First slice (built — ADR-0013):** the deterministic, human-gated cycle itself.
+- ✅ `builder` agent (`.claude/agents/`): proposes a fix as a reviewable diff,
+  never applied to prod, never self-approves, never silently weakens detection.
+  Verifier is **not** a new LLM agent — it stays `qa` + the deterministic eval
+  gate (ADR-0005 spirit).
+- ✅ **Remediation cycle ledger** (`intelligence/remediation.py`): states
+  `reproduced → fix-proposed → verified → approved → learned` (+ `rejected`),
+  driven by `olive cycle open/propose/verify/approve/learn/show`. **Verify** is
+  writable only from the real `run_evals.py` gate result; **learn** (the
+  baseline lock-in) is refused without a recorded capability-gated
+  (`olive:remediate`) human approval. Rule-3 fields only (patch hash + bounded
+  summary). Lives on the intelligence side of the open-core seam (ADR-0003).
+- ✅ Reuses: `red-team` = Reproducer, eval corpus + baseline gate = Verifier and
+  the Learn mechanism (`--update-baseline`), `incidents`/`IncidentReport` = the
+  structured incident.
+
+**Deferred (later slice within/after M7):** the operating modes (Normal /
+Suspicious / Siege), the full Command & Coordination hierarchy, and credential
+rotation. ADR-0013 builds the loop, not the org chart.
 
 ## Later — the bets
 
