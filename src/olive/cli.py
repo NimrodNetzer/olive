@@ -152,6 +152,20 @@ def serve_http(
     uvicorn.run(app, host=host, port=port)
 
 
+async def reset_baselines(config_path: str, db_override: str | None, tool: str | None) -> None:
+    """Clear rug-pull baselines so a legitimate tool-description change can be
+    re-accepted on the next listing (ADR-0009) - an operator re-approval."""
+    config = load_config(config_path)
+    store = EventStore(db_override or config.db_path)
+    await store.open()
+    try:
+        count = await store.reset_baseline(tool)
+        target = tool or "all tools"
+        print(f"[olive] cleared {count} baseline(s) for {target}", file=sys.stderr)
+    finally:
+        await store.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -184,7 +198,22 @@ def main() -> None:
         help="upstream MCP server command (prefix with --)",
     )
 
+    reset = sub.add_parser(
+        "reset-baselines",
+        help="clear rug-pull tool baselines so a legitimate change is re-accepted",
+    )
+    reset.add_argument("--config", required=True, help="policy YAML file")
+    reset.add_argument("--db", default=None, help="override audit DB path from the policy file")
+    reset.add_argument("--tool", default=None, help="a single tool name (default: all)")
+
     args = parser.parse_args()
+
+    if args.command == "reset-baselines":
+        try:
+            asyncio.run(reset_baselines(args.config, args.db, args.tool))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
     # An upstream may come from the policy's `upstreams:` instead of the CLI, so
     # an empty command is allowed here; _resolve_specs enforces "at least one".
     upstream = [part for part in args.upstream if part != "--"]

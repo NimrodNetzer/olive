@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from hashlib import sha256
 from time import perf_counter
 
 import mcp.types as types
@@ -33,7 +34,7 @@ from olive.gateway.context import Direction, SecurityContext, hash_arguments
 from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
 from olive.gateway.ratelimit import RateLimiter
 from olive.identity.claims import IdentityClaims, unverified_from_config
-from olive.store.events import EventStore
+from olive.store.events import BaselineStatus, EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
     "policy.": "privilege-escalation",
@@ -343,13 +344,30 @@ class OliveGateway:
                     0,
                     (),
                 )
-                verdict = await self._pipeline.run(tool_ctx, content=_inspectable_tool_text(tool))
-                if verdict.allowed:
-                    safe.append(tool)
-                else:
+                declaration = _inspectable_tool_text(tool)
+                verdict = await self._pipeline.run(tool_ctx, content=declaration)
+                if not verdict.allowed:
                     await self._record(
                         tool_ctx, verdict, started, "pattern", attack_type="tool-poisoning"
                     )
+                    continue  # withhold: poisoned declaration
+
+                # Rug-pull (ADR-0009): a declaration that CHANGED since first use
+                # is withheld even if pattern-clean - the swap itself is hostile.
+                status = await self._store.observe_tool(
+                    tool.name, sha256(declaration.encode("utf-8")).hexdigest()
+                )
+                if status is BaselineStatus.CHANGED:
+                    rug = Verdict(
+                        decision=Decision.BLOCK,
+                        rule="tools.rug_pull",
+                        evidence=f"declaration of '{tool.name}' changed since first seen",
+                    )
+                    await self._record(
+                        tool_ctx, rug, started, "baseline", attack_type="tool-rug-pull"
+                    )
+                    continue  # withhold: rug-pull
+                safe.append(tool)
 
             # One aggregate audit row for the listing surface; hashing all
             # names+descriptions keeps rug-pull swaps detectable in the trail.

@@ -48,9 +48,9 @@ Inspect the whole MCP surface, not just `tools/call` content:
 
 - ✅ Tool names, descriptions, and schemas content-inspected at `tools/list`;
   poisoned tools are withheld from the agent and logged (`tool-poisoning`).
-- ⬜ Detect **changes in tool descriptions between sessions** (rug-pull / MCP
-  description-poisoning) — persist a per-(upstream, tool) baseline and flag
-  drift.
+- ✅ **Rug-pull** detection (ADR-0009): trust-on-first-use baselines flag a
+  declaration that changes between sessions; the tool is withheld
+  (`tool-rug-pull`) until an operator re-approves (`olive reset-baselines`).
 - ⬜ Extend inspection to resources and prompts offered by upstreams.
 
 ## M4 — Contextual authorization

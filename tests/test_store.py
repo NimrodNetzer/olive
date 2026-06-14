@@ -62,6 +62,27 @@ async def test_summary_counts(store, make_context):
     assert (summary.total, summary.allowed, summary.blocked, summary.incidents) == (2, 1, 1, 1)
 
 
+async def test_tool_baseline_tofu_lifecycle(store):
+    from olive.store.events import BaselineStatus
+
+    assert await store.observe_tool("files.read", "h1") is BaselineStatus.NEW
+    assert await store.observe_tool("files.read", "h1") is BaselineStatus.UNCHANGED
+    # a changed declaration is flagged...
+    assert await store.observe_tool("files.read", "h2") is BaselineStatus.CHANGED
+    # ...and the baseline is NOT overwritten by the swap
+    assert await store.observe_tool("files.read", "h2") is BaselineStatus.CHANGED
+    # the original baseline still matches
+    assert await store.observe_tool("files.read", "h1") is BaselineStatus.UNCHANGED
+
+
+async def test_reset_baseline_reaccepts_first_use(store):
+    from olive.store.events import BaselineStatus
+
+    await store.observe_tool("a", "h1")
+    assert await store.reset_baseline("a") == 1
+    assert await store.observe_tool("a", "h2") is BaselineStatus.NEW
+
+
 async def test_no_raw_arguments_ever_persisted(store, make_context, tmp_path):
     """CLAUDE.md rule 3: the secret value must not appear anywhere in the DB file."""
     secret = "super-secret-api-key-12345"

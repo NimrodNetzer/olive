@@ -49,9 +49,9 @@ only signal the circuit breaker, which applies deterministic quarantine.
      reaches the agent.
   5. Log events (and incident if blocked) either way.
 - `tools/list` declarations (name + description + schema) are content-inspected
-  per tool (M3); a poisoned tool is withheld from the listing and logged as a
-  `tool-poisoning` incident. Rug-pull (cross-session description diffing) is the
-  next M3 slice.
+  per tool (M3); a poisoned tool is withheld and logged (`tool-poisoning`).
+  A declaration that *changes* between sessions is withheld as a rug-pull
+  (`tool-rug-pull`) via trust-on-first-use baselines (ADR-0009).
 
 ### SecurityContext — `src/olive/gateway/context.py`
 One frozen object per inspected message. Fields: `agent_id`, `session_id`,
@@ -160,6 +160,9 @@ CREATE TABLE incidents (
     decision TEXT NOT NULL, status TEXT NOT NULL
 );
 ```
+
+Plus a `tool_baselines` table (tool_name, declaration_hash, first/last seen)
+backing trust-on-first-use rug-pull detection (ADR-0009).
 
 Raw payloads are never stored — hashes + bounded evidence excerpts only.
 

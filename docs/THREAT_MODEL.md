@@ -81,10 +81,15 @@ this document, update the document first (via ADR if the change is structural).
   now **content-inspected** before reaching the agent (M3): a tool whose
   declaration trips a layer-zero pattern is **withheld** from the listing and
   logged as a `tool-poisoning` incident, and a hash of all names+descriptions is
-  still recorded per listing. Limits: detection is layer-zero only, so
-  **semantic** description poisoning (no trigger words) is still missed (M6
-  sentinels), and **rug-pull** detection — flagging a description that *changes*
-  between sessions — is not yet implemented (next M3 slice).
+  still recorded per listing.
+- **Rug-pull** (a tool declaration that *changes* between sessions) is detected
+  via trust-on-first-use baselines (ADR-0009): a changed declaration is withheld
+  and logged as `tool-rug-pull`, even when the new text is pattern-clean; the
+  baseline is never overwritten by the swap, and an operator re-approves a
+  legitimate change with `olive reset-baselines`. Limits: detection is still
+  layer-zero for *content*, so **semantic** description poisoning present from
+  the **first** sighting (no trigger words, never changed) is missed until the
+  M6 sentinels; and baselines are per-gateway (not federated).
 - Containment state (session status, quarantine) is **in-memory and
   per-process** (ADR-0006). In stdio mode that is the whole session, so
   quarantine is effective for the run; but state does not survive a restart and

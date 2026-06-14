@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 import aiosqlite
@@ -47,7 +48,19 @@ CREATE TABLE IF NOT EXISTS incidents (
     decision         TEXT NOT NULL,
     status           TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tool_baselines (
+    tool_name        TEXT PRIMARY KEY,
+    declaration_hash TEXT NOT NULL,
+    first_seen       TEXT NOT NULL,
+    last_seen        TEXT NOT NULL
+);
 """
+
+
+class BaselineStatus(StrEnum):
+    NEW = "new"  # first sighting - baseline recorded (trust on first use)
+    UNCHANGED = "unchanged"  # declaration matches the baseline
+    CHANGED = "changed"  # declaration differs from baseline (rug-pull signal)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,3 +173,43 @@ class EventStore:
             blocked=blocked or 0,
             incidents=(incidents_row or (0,))[0] or 0,
         )
+
+    async def observe_tool(self, tool_name: str, declaration_hash: str) -> BaselineStatus:
+        """Trust-on-first-use baseline check (ADR-0009). Records a new baseline,
+        confirms an unchanged one, or reports a CHANGED declaration. A mismatch
+        NEVER overwrites the baseline - the swap must not become the new normal."""
+        now = SecurityContext.now()
+        cursor = await self._conn.execute(
+            "INSERT OR IGNORE INTO tool_baselines"
+            " (tool_name, declaration_hash, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            (tool_name, declaration_hash, now, now),
+        )
+        if cursor.rowcount == 1:
+            await self._conn.commit()
+            return BaselineStatus.NEW
+
+        cursor = await self._conn.execute(
+            "SELECT declaration_hash FROM tool_baselines WHERE tool_name = ?", (tool_name,)
+        )
+        row = await cursor.fetchone()
+        if row is not None and row[0] == declaration_hash:
+            await self._conn.execute(
+                "UPDATE tool_baselines SET last_seen = ? WHERE tool_name = ?", (now, tool_name)
+            )
+            await self._conn.commit()
+            return BaselineStatus.UNCHANGED
+
+        await self._conn.commit()  # baseline left intact on purpose
+        return BaselineStatus.CHANGED
+
+    async def reset_baseline(self, tool_name: str | None = None) -> int:
+        """Clear baselines so a legitimate declaration change can be re-accepted
+        on the next listing. Returns the number of baselines removed."""
+        if tool_name is None:
+            cursor = await self._conn.execute("DELETE FROM tool_baselines")
+        else:
+            cursor = await self._conn.execute(
+                "DELETE FROM tool_baselines WHERE tool_name = ?", (tool_name,)
+            )
+        await self._conn.commit()
+        return cursor.rowcount
