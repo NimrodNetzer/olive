@@ -30,7 +30,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
-from olive.identity.claims import IdentityClaims, claims_from_token
+from olive.identity.claims import IdentityClaims, claims_from_token, session_key
 from olive.identity.tokens import IdentityError
 
 # Capability a token must carry to use the admin release endpoint.
@@ -100,9 +100,19 @@ async def _release(request: Request) -> JSONResponse:
         return JSONResponse(
             {"error": f"forbidden: requires '{RELEASE_SCOPE}' capability"}, status_code=403
         )
-    session_id = request.path_params["session_id"]
-    released = await request.app.state.gateway.release_session(session_id)
-    return JSONResponse({"session_id": session_id, "released": released})
+    # A session is the (org, agent, session_id) triple - all three appear in the
+    # audit log, so an operator can identify the session to release.
+    try:
+        body = await request.json()
+        org, agent, sid = body["organization"], body["agent_id"], body["session_id"]
+    except (KeyError, TypeError, ValueError):
+        return JSONResponse(
+            {"error": "body must be {organization, agent_id, session_id}"}, status_code=400
+        )
+    released = await request.app.state.gateway.release_session(session_key(org, agent, sid))
+    return JSONResponse(
+        {"organization": org, "agent_id": agent, "session_id": sid, "released": released}
+    )
 
 
 def build_http_app(
@@ -122,7 +132,7 @@ def build_http_app(
     ]
     routes = [
         Route(mcp_path, endpoint=RequireAuthMiddleware(_McpAsgiApp(), [], None)),
-        Route("/admin/release/{session_id}", endpoint=_release, methods=["POST"]),
+        Route("/admin/release", endpoint=_release, methods=["POST"]),
     ]
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
 

@@ -12,6 +12,17 @@ from dataclasses import dataclass
 
 from olive.identity.tokens import IdentityError, verify_token
 
+# ASCII unit separator: cannot appear in normal identifiers, so the composite
+# key is unambiguous regardless of what org/agent/session strings contain.
+_KEY_SEP = "\x1f"
+
+
+def session_key(organization: str, agent_id: str, session_id: str) -> str:
+    """Namespaced containment key. Two tokens that reuse a `session_id` across
+    different agents/orgs must NOT share breaker/rate-limiter state, so the key
+    is the (org, agent, session) triple - not the session id alone."""
+    return f"{organization}{_KEY_SEP}{agent_id}{_KEY_SEP}{session_id}"
+
 
 @dataclass(frozen=True, slots=True)
 class IdentityClaims:
@@ -22,6 +33,10 @@ class IdentityClaims:
     capabilities: tuple[str, ...] = ()
     # True only when these claims came from a cryptographically verified token.
     verified: bool = False
+
+    @property
+    def session_key(self) -> str:
+        return session_key(self.organization, self.agent_id, self.session_id)
 
 
 def _new_session_id() -> str:

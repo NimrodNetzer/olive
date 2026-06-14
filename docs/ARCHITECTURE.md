@@ -102,10 +102,12 @@ stdio uses the unverified config fallback.
 
 Identity is resolved **per call**: `handle_call_tool` takes the request's
 `IdentityClaims` (stdio falls back to the construction identity). The breaker
-and rate limiter key on that identity's `session_id`, and the rate limit is
-resolved from that identity's role — so one gateway can front many agents with
-independent containment and per-role throttles. The limiter is a pure keyed
-sliding window; the limit is supplied per call.
+and rate limiter key on `IdentityClaims.session_key` — the namespaced
+**(org, agent, session_id)** triple, so a reused session id across tenants can't
+share containment state — and the rate limit is resolved from that identity's
+role. One gateway can thus front many agents with independent containment and
+per-role throttles. The limiter is a pure keyed sliding window; the limit is
+supplied per call.
 
 ### HTTP transport — `src/olive/transport/http.py`
 `olive serve` exposes the gateway over streamable HTTP with **bearer-token
@@ -165,9 +167,11 @@ release** resets the session to active. Quarantined calls are logged as
 `quarantine` events referencing the tripping incident — no incident-per-call
 spam, but never a silent decision (ADR-0006).
 
-In-memory and per-process for now: in stdio mode that is exactly one session.
-A cross-process admin surface for release lands with the HTTP transport (M2);
-today release is an in-process method.
+In-memory and per-process for now: in stdio mode that is exactly one session;
+over HTTP, release is reachable via the capability-gated admin endpoint. Idle
+**active** sessions are evicted past a TTL (lazy sweep + `evict_idle`) to bound
+memory; **quarantined sessions are never evicted** (idling must not clear a
+quarantine).
 
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from

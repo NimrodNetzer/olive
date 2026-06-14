@@ -18,10 +18,21 @@ from time import monotonic
 
 
 class RateLimiter:
-    def __init__(self, window_seconds: float = 60.0) -> None:
+    def __init__(self, window_seconds: float = 60.0, sweep_interval_seconds: float = 300.0) -> None:
         self._window = window_seconds
+        self._sweep_interval = sweep_interval_seconds
+        self._last_sweep = monotonic()
         self._calls: dict[str, deque[float]] = {}
         self._lock = asyncio.Lock()
+
+    def _sweep_locked(self, now: float) -> int:
+        """Drop keys whose entire window has expired (no live calls), bounding
+        memory under many short-lived sessions. Caller holds the lock."""
+        cutoff = now - self._window
+        empty = [k for k, w in self._calls.items() if not w or w[-1] <= cutoff]
+        for k in empty:
+            del self._calls[k]
+        return len(empty)
 
     async def check_and_record(
         self, key: str, limit: int | None, now: float | None = None
@@ -40,6 +51,9 @@ class RateLimiter:
             raise ValueError("limit must be >= 1 or None")
         ts = monotonic() if now is None else now
         async with self._lock:
+            if ts - self._last_sweep > self._sweep_interval:
+                self._sweep_locked(ts)
+                self._last_sweep = ts
             window = self._calls.setdefault(key, deque())
             cutoff = ts - self._window
             while window and window[0] <= cutoff:
@@ -48,3 +62,11 @@ class RateLimiter:
                 return False
             window.append(ts)
             return True
+
+    async def evict_idle(self, now: float | None = None) -> int:
+        """Drop fully-expired keys; returns how many were removed."""
+        async with self._lock:
+            return self._sweep_locked(monotonic() if now is None else now)
+
+    def key_count(self) -> int:
+        return len(self._calls)

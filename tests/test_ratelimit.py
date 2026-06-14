@@ -73,3 +73,20 @@ async def test_invalid_limit_rejected():
     rl = RateLimiter()
     with pytest.raises(ValueError):
         await rl.check_and_record(KEY, 0)
+
+
+async def test_expired_keys_are_evicted():
+    rl = RateLimiter(window_seconds=60)
+    await rl.check_and_record("a", 5, now=0.0)
+    await rl.check_and_record("b", 5, now=0.0)
+    assert rl.key_count() == 2
+    # all timestamps expired by now=200; eviction frees both keys
+    assert await rl.evict_idle(now=200.0) == 2
+    assert rl.key_count() == 0
+
+
+async def test_active_keys_survive_eviction():
+    rl = RateLimiter(window_seconds=60)
+    await rl.check_and_record("a", 5, now=0.0)
+    assert await rl.evict_idle(now=10.0) == 0  # still within the window
+    assert rl.key_count() == 1

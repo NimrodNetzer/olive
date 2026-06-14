@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from time import monotonic
 
 import pytest
 
@@ -93,3 +94,32 @@ async def test_concurrent_begin_calls_get_unique_numbers():
 def test_max_blocks_must_be_positive():
     with pytest.raises(ValueError):
         CircuitBreaker(max_blocks=0)
+
+
+async def test_idle_active_sessions_are_evicted():
+    b = CircuitBreaker(idle_ttl_seconds=100)
+    await b.begin_call("s1")
+    await b.begin_call("s2")
+    assert b.session_count() == 2
+    # far-future sweep: both are idle past the TTL
+    evicted = await b.evict_idle(now=monotonic() + 10_000)
+    assert evicted == 2
+    assert b.session_count() == 0
+
+
+async def test_quarantined_sessions_are_never_evicted():
+    """Critical: going idle must not clear a quarantine."""
+    b = CircuitBreaker(max_blocks=1, idle_ttl_seconds=100)
+    await b.record_block("attacker", "INC-0001")  # trips -> quarantined
+    await b.begin_call("idle-active")  # an ordinary active session
+    evicted = await b.evict_idle(now=monotonic() + 10_000)
+    assert evicted == 1  # only the active one
+    assert await b.status("attacker") is SessionStatus.QUARANTINED
+    assert b.snapshot("idle-active") is None
+
+
+async def test_recent_sessions_survive_eviction():
+    b = CircuitBreaker(idle_ttl_seconds=10_000)
+    await b.begin_call("fresh")
+    assert await b.evict_idle() == 0
+    assert b.snapshot("fresh") is not None

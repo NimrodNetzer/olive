@@ -72,3 +72,15 @@ def test_config_fallback_is_marked_unverified():
     assert claims.agent_id == "agent-x"
     assert isinstance(claims, IdentityClaims)
     assert claims.session_id.startswith("sess-")
+
+
+def test_session_key_namespaces_by_org_and_agent():
+    # same session_id, different agent/org => different containment keys
+    a = IdentityClaims(agent_id="a", organization="o1", role="r", session_id="sess-1")
+    b = IdentityClaims(agent_id="b", organization="o1", role="r", session_id="sess-1")
+    c = IdentityClaims(agent_id="a", organization="o2", role="r", session_id="sess-1")
+    assert a.session_key != b.session_key
+    assert a.session_key != c.session_key
+    # identical triples => identical key (stable)
+    again = IdentityClaims(agent_id="a", organization="o1", role="x", session_id="sess-1")
+    assert a.session_key == again.session_key

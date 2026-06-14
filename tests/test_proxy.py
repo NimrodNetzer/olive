@@ -365,6 +365,28 @@ async def test_containment_is_per_identity_session(store):
     assert not b_ok.isError, "agent B's session must be unaffected by A's quarantine"
 
 
+async def test_same_session_id_different_agents_do_not_share_containment(store):
+    """Hardening: a reused session_id across agents must not share quarantine."""
+    gw = make_gateway(store, max_blocks=2)
+    upstream = StubUpstream()
+    # identical session_id, different agents
+    a = IdentityClaims(
+        agent_id="agent-a", organization="o", role="customer-support",
+        session_id="SAME", verified=True,
+    )
+    b = IdentityClaims(
+        agent_id="agent-b", organization="o", role="customer-support",
+        session_id="SAME", verified=True,
+    )
+    await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)
+    await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)  # quarantines A
+
+    a_blocked = await gw.handle_call_tool(upstream, "read_faq", {}, identity=a)
+    assert "quarantined" in _text(a_blocked).lower()
+    b_ok = await gw.handle_call_tool(upstream, "read_faq", {}, identity=b)
+    assert not b_ok.isError, "B shares the session_id string but not the namespaced key"
+
+
 async def test_rate_limit_is_per_identity_role(store):
     """Different roles carry different limits through the same gateway/limiter."""
     config = make_config(rate_limit=1)

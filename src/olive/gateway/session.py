@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from time import monotonic
 
 from olive.gateway.context import SecurityContext
 
@@ -27,6 +28,9 @@ class SessionState:
     block_count: int = 0
     first_seen: str = field(default_factory=SecurityContext.now)
     last_seen: str = field(default_factory=SecurityContext.now)
+    # Monotonic clock of last activity, used only for idle eviction math
+    # (last_seen is the human-readable ISO timestamp for reporting).
+    last_active: float = field(default_factory=monotonic)
     quarantine_reason: str | None = None
     # The incident that tripped the breaker; later quarantined calls reference
     # it instead of each minting a new incident (ADR-0006, CLAUDE.md rule 5).

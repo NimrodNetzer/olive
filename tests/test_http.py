@@ -162,21 +162,22 @@ async def test_mcp_endpoint_rejects_forged_token(app_ctx, ca):
 
 async def test_admin_release_requires_capability(app_ctx, ca):
     app, _, _ = app_ctx
+    body = {"organization": "o", "agent_id": "a", "session_id": "sess-x"}
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
             # no token
-            assert (await client.post("/admin/release/sess-x")).status_code == 401
+            assert (await client.post("/admin/release", json=body)).status_code == 401
             # valid token without the release capability
             plain = issue(ca, capabilities=["read_faq"])
             r = await client.post(
-                "/admin/release/sess-x", headers={"Authorization": f"Bearer {plain}"}
+                "/admin/release", json=body, headers={"Authorization": f"Bearer {plain}"}
             )
             assert r.status_code == 403
             # token carrying the release capability
             admin = issue(ca, agent_id="ops", capabilities=["olive:release"])
             r = await client.post(
-                "/admin/release/sess-x", headers={"Authorization": f"Bearer {admin}"}
+                "/admin/release", json=body, headers={"Authorization": f"Bearer {admin}"}
             )
             assert r.status_code == 200
             assert r.json()["session_id"] == "sess-x"

@@ -103,13 +103,15 @@ this document, update the document first (via ADR if the change is structural).
 - Capability attenuation (token capabilities ∩ role) is carried but **not yet
   enforced** for tool calls (later M2/M3 slice); today capabilities only gate the
   admin release endpoint (`olive:release`).
-- The breaker and rate limiter key on the token's `session_id`. The issuing CA
-  must mint **unique** session ids; two tokens sharing a session id would share
-  containment state. (Namespacing by org+agent is a planned hardening.)
-- Per-session breaker/rate-limiter state is held in-memory and is **not yet
-  evicted**; over a long-lived multi-session HTTP process this grows unbounded.
-  Idle-session eviction is a planned hardening (the SDK already idle-times the
-  transport session; our enforcement state must be tied to it).
+- Containment keys on the namespaced **(org, agent, session_id)** triple
+  (`IdentityClaims.session_key`), so two tokens that reuse a `session_id` across
+  different agents/orgs do **not** share breaker/rate-limiter state. State is
+  still in-memory/per-process (no persistence across restarts).
+- Per-session breaker/rate-limiter state is **evicted when idle** past a TTL
+  (lazy sweep + `evict_idle`), bounding memory under many short-lived sessions.
+  **Quarantined sessions are never evicted** — going idle cannot clear a
+  quarantine. (A real persistence layer for quarantine across restarts is still
+  future work.)
 - Token verification trusts the configured CA public key (`--ca-pubkey`); a
   compromised CA key or a misconfigured public key undermines identity. The mock
   CA is for dev; production needs a real key-managed CA.

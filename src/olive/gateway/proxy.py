@@ -156,10 +156,11 @@ class OliveGateway:
     def breaker(self) -> CircuitBreaker:
         return self._breaker
 
-    async def release_session(self, session_id: str | None = None) -> bool:
-        """Reversible human release of a quarantined session (ADR-0006).
-        A cross-process admin surface for this lands with HTTP transport."""
-        return await self._breaker.release(session_id or self._session_id)
+    async def release_session(self, key: str | None = None) -> bool:
+        """Reversible human release of a quarantined session (ADR-0006). `key`
+        is the namespaced session key (see IdentityClaims.session_key); defaults
+        to this gateway's own identity for the stdio case."""
+        return await self._breaker.release(key or self._identity.session_key)
 
     def _build_context(
         self,
@@ -230,7 +231,9 @@ class OliveGateway:
         # The breaker and rate limiter key on this session, so containment is
         # per-agent even when one gateway fronts many.
         identity = identity or self._identity
-        sid = identity.session_id
+        # Containment keys on the namespaced (org, agent, session) triple so a
+        # reused session_id across tenants can't share quarantine/rate state.
+        sid = identity.session_key
         started = perf_counter()
         ticket = await self._breaker.begin_call(sid)
 
