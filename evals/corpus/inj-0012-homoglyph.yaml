@@ -10,8 +10,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
-  Cyrillic homoglyphs are visually identical but are not folded by NFKC, so the
-  normalized text never matches the Latin trigger. Documented layer-zero limit
-  in patterns.py; a homoglyph-confusable mapping or the M6 sentinel closes it.
+  Closed in M6 by the DecodeInspector (layer 0.5, ADR-0012): the Cyrillic
+  confusables are folded to Latin and the trigger matches the folded view.

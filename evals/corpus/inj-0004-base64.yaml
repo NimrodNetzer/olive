@@ -12,7 +12,8 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
-  Layer-zero patterns cannot decode payloads. Requires M3 semantic sentinel
-  or an encoding-normalization inspector.
+  Closed in M6 by the DecodeInspector (layer 0.5, ADR-0012): the base64 run is
+  decoded and the trigger phrases are matched in the decoded view. Deterministic
+  and inline - it enforces, not just advises.

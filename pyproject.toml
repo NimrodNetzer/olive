@@ -16,10 +16,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The intelligence layer's Claude semantic sentinel (M6, ADR-0012). Optional so
+# the gateway core stays free of the LLM SDK (open-core seam, ADR-0003); the
+# analyzer degrades to "no signal" when absent.
+intelligence = [
+    "anthropic>=0.69",  # Claude API for the Prompt-Injection Sentinel
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
+    "anthropic>=0.69",  # exercises the intelligence layer's SDK path in tests
 ]
 
 [project.scripts]

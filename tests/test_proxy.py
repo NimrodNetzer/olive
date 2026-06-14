@@ -647,3 +647,52 @@ async def test_rate_limit_is_per_identity_role(store):
     # the unlimited role is unaffected
     for _ in range(5):
         assert not (await gw.handle_call_tool(upstream, "read_faq", {}, identity=loose)).isError
+
+
+# --- M6 telemetry seam (ADR-0012) ---
+
+
+def make_gateway_with_sink(store: EventStore, sink) -> OliveGateway:
+    config = make_config()
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    return OliveGateway(
+        config,
+        store,
+        pipeline,
+        breaker=CircuitBreaker(max_blocks=3),
+        rate_limiter=RateLimiter(),
+        telemetry=sink,
+    )
+
+
+async def test_gateway_publishes_outbound_and_inbound_telemetry(store):
+    from olive.gateway.telemetry import QueueSink
+
+    sink = QueueSink()
+    gw = make_gateway_with_sink(store, sink)
+    await gw.handle_call_tool(StubUpstream(), "read_faq", {"topic": "x"})
+
+    events = []
+    while not sink.queue.empty():
+        events.append(sink.queue.get_nowait())
+    directions = {e.ctx.direction for e in events}
+    assert directions == {"outbound", "inbound"}
+    # The outbound event carries arguments; the inbound carries content. Both
+    # carry the breaker session key so the parallel path can trip the same session.
+    outbound = next(e for e in events if e.ctx.direction == "outbound")
+    inbound = next(e for e in events if e.ctx.direction == "inbound")
+    assert outbound.arguments == {"topic": "x"}
+    assert inbound.content is not None
+    assert outbound.session_key and outbound.session_key == inbound.session_key
+
+
+async def test_telemetry_sink_failure_never_breaks_the_call(store):
+    class BoomSink:
+        async def publish(self, event):
+            raise RuntimeError("sink down")
+
+    gw = make_gateway_with_sink(store, BoomSink())
+    result = await gw.handle_call_tool(StubUpstream(), "read_faq", {"topic": "x"})
+    assert not result.isError  # the call still succeeds despite the sink failing

@@ -25,6 +25,7 @@ from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway
 from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
 from olive.inspectors.context_policy import ContextPolicyInspector
+from olive.inspectors.decode import DecodeInspector
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector
 from olive.store.events import EventStore
@@ -37,10 +38,12 @@ def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
         [
             # Coarse allowlist first (default-deny). ContextPolicyInspector runs
             # next so it can only refine an already-allowed call - restrict or
-            # hold, never grant (ADR-0010). Pattern inspection last.
+            # hold, never grant (ADR-0010). Pattern inspection (layer zero), then
+            # the decode layer (0.5) which defeats deterministic obfuscation.
             PolicyInspector(config.roles),
             ContextPolicyInspector(config.context_rules),
             PatternInspector(config.injection_patterns),
+            DecodeInspector(config.injection_patterns),
         ]
     )
 

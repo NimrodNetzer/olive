@@ -1,6 +1,6 @@
 {
-  "detected": 22,
-  "malicious_total": 22,
+  "detected": 27,
+  "malicious_total": 27,
   "false_positives": 0,
   "benign_total": 11,
   "per_category": {
@@ -21,8 +21,8 @@
       "total": 2
     },
     "injection.encoded": {
-      "detected": 2,
-      "total": 2
+      "detected": 7,
+      "total": 7
     },
     "injection.trigger": {
       "detected": 6,

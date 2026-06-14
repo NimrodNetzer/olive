@@ -32,15 +32,17 @@ from olive.config import GatewayConfig
 from olive.gateway.approvals import ApprovalRegistry, approval_key
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.context import Direction, SecurityContext, hash_arguments
-from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
+from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict, bound_evidence
 from olive.gateway.ratelimit import RateLimiter
 from olive.gateway.resources import extract_resource
+from olive.gateway.telemetry import NullSink, TelemetryEvent, TelemetrySink
 from olive.identity.claims import IdentityClaims, unverified_from_config
 from olive.store.events import BaselineStatus, EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
     "policy.": "privilege-escalation",
     "patterns.": "prompt-injection",
+    "decode.": "prompt-injection",
     "context.": "authorization-violation",
 }
 
@@ -202,10 +204,15 @@ class OliveGateway:
         rate_limiter: RateLimiter | None = None,
         identity: IdentityClaims | None = None,
         approvals: ApprovalRegistry | None = None,
+        telemetry: TelemetrySink | None = None,
     ) -> None:
         self._config = config
         self._store = store
         self._pipeline = pipeline
+        # The one outbound channel to the advisory parallel path (ADR-0012). The
+        # default no-op sink means the gateway enforces identically with the
+        # intelligence layer absent (ADR-0003 open-core seam).
+        self._telemetry = telemetry or NullSink()
         # The single authority over pending-hold approvals (ADR-0010). Consulted
         # only when a HOLD verdict fires; an operator approval releases one
         # specific held call.
@@ -328,6 +335,31 @@ class OliveGateway:
         latency_ms = int((perf_counter() - started) * 1000)
         await self._store.log_event(ctx, verdict, latency_ms, None)
 
+    async def _emit(
+        self,
+        ctx: SecurityContext,
+        verdict: Verdict,
+        session_key: str,
+        content: str | None = None,
+        arguments: dict | None = None,
+    ) -> None:
+        # Publish to the parallel path. Telemetry is observability, not
+        # enforcement: the decision has already been made and logged, so a sink
+        # failure must never affect this call - swallow everything (no stdout in
+        # stdio mode). Losing an event degrades detection, never correctness.
+        try:
+            await self._telemetry.publish(
+                TelemetryEvent(
+                    ctx=ctx,
+                    verdict=verdict,
+                    content=content,
+                    arguments=arguments,
+                    session_key=session_key,
+                )
+            )
+        except Exception:  # noqa: BLE001 - telemetry must never break the gateway
+            pass
+
     async def _screen_declaration(
         self,
         identity: IdentityClaims,
@@ -352,7 +384,9 @@ class OliveGateway:
             rug = Verdict(
                 decision=Decision.BLOCK,
                 rule=f"{kind}s.rug_pull",
-                evidence=f"{kind} '{name}' declaration changed since first seen",
+                evidence=bound_evidence(
+                    f"{kind} '{name}' declaration changed since first seen"
+                ),
             )
             await self._record(ctx, rug, started, "baseline", attack_type=f"{kind}-rug-pull")
             return False
@@ -427,6 +461,7 @@ class OliveGateway:
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
             await self._breaker.record_block(sid, incident_id)
+            await self._emit(out_ctx, out_verdict, sid, arguments=arguments)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
 
         # Throttle policy-allowed calls before the (expensive) upstream contact.
@@ -439,6 +474,8 @@ class OliveGateway:
 
         await self._record(out_ctx, out_verdict, started, "deterministic")
         await self._breaker.record_allowed_call(sid, name)
+        # Outbound arguments to the parallel path (Data-Leak / Behavior sentinels).
+        await self._emit(out_ctx, out_verdict, sid, arguments=arguments)
         history = (*history, name)
 
         # Forward. An upstream failure fails closed but is an operational
@@ -458,12 +495,16 @@ class OliveGateway:
 
         # Inbound: inspect the full result before it reaches the agent.
         in_ctx = self._build_context(identity, name, arguments, "inbound", call_number, history)
-        in_verdict = await self._pipeline.run(in_ctx, content=extract_inspectable_text(result))
+        inbound_text = extract_inspectable_text(result)
+        in_verdict = await self._pipeline.run(in_ctx, content=inbound_text)
         if not in_verdict.allowed:
             incident_id = await self._record(in_ctx, in_verdict, started, "pattern")
             await self._breaker.record_block(sid, incident_id)
+            await self._emit(in_ctx, in_verdict, sid, content=inbound_text)
             return _blocked_result("inbound", in_verdict, incident_id or "unrecorded")
         await self._record(in_ctx, in_verdict, started, "pattern")
+        # Inbound content to the parallel path (Prompt-Injection Sentinel).
+        await self._emit(in_ctx, in_verdict, sid, content=inbound_text)
         return result
 
     def build_server(

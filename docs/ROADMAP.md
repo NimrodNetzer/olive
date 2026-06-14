@@ -95,20 +95,36 @@ Decided in ADR-0010 and built so far:
 
 > A security product without measurable results becomes marketing.
 
-## M6 — Intelligence agents (advisory only — ADR-0005)
+## M6 — Intelligence agents (advisory only — ADR-0005)  ✅ done
 
 The Defensive Department's sentinels, on the parallel path. Advisory only: they
 emit signals to the deterministic circuit breaker, never enforce directly.
+Decided in ADR-0012, split along the architectural law (agents advise,
+deterministic code enforces):
 
-- Telemetry queue from fast path to parallel path.
-- **Prompt-Injection Sentinel**: deterministic first; Claude API semantic
-  analysis only for unmatched untrusted content; fires the breaker above
-  threshold.
-- **Behavior Sentinel**: session sequence vs. role/goal every N calls.
-- **Data-Leak Sentinel**: exfiltration patterns in outbound arguments.
-- **Identity / Tool-Usage / Agent-Communication Sentinels** as the surface
-  grows.
-- Incident reporter: structured, human-readable incident reports.
+- ✅ **Deterministic decode layer (inline, enforces, CI-gated)** — the
+  "deterministic first" half: `inspectors/decode.py` (layer 0.5) decodes
+  base64/hex/rot13/url-encoding and folds homoglyphs, then re-runs the trigger
+  matcher. Closed 5 encoded `known-miss` corpus cases (promoted to `active`,
+  baseline raised: detection 22→27).
+- ✅ **Telemetry seam** (`gateway/telemetry.py`): the gateway publishes a
+  `TelemetryEvent` to a `TelemetrySink` after each decision (default `NullSink`,
+  zero overhead). The open-core boundary (ADR-0003) is now real and exercised —
+  gateway core never imports the intelligence layer.
+- ✅ **Intelligence layer** (`src/olive/intelligence/`, advisory only):
+  - **Prompt-Injection Sentinel**: deterministic-first; Claude API semantic
+    analysis only for unmatched untrusted content; hostile-content delimiter
+    defense + defensive strict-JSON parse; degrades to no-signal without a key.
+  - **Data-Leak Sentinel**: exfiltration indicators in outbound arguments.
+  - **Behavior Sentinel**: read → egress chain across the session sequence.
+  - **SentinelRunner**: aggregates signals; the only place a signal becomes an
+    action — a single deterministic `breaker.trip` above a threshold.
+  - **Incident reporter**: structured, human-readable incident objects.
+- ✅ red-team pass: 7 new deterministic-bypass `known-miss` cases
+  (inj-0018..0024 — base32/base85/nested/fragmented/capital-homoglyph) +
+  2 benign hard negatives; corpus 53→62, gate still 0 FP.
+- **Identity / Tool-Usage / Agent-Communication Sentinels** remain future work
+  as the surface grows.
 
 ## M7 — The first complete department cycle
 

@@ -10,8 +10,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
-  The %20 separators are literal characters at layer zero (no URL-decoding), so
-  the normalized text never matches the spaced trigger. Encoding-normalization
-  inspector or M6 sentinel required.
+  Closed in M6 by the DecodeInspector (layer 0.5, ADR-0012): the body is
+  percent-decoded and the trigger matches the decoded view.
