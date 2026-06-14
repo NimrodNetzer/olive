@@ -26,6 +26,12 @@ class UpstreamSession(Protocol):
     async def call_tool(
         self, name: str, arguments: dict | None = None
     ) -> types.CallToolResult: ...
+    async def list_resources(self) -> types.ListResourcesResult: ...
+    async def read_resource(self, uri) -> types.ReadResourceResult: ...
+    async def list_prompts(self) -> types.ListPromptsResult: ...
+    async def get_prompt(
+        self, name: str, arguments: dict | None = None
+    ) -> types.GetPromptResult: ...
 
 
 class UnknownUpstreamError(Exception):
@@ -81,3 +87,41 @@ class MultiplexUpstream:
     ) -> types.CallToolResult:
         upstream, bare = self._route(name)  # raises UnknownUpstreamError -> fail closed
         return await upstream.session.call_tool(bare, arguments)
+
+    # --- prompts: namespaced by name, exactly like tools -------------------
+
+    async def list_prompts(self) -> types.ListPromptsResult:
+        prompts: list[types.Prompt] = []
+        for upstream in self._by_name.values():
+            result = await upstream.session.list_prompts()
+            for prompt in result.prompts:
+                namespaced = self._namespaced(upstream.name, prompt.name)
+                prompts.append(prompt.model_copy(update={"name": namespaced}))
+        return types.ListPromptsResult(prompts=prompts)
+
+    async def get_prompt(
+        self, name: str, arguments: dict | None = None
+    ) -> types.GetPromptResult:
+        upstream, bare = self._route(name)
+        return await upstream.session.get_prompt(bare, arguments)
+
+    # --- resources: aggregated; URIs are not prefixed (assumed unique). A
+    #     read is routed by trying each upstream until one owns the URI. -----
+
+    async def list_resources(self) -> types.ListResourcesResult:
+        resources: list[types.Resource] = []
+        for upstream in self._by_name.values():
+            result = await upstream.session.list_resources()
+            resources.extend(result.resources)
+        return types.ListResourcesResult(resources=resources)
+
+    async def read_resource(self, uri) -> types.ReadResourceResult:
+        if self._single is not None:
+            return await self._single.session.read_resource(uri)
+        last_error: Exception | None = None
+        for upstream in self._by_name.values():
+            try:
+                return await upstream.session.read_resource(uri)
+            except Exception as exc:  # noqa: BLE001 - try the next owner
+                last_error = exc
+        raise UnknownUpstreamError(str(uri)) from last_error

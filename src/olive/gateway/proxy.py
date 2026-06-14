@@ -57,6 +57,34 @@ def _inspectable_tool_text(tool: types.Tool) -> str:
     return tool.model_dump_json()
 
 
+def _resource_contents_text(result: types.ReadResourceResult) -> str:
+    """Text surfaces of a resource read. Binary blobs are out of scope for text
+    inspection; their metadata is still serialized (mirrors tool results)."""
+    parts: list[str] = []
+    for item in result.contents:
+        if isinstance(item, types.TextResourceContents):
+            parts.append(item.text)
+        else:  # BlobResourceContents - never inspect/echo the blob bytes
+            parts.append(item.model_dump_json(exclude={"blob"}))
+    return "\n".join(parts)
+
+
+def _prompt_messages_text(result: types.GetPromptResult) -> str:
+    """Text surfaces of a rendered prompt - the messages injected into context."""
+    parts: list[str] = []
+    if result.description:
+        parts.append(result.description)
+    for message in result.messages:
+        content = message.content
+        if isinstance(content, types.TextContent):
+            parts.append(content.text)
+        elif isinstance(content, types.ImageContent | types.AudioContent):
+            parts.append(content.model_dump_json(exclude={"data"}))
+        else:
+            parts.append(content.model_dump_json())
+    return "\n".join(parts)
+
+
 def extract_inspectable_text(result: types.CallToolResult) -> str:
     """Collect every textual surface of a tool result for inspection.
 
@@ -118,6 +146,31 @@ def _throttled_result() -> types.CallToolResult:
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=message)],
         isError=True,
+    )
+
+
+def _blocked_resource(uri, incident_id: str) -> types.ServerResult:
+    # Sanitized: the poisoned resource content is replaced, never delivered.
+    message = f"[Olive] resource blocked by content inspection. Incident {incident_id} logged."
+    return types.ServerResult(
+        types.ReadResourceResult(
+            contents=[types.TextResourceContents(uri=uri, text=message, mimeType="text/plain")]
+        )
+    )
+
+
+def _blocked_prompt(incident_id: str) -> types.ServerResult:
+    # Sanitized: the poisoned prompt messages are replaced, never delivered.
+    message = f"[Olive] prompt blocked by content inspection. Incident {incident_id} logged."
+    return types.ServerResult(
+        types.GetPromptResult(
+            description="blocked by Olive",
+            messages=[
+                types.PromptMessage(
+                    role="user", content=types.TextContent(type="text", text=message)
+                )
+            ],
+        )
     )
 
 
@@ -231,6 +284,46 @@ class OliveGateway:
         verdict = Verdict(decision=Decision.BLOCK, rule="ratelimit.exceeded")
         await self._store.log_event(ctx, verdict, latency_ms, None)
 
+    async def _screen_declaration(
+        self,
+        identity: IdentityClaims,
+        name: str,
+        declaration: str,
+        started: float,
+        kind: str,
+    ) -> bool:
+        """Inspect a declaration (tool/resource/prompt) that the agent's context
+        ingests. Returns True if safe to expose; on a poisoned declaration or a
+        rug-pull (ADR-0009) it records an incident and returns False (withhold).
+        Shared by every `*/list` surface so they enforce identically."""
+        ctx = self._build_context(identity, name, {"name": name}, "inbound", 0, ())
+        verdict = await self._pipeline.run(ctx, content=declaration)
+        if not verdict.allowed:
+            await self._record(ctx, verdict, started, "pattern", attack_type=f"{kind}-poisoning")
+            return False
+        status = await self._store.observe_tool(
+            f"{kind}:{name}", sha256(declaration.encode("utf-8")).hexdigest()
+        )
+        if status is BaselineStatus.CHANGED:
+            rug = Verdict(
+                decision=Decision.BLOCK,
+                rule=f"{kind}s.rug_pull",
+                evidence=f"{kind} '{name}' declaration changed since first seen",
+            )
+            await self._record(ctx, rug, started, "baseline", attack_type=f"{kind}-rug-pull")
+            return False
+        return True
+
+    async def _screen_inbound_content(
+        self, identity: IdentityClaims, name: str, text: str, started: float
+    ) -> str | None:
+        """Inspect untrusted content flowing back to the agent (resource read /
+        prompt get). Returns an incident id if it must be blocked, else None
+        (and logs the allow). Mirrors the inbound leg of a tool call."""
+        ctx = self._build_context(identity, name, {"name": name}, "inbound", 0, ())
+        verdict = await self._pipeline.run(ctx, content=text)
+        return await self._record(ctx, verdict, started, "pattern")
+
     def _rate_limit_for(self, role: str) -> int | None:
         policy = self._config.roles.get(role)
         return policy.max_calls_per_minute if policy else None
@@ -336,38 +429,10 @@ class OliveGateway:
             # reaching the agent) and logged as an incident. Clean tools pass.
             safe: list[types.Tool] = []
             for tool in upstream_tools.tools:
-                tool_ctx = self._build_context(
-                    identity,
-                    tool.name,
-                    {"name": tool.name, "description": tool.description or ""},
-                    "inbound",
-                    0,
-                    (),
-                )
-                declaration = _inspectable_tool_text(tool)
-                verdict = await self._pipeline.run(tool_ctx, content=declaration)
-                if not verdict.allowed:
-                    await self._record(
-                        tool_ctx, verdict, started, "pattern", attack_type="tool-poisoning"
-                    )
-                    continue  # withhold: poisoned declaration
-
-                # Rug-pull (ADR-0009): a declaration that CHANGED since first use
-                # is withheld even if pattern-clean - the swap itself is hostile.
-                status = await self._store.observe_tool(
-                    tool.name, sha256(declaration.encode("utf-8")).hexdigest()
-                )
-                if status is BaselineStatus.CHANGED:
-                    rug = Verdict(
-                        decision=Decision.BLOCK,
-                        rule="tools.rug_pull",
-                        evidence=f"declaration of '{tool.name}' changed since first seen",
-                    )
-                    await self._record(
-                        tool_ctx, rug, started, "baseline", attack_type="tool-rug-pull"
-                    )
-                    continue  # withhold: rug-pull
-                safe.append(tool)
+                if await self._screen_declaration(
+                    identity, tool.name, _inspectable_tool_text(tool), started, "tool"
+                ):
+                    safe.append(tool)
 
             # One aggregate audit row for the listing surface; hashing all
             # names+descriptions keeps rug-pull swaps detectable in the trail.
@@ -386,4 +451,92 @@ class OliveGateway:
             identity = identity_resolver() if identity_resolver else None
             return await self.handle_call_tool(upstream, name, arguments, identity=identity)
 
+        def _identity() -> IdentityClaims:
+            return (identity_resolver() if identity_resolver else None) or self._identity
+
+        # Resources & prompts (M3): also untrusted surfaces. Listings are
+        # screened like tool declarations (poison/rug-pull -> withheld); read/get
+        # content is inspected like a tool response (poison -> sanitized result).
+        # Handlers are registered directly so upstream results pass through
+        # faithfully except when blocked.
+        async def handle_list_resources(
+            req: types.ListResourcesRequest,
+        ) -> types.ServerResult:
+            started = perf_counter()
+            identity = _identity()
+            result = await upstream.list_resources()
+            safe = [
+                r
+                for r in result.resources
+                if await self._screen_declaration(
+                    identity, str(r.uri), r.model_dump_json(), started, "resource"
+                )
+            ]
+            return types.ServerResult(types.ListResourcesResult(resources=safe))
+
+        async def handle_read_resource(
+            req: types.ReadResourceRequest,
+        ) -> types.ServerResult:
+            started = perf_counter()
+            identity = _identity()
+            uri = req.params.uri
+            try:
+                result = await upstream.read_resource(uri)
+            except Exception as exc:  # noqa: BLE001 - fail closed
+                ctx = self._build_context(identity, str(uri), {"uri": str(uri)}, "inbound", 0, ())
+                verdict = Verdict(
+                    decision=Decision.BLOCK,
+                    rule="gateway.upstream_error",
+                    evidence=f"read_resource failed: {type(exc).__name__}",
+                )
+                await self._record(ctx, verdict, started, "deterministic")
+                return _blocked_resource(uri, "unrecorded")
+            incident = await self._screen_inbound_content(
+                identity, str(uri), _resource_contents_text(result), started
+            )
+            if incident is not None:
+                return _blocked_resource(uri, incident)
+            return types.ServerResult(result)
+
+        async def handle_list_prompts(
+            req: types.ListPromptsRequest,
+        ) -> types.ServerResult:
+            started = perf_counter()
+            identity = _identity()
+            result = await upstream.list_prompts()
+            safe = [
+                p
+                for p in result.prompts
+                if await self._screen_declaration(
+                    identity, p.name, p.model_dump_json(), started, "prompt"
+                )
+            ]
+            return types.ServerResult(types.ListPromptsResult(prompts=safe))
+
+        async def handle_get_prompt(req: types.GetPromptRequest) -> types.ServerResult:
+            started = perf_counter()
+            identity = _identity()
+            name = req.params.name
+            try:
+                result = await upstream.get_prompt(name, req.params.arguments)
+            except Exception as exc:  # noqa: BLE001 - fail closed
+                ctx = self._build_context(identity, name, {"name": name}, "inbound", 0, ())
+                verdict = Verdict(
+                    decision=Decision.BLOCK,
+                    rule="gateway.upstream_error",
+                    evidence=f"get_prompt failed: {type(exc).__name__}",
+                )
+                await self._record(ctx, verdict, started, "deterministic")
+                return _blocked_prompt("unrecorded")
+            incident = await self._screen_inbound_content(
+                identity, name, _prompt_messages_text(result), started
+            )
+            if incident is not None:
+                return _blocked_prompt(incident)
+            return types.ServerResult(result)
+
+        server.request_handlers[types.ListResourcesRequest] = handle_list_resources
+        server.request_handlers[types.ReadResourceRequest] = handle_read_resource
+        server.request_handlers[types.ListPromptsRequest] = handle_list_prompts
+        server.request_handlers[types.GetPromptRequest] = handle_get_prompt
         return server

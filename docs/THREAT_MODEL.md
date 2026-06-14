@@ -56,8 +56,9 @@ this document, update the document first (via ADR if the change is structural).
 ## Security guarantees (current milestone)
 
 - Tool calls not allowed by policy are blocked **before** reaching the tool.
-- Tool responses from untrusted sources are inspected **before** reaching the
-  agent; matched injection content never enters the agent's context.
+- **All untrusted content surfaces are inspected before reaching the agent** —
+  tool responses, **resource reads, and rendered prompts** — and matched
+  injection content never enters the agent's context (blocked/sanitized).
 - Every decision (allow/block/hold/quarantine) produces an auditable event
   with the rule that fired.
 - Inspector failure results in `block`, never silent pass-through (fail closed).
@@ -77,12 +78,10 @@ this document, update the document first (via ADR if the change is structural).
   format-character stripping are applied, lookalike-character substitution is
   not). LLM sentinels (M6) and the eval harness (M5) address this; until
   then, detection coverage is limited and must be described honestly.
-- Tool declarations from `tools/list` (name + description + input schema) are
-  now **content-inspected** before reaching the agent (M3): a tool whose
-  declaration trips a layer-zero pattern is **withheld** from the listing and
-  logged as a `tool-poisoning` incident, and a hash of all names+descriptions is
-  still recorded per listing.
-- **Rug-pull** (a tool declaration that *changes* between sessions) is detected
+- **Tool, resource, and prompt declarations** (`*/list`) are **content-inspected**
+  before reaching the agent (M3): a declaration that trips a layer-zero pattern
+  is **withheld** from the listing and logged (`{tool,resource,prompt}-poisoning`).
+- **Rug-pull** (a declaration that *changes* between sessions) is detected
   via trust-on-first-use baselines (ADR-0009): a changed declaration is withheld
   and logged as `tool-rug-pull`, even when the new text is pattern-clean; the
   baseline is never overwritten by the swap, and an operator re-approves a

@@ -159,8 +159,11 @@ async def reset_baselines(config_path: str, db_override: str | None, tool: str |
     store = EventStore(db_override or config.db_path)
     await store.open()
     try:
-        count = await store.reset_baseline(tool)
-        target = tool or "all tools"
+        # Baselines are keyed by kind (tool/resource/prompt); --tool targets the
+        # tool surface, no flag clears everything.
+        key = f"tool:{tool}" if tool else None
+        count = await store.reset_baseline(key)
+        target = f"tool '{tool}'" if tool else "all tools/resources/prompts"
         print(f"[olive] cleared {count} baseline(s) for {target}", file=sys.stderr)
     finally:
         await store.close()

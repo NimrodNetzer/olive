@@ -48,10 +48,12 @@ only signal the circuit breaker, which applies deterministic quarantine.
      block returns a sanitized error result; the poisoned content never
      reaches the agent.
   5. Log events (and incident if blocked) either way.
-- `tools/list` declarations (name + description + schema) are content-inspected
-  per tool (M3); a poisoned tool is withheld and logged (`tool-poisoning`).
-  A declaration that *changes* between sessions is withheld as a rug-pull
-  (`tool-rug-pull`) via trust-on-first-use baselines (ADR-0009).
+- The **whole MCP surface** is inspected (M3), not just tool calls: `*/list`
+  declarations (tools, resources, prompts) are screened per item — poisoned or
+  rug-pulled (ADR-0009) declarations are withheld and logged; and `resources/read`
+  + `prompts/get` content is inspected like a tool response (poison → sanitized
+  result). The shared `_screen_declaration` / `_screen_inbound_content` helpers
+  keep every surface enforcing identically.
 
 ### SecurityContext — `src/olive/gateway/context.py`
 One frozen object per inspected message. Fields: `agent_id`, `session_id`,
