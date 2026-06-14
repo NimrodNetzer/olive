@@ -77,15 +77,21 @@ Decided in ADR-0010 and built so far:
   releases one specific held call (one-shot, argument-specific).
 - ✅ Corpus `ctx-*` cases run against `policies/contextual.yaml`.
 
-## M5 — Measured detection (the moat)
+## M5 — Measured detection (the moat)  ✅ done
 
-- Attack corpus ≥ 50 cases: trigger phrases, encoded/obfuscated (base64,
-  unicode, homoglyph, language-switch), semantic (no trigger words),
-  tool-description poisoning / rug-pull, exfiltration-via-arguments, multi-step
-  chains, plus benign hard negatives.
-- Metrics: detection rate, false-positive rate, added latency p50/p95, results
-  per attack category.
-- CI regression gate: detection may never silently drop.
+- ✅ Attack corpus = 53 cases: trigger phrases, encoded/obfuscated (base64,
+  fullwidth-unicode, homoglyph, hex, rot13, url-encode, zero-width,
+  language-switch), semantic (no trigger words), tool-description poisoning /
+  rug-pull (content surface), exfiltration-via-arguments, multi-step chains,
+  plus benign hard negatives. Honest by construction: cases layer-zero cannot
+  catch are `known-miss`, kept visible as the backlog M6 closes.
+- ✅ Metrics in the runner: detection rate, false-positive rate, added latency
+  p50/p95 per direction, per-category breakdown, corpus size.
+- ✅ CI regression gate (ADR-0011): a committed `evals/baseline.json` of
+  **counts** pins the floor; the run exits non-zero on a per-case flip, a total
+  or per-category detection drop (incl. silent reclassification to known-miss),
+  or a false-positive rise. `.github/workflows/ci.yml` runs tests + the gate on
+  every push/PR. The harness itself is unit-tested (`tests/test_evals.py`).
 
 > A security product without measurable results becomes marketing.
 

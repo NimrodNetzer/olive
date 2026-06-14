@@ -1,0 +1,32 @@
+# Olive CI — the eval gate is the moat (EVALS.md, ADR-0011): detection may
+# never silently drop. Tests and the eval regression gate run on every push/PR.
+name: ci
+
+on:
+  push:
+    branches: [main, feature]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests evals
+      - name: Tests
+        run: pytest -q
+      - name: Detection eval gate
+        # Exit 1 on any regression vs evals/baseline.json: a per-case flip,
+        # total or per-category detection dropping, or a false positive rising.
+        run: python evals/run_evals.py

@@ -1,0 +1,36 @@
+{
+  "detected": 22,
+  "malicious_total": 22,
+  "false_positives": 0,
+  "benign_total": 11,
+  "per_category": {
+    "context.resource_scope": {
+      "detected": 5,
+      "total": 5
+    },
+    "description.poisoning": {
+      "detected": 2,
+      "total": 2
+    },
+    "escalation.tool": {
+      "detected": 4,
+      "total": 4
+    },
+    "exfil.arguments": {
+      "detected": 2,
+      "total": 2
+    },
+    "injection.encoded": {
+      "detected": 2,
+      "total": 2
+    },
+    "injection.trigger": {
+      "detected": 6,
+      "total": 6
+    },
+    "rug.pull": {
+      "detected": 1,
+      "total": 1
+    }
+  }
+}
