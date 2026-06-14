@@ -55,13 +55,27 @@ Inspect the whole MCP surface, not just `tools/call` content:
   screened (poison/rug-pull → withheld); `resources/read` + `prompts/get`
   content inspected like a tool response (poison → sanitized).
 
-## M4 — Contextual authorization
+## M4 — Contextual authorization  🚧 in progress
 
 Move beyond "this role may call this tool" toward "this specific agent may
 perform this specific action on this specific resource for this specific task."
 Policies grow to include: user identity, organization, current goal, requested
 resource, data classification, delegation source, session history, risk level,
 and approval requirements.
+
+Decided in ADR-0010 and built so far:
+
+- ✅ **Structured resource extraction**: per-tool extractors lift only the
+  declared scoping id into a `ResourceRef` (`type`, `id`, `classification`) -
+  never the payload (rule 3); sensitive ids are hashed.
+- ✅ **`ContextPolicyInspector`** (refine-only, after the coarse allowlist):
+  ordered deterministic rules that `block` or `hold` an already-allowed call,
+  never grant one. Predicates: explicit task binding
+  (`resource.id_in: task.resources`), classification ceilings, approval.
+- ✅ **`Decision.HOLD` wired**: a governance pause (no incident, no breaker
+  trip), with a capability-gated (`olive:approve`) operator approval that
+  releases one specific held call (one-shot, argument-specific).
+- ✅ Corpus `ctx-*` cases run against `policies/contextual.yaml`.
 
 ## M5 — Measured detection (the moat)
 

@@ -59,9 +59,13 @@ only signal the circuit breaker, which applies deterministic quarantine.
 One frozen object per inspected message. Fields: `agent_id`, `session_id`,
 `role`, `declared_goal`, `tool`, `arguments_hash` (SHA-256, never raw),
 `direction` (`outbound`/`inbound`), `call_number`, `session_tool_history`,
-`source_trust` (`trusted`/`untrusted`), `timestamp`. This is the object the
-whole system reasons about — "can *this* agent use *this* tool at *this*
-point in the session", not just "is the tool allowlisted".
+`source_trust` (`trusted`/`untrusted`), `timestamp`, plus (M4, ADR-0010)
+`requested_resource` (a `ResourceRef` = `type`/`id`/`classification`, the
+structured target lifted by a per-tool extractor — never the payload) and
+`task_resources` (resource ids the attested identity's current task is scoped
+to). This is the object the whole system reasons about — "can *this* agent use
+*this* tool on *this* resource at *this* point in the session", not just "is
+the tool allowlisted".
 
 ### Inspector pipeline — `src/olive/gateway/pipeline.py`
 - `Inspector` protocol: `async inspect(ctx, content) -> Verdict`.
@@ -76,6 +80,13 @@ point in the session", not just "is the tool allowlisted".
 ### Inspectors — `src/olive/inspectors/`
 - `policy.py` (outbound): allowed/forbidden tool check per role from
   `policies/*.yaml`. Unknown tools are blocked (default deny).
+- `context_policy.py` (outbound, M4/ADR-0010): runs **after** `policy.py` and
+  is **refine-only** — it can `block` or `hold` an already-allowed call, never
+  grant one. Ordered deterministic rules over `SecurityContext` structured
+  fields: explicit task binding (`resource.id_in: task.resources`),
+  classification ceilings, and approval requirements (`hold`). No regex over
+  arguments, no LLM. A `hold` is released out-of-band by a capability-gated
+  (`olive:approve`) operator via the `ApprovalRegistry` (`gateway/approvals.py`).
 - `patterns.py` (inbound): deterministic injection-phrase matching,
   case/whitespace-normalized. **Layer zero only** — documented as trivially
   bypassable by encoding/semantics; exists for speed and as the floor the

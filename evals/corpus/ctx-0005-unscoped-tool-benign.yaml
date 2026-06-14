@@ -1,0 +1,14 @@
+id: ctx-0005
+title: a tool with no resource rule is unaffected by contextual authz (benign)
+category: context.resource_scope
+vector: tool_arguments
+direction: outbound
+payload: ""
+policy: contextual.yaml
+context:
+  role: customer-support
+  tool: read_faq
+  source_trust: untrusted
+  task_resources: []
+expected: allow
+status: active

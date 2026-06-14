@@ -133,3 +133,145 @@ def test_duplicate_upstream_name_rejected(tmp_path):
     )
     with pytest.raises(ConfigError, match="duplicate"):
         load_config(bad)
+
+
+def test_no_resources_defaults_to_empty():
+    config = load_config(ROOT / "policies" / "default.yaml")
+    assert config.resource_extractors == {}
+
+
+def test_resources_section_parses(tmp_path):
+    good = tmp_path / "good.yaml"
+    good.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: [read_order]}}\n"
+        "resources:\n"
+        "  read_order: {type: order, id_arg: order_id, classification: customer-pii}\n"
+        "  read_account: {type: account, id_arg: ssn, hash_id: true}\n",
+        encoding="utf-8",
+    )
+    config = load_config(good)
+    ro = config.resource_extractors["read_order"]
+    assert ro.type == "order" and ro.id_arg == "order_id"
+    assert ro.classification == "customer-pii" and ro.hash_id is False
+    assert config.resource_extractors["read_account"].hash_id is True
+
+
+def test_resource_extractor_missing_id_arg_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: []}}\n"
+        "resources: {read_order: {type: order}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="id_arg"):
+        load_config(bad)
+
+
+def test_resource_extractor_bad_hash_id_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: []}}\n"
+        "resources: {read_order: {type: order, id_arg: x, hash_id: maybe}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="hash_id"):
+        load_config(bad)
+
+
+# --- per-role contextual rules (ADR-0010) ---
+
+
+def test_contextual_showcase_policy_loads():
+    from olive.gateway.pipeline import Decision
+
+    config = load_config(ROOT / "policies" / "contextual.yaml")
+    rules = config.context_rules["customer-support"]
+    by_id = {r.id: r for r in rules}
+    assert by_id["order-must-match-task"].effect is Decision.BLOCK
+    assert by_id["order-must-match-task"].when == {"resource.type": "order"}
+    assert by_id["order-must-match-task"].require == {"resource.id_in": "task.resources"}
+    assert by_id["payroll-needs-approval"].effect is Decision.HOLD
+    # a role without rules has no entry (back-compat with M3 policies)
+    assert "customer-support" in config.context_rules
+
+
+def test_rules_parse_block_and_hold(tmp_path):
+    from olive.gateway.pipeline import Decision
+
+    good = tmp_path / "good.yaml"
+    good.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles:\n"
+        "  r:\n"
+        "    allowed_tools: [t1, t2]\n"
+        "    rules:\n"
+        "      - {id: bind, tool: t1, when: {resource.type: order},"
+        " require: {resource.id_in: task.resources}}\n"
+        "      - {id: appr, tool: t2, require: {approval: operator}, effect: hold}\n",
+        encoding="utf-8",
+    )
+    rules = load_config(good).context_rules["r"]
+    assert [x.id for x in rules] == ["bind", "appr"]
+    assert rules[0].effect is Decision.BLOCK  # default
+    assert rules[1].effect is Decision.HOLD
+
+
+def test_rule_missing_id_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles: {r: {allowed_tools: [t], rules: [{tool: t, require: {approval: operator}}]}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="id"):
+        load_config(bad)
+
+
+def test_rule_duplicate_id_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles:\n"
+        "  r:\n"
+        "    allowed_tools: [t]\n"
+        "    rules:\n"
+        "      - {id: dup, tool: t, require: {approval: operator}}\n"
+        "      - {id: dup, tool: t, require: {approval: operator}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="duplicate"):
+        load_config(bad)
+
+
+def test_rule_bad_effect_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles: {r: {allowed_tools: [t], rules:"
+        " [{id: x, tool: t, require: {approval: operator}, effect: nuke}]}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="effect"):
+        load_config(bad)
+
+
+def test_rule_empty_require_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles: {r: {allowed_tools: [t], rules: [{id: x, tool: t, require: {}}]}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="requirement"):
+        load_config(bad)
+
+
+def test_rules_not_a_list_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\n"
+        "roles: {r: {allowed_tools: [t], rules: {id: x}}}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="rules must be a list"):
+        load_config(bad)

@@ -35,6 +35,8 @@ from olive.identity.tokens import IdentityError
 
 # Capability a token must carry to use the admin release endpoint.
 RELEASE_SCOPE = "olive:release"
+# Capability a token must carry to approve a held call (ADR-0010).
+APPROVE_SCOPE = "olive:approve"
 
 
 class OliveTokenVerifier(TokenVerifier):
@@ -62,6 +64,9 @@ class OliveTokenVerifier(TokenVerifier):
                 "role": claims.role,
                 "session_id": claims.session_id,
                 "capabilities": list(claims.capabilities),
+                # Carry the task binding so contextual resource rules (ADR-0010)
+                # are enforceable on the wire, not just in-process.
+                "task_resources": list(claims.task_resources),
             },
         )
 
@@ -79,6 +84,7 @@ def identity_from_context() -> IdentityClaims | None:
         role=c["role"],
         session_id=c["session_id"],
         capabilities=tuple(c.get("capabilities", ())),
+        task_resources=tuple(c.get("task_resources", ())),
         verified=True,
     )
 
@@ -115,6 +121,25 @@ async def _release(request: Request) -> JSONResponse:
     )
 
 
+async def _approve(request: Request) -> JSONResponse:
+    token = get_access_token()
+    if token is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if APPROVE_SCOPE not in (token.scopes or []):
+        return JSONResponse(
+            {"error": f"forbidden: requires '{APPROVE_SCOPE}' capability"}, status_code=403
+        )
+    # The approval id is surfaced to the agent in the held response and to the
+    # operator in the audit trail (ADR-0010).
+    try:
+        body = await request.json()
+        approval_id = body["approval_id"]
+    except (KeyError, TypeError, ValueError):
+        return JSONResponse({"error": "body must be {approval_id}"}, status_code=400)
+    approved = await request.app.state.gateway.approve_hold(approval_id)
+    return JSONResponse({"approval_id": approval_id, "approved": approved})
+
+
 def build_http_app(
     public_key_pem: bytes,
     lifespan,
@@ -133,6 +158,7 @@ def build_http_app(
     routes = [
         Route(mcp_path, endpoint=RequireAuthMiddleware(_McpAsgiApp(), [], None)),
         Route("/admin/release", endpoint=_release, methods=["POST"]),
+        Route("/admin/approve", endpoint=_approve, methods=["POST"]),
     ]
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
 

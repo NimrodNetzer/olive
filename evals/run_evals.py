@@ -24,12 +24,27 @@ from rich.table import Table
 
 from olive.cli import build_pipeline
 from olive.config import load_config
-from olive.gateway.context import SecurityContext, hash_arguments
+from olive.gateway.context import ResourceRef, SecurityContext, hash_arguments
 
 ROOT = Path(__file__).parent.parent
 CORPUS = Path(__file__).parent / "corpus"
 
 console = Console()
+
+
+def _resource_ref(ctx: dict) -> ResourceRef | None:
+    """Build the structured resource a contextual case targets (ADR-0010). The
+    extractor has its own unit tests; here the case states the ref directly so
+    the corpus measures the inspector verdict."""
+    res = ctx.get("resource")
+    if not res:
+        return None
+    return ResourceRef(
+        type=res["type"],
+        id=str(res.get("id", "")),
+        classification=res.get("classification"),
+        id_hashed=bool(res.get("id_hashed", False)),
+    )
 
 
 @dataclass
@@ -57,12 +72,21 @@ def build_context(case: dict) -> SecurityContext:
         session_tool_history=(),
         source_trust=ctx.get("source_trust", "untrusted"),
         timestamp=SecurityContext.now(),
+        requested_resource=_resource_ref(ctx),
+        task_resources=tuple(ctx.get("task_resources", ())),
     )
 
 
+def _pipeline_for(policy: str, cache: dict):
+    """One real pipeline per policy file (assembled by the gateway's own
+    build_pipeline). A case may name a `policy:`; most use the default."""
+    if policy not in cache:
+        cache[policy] = build_pipeline(load_config(ROOT / "policies" / policy))
+    return cache[policy]
+
+
 async def run() -> int:
-    config = load_config(ROOT / "policies" / "default.yaml")
-    pipeline = build_pipeline(config)
+    pipelines: dict = {}
 
     cases = [yaml.safe_load(p.read_text(encoding="utf-8")) for p in sorted(CORPUS.glob("*.yaml"))]
     if not cases:
@@ -71,6 +95,7 @@ async def run() -> int:
 
     results: list[CaseResult] = []
     for case in cases:
+        pipeline = _pipeline_for(case.get("policy", "default.yaml"), pipelines)
         ctx = build_context(case)
         content = case["payload"] if case["direction"] == "inbound" else None
         verdict = await pipeline.run(ctx, content)

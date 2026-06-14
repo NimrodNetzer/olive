@@ -46,6 +46,7 @@ class MockCA:
         role: str,
         session_id: str,
         capabilities: list[str],
+        task_resources: list[str] | None = None,
         ttl: timedelta = timedelta(hours=1),
     ) -> str:
         now = datetime.now(UTC)
@@ -55,6 +56,7 @@ class MockCA:
             "role": role,
             "session_id": session_id,
             "capabilities": capabilities,
+            "task_resources": task_resources or [],
             "aud": _AUDIENCE,
             "iat": now,
             "exp": now + ttl,

@@ -23,9 +23,7 @@ class UpstreamSession(Protocol):
     """The subset of an MCP ClientSession the gateway uses."""
 
     async def list_tools(self) -> types.ListToolsResult: ...
-    async def call_tool(
-        self, name: str, arguments: dict | None = None
-    ) -> types.CallToolResult: ...
+    async def call_tool(self, name: str, arguments: dict | None = None) -> types.CallToolResult: ...
     async def list_resources(self) -> types.ListResourcesResult: ...
     async def read_resource(self, uri) -> types.ReadResourceResult: ...
     async def list_prompts(self) -> types.ListPromptsResult: ...
@@ -82,9 +80,7 @@ class MultiplexUpstream:
                 tools.append(tool.model_copy(update={"name": namespaced}))
         return types.ListToolsResult(tools=tools)
 
-    async def call_tool(
-        self, name: str, arguments: dict | None = None
-    ) -> types.CallToolResult:
+    async def call_tool(self, name: str, arguments: dict | None = None) -> types.CallToolResult:
         upstream, bare = self._route(name)  # raises UnknownUpstreamError -> fail closed
         return await upstream.session.call_tool(bare, arguments)
 
@@ -99,9 +95,7 @@ class MultiplexUpstream:
                 prompts.append(prompt.model_copy(update={"name": namespaced}))
         return types.ListPromptsResult(prompts=prompts)
 
-    async def get_prompt(
-        self, name: str, arguments: dict | None = None
-    ) -> types.GetPromptResult:
+    async def get_prompt(self, name: str, arguments: dict | None = None) -> types.GetPromptResult:
         upstream, bare = self._route(name)
         return await upstream.session.get_prompt(bare, arguments)
 

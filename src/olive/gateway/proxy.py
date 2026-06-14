@@ -29,16 +29,19 @@ from mcp.client.session import ClientSession
 from mcp.server.lowlevel import Server
 
 from olive.config import GatewayConfig
+from olive.gateway.approvals import ApprovalRegistry, approval_key
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.context import Direction, SecurityContext, hash_arguments
 from olive.gateway.pipeline import ALLOW, Decision, InspectorPipeline, Verdict
 from olive.gateway.ratelimit import RateLimiter
+from olive.gateway.resources import extract_resource
 from olive.identity.claims import IdentityClaims, unverified_from_config
 from olive.store.events import BaselineStatus, EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
     "policy.": "privilege-escalation",
     "patterns.": "prompt-injection",
+    "context.": "authorization-violation",
 }
 
 
@@ -149,6 +152,21 @@ def _throttled_result() -> types.CallToolResult:
     )
 
 
+def _held_result(verdict: Verdict, approval_id: str) -> types.CallToolResult:
+    # A governance pause (ADR-0010), not an attack: the call is not executed and
+    # awaits operator approval. Rule + approval id only, never evidence. The
+    # operator approves this id; the agent may then retry the same call.
+    message = (
+        f"[Olive] action held for approval by rule '{verdict.rule}'. "
+        f"Approval {approval_id} is pending; an operator must approve before "
+        "this call can proceed, then retry."
+    )
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)],
+        isError=True,
+    )
+
+
 def _blocked_resource(uri, incident_id: str) -> types.ServerResult:
     # Sanitized: the poisoned resource content is replaced, never delivered.
     message = f"[Olive] resource blocked by content inspection. Incident {incident_id} logged."
@@ -183,10 +201,15 @@ class OliveGateway:
         breaker: CircuitBreaker | None = None,
         rate_limiter: RateLimiter | None = None,
         identity: IdentityClaims | None = None,
+        approvals: ApprovalRegistry | None = None,
     ) -> None:
         self._config = config
         self._store = store
         self._pipeline = pipeline
+        # The single authority over pending-hold approvals (ADR-0010). Consulted
+        # only when a HOLD verdict fires; an operator approval releases one
+        # specific held call.
+        self._approvals = approvals or ApprovalRegistry()
         # Identity is the verified (or, for stdio fallback, config-derived)
         # subject the gateway enforces as. Role comes from here, not config, so
         # it cannot be self-asserted once tokens are required (ADR-0007).
@@ -198,9 +221,7 @@ class OliveGateway:
         self._session_id = self._identity.session_id
         # The breaker is the single concurrency authority over session state:
         # it sequences call numbers, snapshots history, and contains sessions.
-        self._breaker = breaker or CircuitBreaker(
-            max_blocks=config.max_blocks_before_quarantine
-        )
+        self._breaker = breaker or CircuitBreaker(max_blocks=config.max_blocks_before_quarantine)
         # The limit is resolved per call from the request identity's role
         # (multi-tenant safe); the limiter itself is just a keyed window.
         self._rate_limiter = rate_limiter or RateLimiter()
@@ -223,6 +244,17 @@ class OliveGateway:
         to this gateway's own identity for the stdio case."""
         return await self._breaker.release(key or self._identity.session_key)
 
+    @property
+    def approvals(self) -> ApprovalRegistry:
+        return self._approvals
+
+    async def approve_hold(self, approval_id: str) -> bool:
+        """Operator approval of one held call (ADR-0010). Returns True if a
+        pending hold was marked approved. The capability check (`olive:approve`)
+        is enforced by the admin surface, mirroring session release. No LLM may
+        call this path (ADR-0005)."""
+        return await self._approvals.approve(approval_id)
+
     def _build_context(
         self,
         identity: IdentityClaims,
@@ -232,6 +264,9 @@ class OliveGateway:
         call_number: int,
         history: tuple[str, ...],
     ) -> SecurityContext:
+        # Lift only the declared scoping id into a structured ResourceRef
+        # (ADR-0010); the raw arguments never travel further than this boundary.
+        requested_resource = extract_resource(tool, self._config.resource_extractors, arguments)
         return SecurityContext(
             agent_id=identity.agent_id,
             session_id=identity.session_id,
@@ -245,6 +280,8 @@ class OliveGateway:
             session_tool_history=history,
             source_trust=self._config.upstream_trust,
             timestamp=SecurityContext.now(),
+            requested_resource=requested_resource,
+            task_resources=identity.task_resources,
         )
 
     async def _record(
@@ -282,6 +319,13 @@ class OliveGateway:
         # not count toward quarantine (it is not an attack).
         latency_ms = int((perf_counter() - started) * 1000)
         verdict = Verdict(decision=Decision.BLOCK, rule="ratelimit.exceeded")
+        await self._store.log_event(ctx, verdict, latency_ms, None)
+
+    async def _log_held(self, ctx: SecurityContext, verdict: Verdict, started: float) -> None:
+        # A hold is audited as a `hold` event but, like a throttle, mints no
+        # incident and does NOT count toward quarantine (ADR-0010): it is a
+        # governance pause awaiting approval, not an attack. Never silent (rule 5).
+        latency_ms = int((perf_counter() - started) * 1000)
         await self._store.log_event(ctx, verdict, latency_ms, None)
 
     async def _screen_declaration(
@@ -363,6 +407,23 @@ class OliveGateway:
         # behind a throttle and dodge containment.
         out_ctx = self._build_context(identity, name, arguments, "outbound", call_number, history)
         out_verdict = await self._pipeline.run(out_ctx, content=None)
+        # A hold is a governance pause, not a block: the call is withheld and
+        # audited, but it is not an attack - no incident, no breaker trip
+        # (ADR-0010). If an operator has already approved this exact call, the
+        # approval is consumed (one-shot) and the call proceeds; otherwise it is
+        # registered as pending and withheld until approved out-of-band.
+        if out_verdict.decision is Decision.HOLD:
+            akey = approval_key(sid, name, out_ctx.arguments_hash)
+            if await self._approvals.consume(akey):
+                # Operator-approved: proceed down the allowed path below, which
+                # records this ALLOW verdict once and forwards the call.
+                out_verdict = Verdict(Decision.ALLOW, rule="approval.granted")
+            else:
+                approval_id = await self._approvals.register(
+                    akey, sid, name, out_ctx.arguments_hash, out_verdict.rule
+                )
+                await self._log_held(out_ctx, out_verdict, started)
+                return _held_result(out_verdict, approval_id)
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
             await self._breaker.record_block(sid, incident_id)
@@ -386,9 +447,7 @@ class OliveGateway:
         try:
             result = await upstream.call_tool(name, arguments)
         except Exception as exc:  # noqa: BLE001
-            in_ctx = self._build_context(
-                identity, name, arguments, "inbound", call_number, history
-            )
+            in_ctx = self._build_context(identity, name, arguments, "inbound", call_number, history)
             verdict = Verdict(
                 decision=Decision.BLOCK,
                 rule="gateway.upstream_error",

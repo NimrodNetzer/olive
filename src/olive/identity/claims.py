@@ -31,6 +31,11 @@ class IdentityClaims:
     role: str
     session_id: str
     capabilities: tuple[str, ...] = ()
+    # Resource ids this agent's current task is scoped to (ADR-0010, explicit
+    # task binding). Contextual rules check the requested resource against this
+    # set. Empty = no task scoping declared; resource-binding rules then have
+    # nothing to match and fall back to the coarse allowlist.
+    task_resources: tuple[str, ...] = ()
     # True only when these claims came from a cryptographically verified token.
     verified: bool = False
 
@@ -56,6 +61,7 @@ def claims_from_token(token: str, public_key_pem: bytes) -> IdentityClaims:
         role=role,
         session_id=payload.get("session_id") or _new_session_id(),
         capabilities=tuple(payload.get("capabilities", ())),
+        task_resources=tuple(payload.get("task_resources", ())),
         verified=True,
     )
 

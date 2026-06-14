@@ -24,6 +24,24 @@ def hash_arguments(arguments: dict[str, Any] | None) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class ResourceRef:
+    """The structured target of a tool call, for contextual authorization
+    (ADR-0010). Only the *scoping identifier* of a resource enters the
+    context - never the payload (CLAUDE.md rule 3).
+
+    `type`/`classification` are non-secret labels (e.g. "order", "customer-pii").
+    `id` is a non-secret scoping key (an order number, a file-path label). When
+    the scoping id is itself sensitive, the extractor pre-hashes it and sets
+    `id_hashed`; predicates may then only test equality, never substring.
+    """
+
+    type: str
+    id: str
+    classification: str | None = None
+    id_hashed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class SecurityContext:
     agent_id: str
     session_id: str
@@ -37,6 +55,15 @@ class SecurityContext:
     session_tool_history: tuple[str, ...]
     source_trust: TrustLevel
     timestamp: str
+    # The structured target of the call, when the policy declares a resource
+    # extractor for this tool (ADR-0010). None when no extractor applies - then
+    # contextual resource predicates simply do not match, and authorization
+    # falls back to the coarse allowlist. Never carries raw argument payloads.
+    requested_resource: ResourceRef | None = None
+    # Resource ids the current task is scoped to (from the attested identity,
+    # ADR-0010). Explicit task binding: a resource rule checks the requested
+    # resource id against this set.
+    task_resources: tuple[str, ...] = ()
 
     @staticmethod
     def now() -> str:

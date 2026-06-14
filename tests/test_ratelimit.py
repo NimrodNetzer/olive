@@ -63,9 +63,7 @@ async def test_same_key_can_carry_different_role_limits():
 
 async def test_concurrent_calls_respect_the_limit():
     rl = RateLimiter(window_seconds=60)
-    results = await asyncio.gather(
-        *(rl.check_and_record(KEY, 10, now=0.0) for _ in range(25))
-    )
+    results = await asyncio.gather(*(rl.check_and_record(KEY, 10, now=0.0) for _ in range(25)))
     assert sum(results) == 10, "exactly the limit may pass under concurrency"
 
 

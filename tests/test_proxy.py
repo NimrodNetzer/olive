@@ -256,8 +256,13 @@ def _resource_text(result) -> str:
 class SurfaceUpstream(StubUpstream):
     """Stub exposing resources + prompts for M3 slice-3 tests."""
 
-    def __init__(self, resource_text="clean resource", prompt_text="clean prompt",
-                 resource_desc="A document.", prompt_desc="A greeting.") -> None:
+    def __init__(
+        self,
+        resource_text="clean resource",
+        prompt_text="clean prompt",
+        resource_desc="A document.",
+        prompt_desc="A greeting.",
+    ) -> None:
         super().__init__()
         self.resource_text = resource_text
         self.prompt_text = prompt_text
@@ -265,9 +270,7 @@ class SurfaceUpstream(StubUpstream):
         self.prompt_desc = prompt_desc
 
     async def list_resources(self):
-        resource = types.Resource(
-            uri="file://doc.txt", name="doc", description=self.resource_desc
-        )
+        resource = types.Resource(uri="file://doc.txt", name="doc", description=self.resource_desc)
         return types.ListResourcesResult(resources=[resource])
 
     async def read_resource(self, uri):
@@ -528,12 +531,18 @@ async def test_containment_is_per_identity_session(store):
     gw = make_gateway(store, max_blocks=2)
     upstream = StubUpstream()
     a = IdentityClaims(
-        agent_id="agent-a", organization="o", role="customer-support",
-        session_id="sess-a", verified=True,
+        agent_id="agent-a",
+        organization="o",
+        role="customer-support",
+        session_id="sess-a",
+        verified=True,
     )
     b = IdentityClaims(
-        agent_id="agent-b", organization="o", role="customer-support",
-        session_id="sess-b", verified=True,
+        agent_id="agent-b",
+        organization="o",
+        role="customer-support",
+        session_id="sess-b",
+        verified=True,
     )
     # Trip agent A with two forbidden calls.
     await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)
@@ -585,12 +594,18 @@ async def test_same_session_id_different_agents_do_not_share_containment(store):
     upstream = StubUpstream()
     # identical session_id, different agents
     a = IdentityClaims(
-        agent_id="agent-a", organization="o", role="customer-support",
-        session_id="SAME", verified=True,
+        agent_id="agent-a",
+        organization="o",
+        role="customer-support",
+        session_id="SAME",
+        verified=True,
     )
     b = IdentityClaims(
-        agent_id="agent-b", organization="o", role="customer-support",
-        session_id="SAME", verified=True,
+        agent_id="agent-b",
+        organization="o",
+        role="customer-support",
+        session_id="SAME",
+        verified=True,
     )
     await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)
     await gw.handle_call_tool(upstream, "access_payroll", {}, identity=a)  # quarantines A
@@ -612,12 +627,18 @@ async def test_rate_limit_is_per_identity_role(store):
     upstream = StubUpstream()
 
     strict = IdentityClaims(
-        agent_id="s", organization="o", role="customer-support",
-        session_id="sess-strict", verified=True,
+        agent_id="s",
+        organization="o",
+        role="customer-support",
+        session_id="sess-strict",
+        verified=True,
     )
     loose = IdentityClaims(
-        agent_id="l", organization="o", role="chatty",
-        session_id="sess-loose", verified=True,
+        agent_id="l",
+        organization="o",
+        role="chatty",
+        session_id="sess-loose",
+        verified=True,
     )
     await gw.handle_call_tool(upstream, "read_faq", {}, identity=strict)  # uses its 1 budget
     throttled = await gw.handle_call_tool(upstream, "read_faq", {}, identity=strict)

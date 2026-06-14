@@ -112,6 +112,36 @@ async def test_verifier_accepts_valid_token(ca):
     assert "read_faq" in access.scopes
 
 
+async def test_verifier_preserves_task_resources(ca):
+    # Regression: task_resources (ADR-0010) must survive the token->AccessToken
+    # rebuild so contextual resource rules are enforceable on the wire.
+    verifier = OliveTokenVerifier(ca.public_key_pem())
+    access = await verifier.verify_token(issue(ca, task_resources=["4471", "4472"]))
+    assert access is not None
+    assert access.claims["task_resources"] == ["4471", "4472"]
+
+
+def test_identity_from_context_carries_task_resources(monkeypatch):
+    # The dict->IdentityClaims step (the second place task_resources could be
+    # dropped) must land the binding into the identity the gateway enforces on.
+    import olive.transport.http as http
+
+    class _Tok:
+        claims = {
+            "agent_id": "a",
+            "organization": "o",
+            "role": "r",
+            "session_id": "s",
+            "capabilities": ["read_faq"],
+            "task_resources": ["4471"],
+        }
+
+    monkeypatch.setattr(http, "get_access_token", lambda: _Tok())
+    identity = http.identity_from_context()
+    assert identity is not None
+    assert identity.task_resources == ("4471",)
+
+
 async def test_verifier_rejects_forged_and_garbage(ca):
     verifier = OliveTokenVerifier(ca.public_key_pem())
     assert await verifier.verify_token("not-a-jwt") is None
@@ -139,8 +169,11 @@ async def test_mcp_endpoint_rejects_unauthenticated(app_ctx):
 async def test_mcp_endpoint_rejects_forged_token(app_ctx, ca):
     app, _, upstream = app_ctx
     forged = MockCA().issue(  # signed by a different CA
-        agent_id="x", organization="o", role="customer-support",
-        session_id="s", capabilities=["read_faq"],
+        agent_id="x",
+        organization="o",
+        role="customer-support",
+        session_id="s",
+        capabilities=["read_faq"],
     )
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
@@ -182,6 +215,35 @@ async def test_admin_release_requires_capability(app_ctx, ca):
             assert r.status_code == 200
             assert r.json()["session_id"] == "sess-x"
             assert r.json()["released"] is False  # no such quarantined session
+
+
+async def test_admin_approve_requires_capability(app_ctx, ca):
+    app, _, _ = app_ctx
+    body = {"approval_id": "APR-none"}
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
+            # no token
+            assert (await client.post("/admin/approve", json=body)).status_code == 401
+            # valid token without the approve capability
+            plain = issue(ca, capabilities=["read_faq"])
+            r = await client.post(
+                "/admin/approve", json=body, headers={"Authorization": f"Bearer {plain}"}
+            )
+            assert r.status_code == 403
+            # a release capability does NOT grant approve (distinct scopes)
+            releaser = issue(ca, agent_id="ops", capabilities=["olive:release"])
+            r = await client.post(
+                "/admin/approve", json=body, headers={"Authorization": f"Bearer {releaser}"}
+            )
+            assert r.status_code == 403
+            # token carrying the approve capability
+            admin = issue(ca, agent_id="ops", capabilities=["olive:approve"])
+            r = await client.post(
+                "/admin/approve", json=body, headers={"Authorization": f"Bearer {admin}"}
+            )
+            assert r.status_code == 200
+            assert r.json()["approved"] is False  # no such pending approval
 
 
 # ---- end-to-end: real MCP handshake over HTTP, in-process -----------------

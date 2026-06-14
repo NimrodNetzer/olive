@@ -34,9 +34,7 @@ class RateLimiter:
             del self._calls[k]
         return len(empty)
 
-    async def check_and_record(
-        self, key: str, limit: int | None, now: float | None = None
-    ) -> bool:
+    async def check_and_record(self, key: str, limit: int | None, now: float | None = None) -> bool:
         """Return True and record the call if under `limit`; return False
         (recording nothing) if the window is already full. `limit=None` means
         unlimited. The limit is passed per call so one limiter can serve many

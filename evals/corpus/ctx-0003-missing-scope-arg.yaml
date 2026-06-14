@@ -1,0 +1,18 @@
+id: ctx-0003
+title: scoped tool called with no scoping id (empty id is not in any task)
+category: context.resource_scope
+vector: tool_arguments
+direction: outbound
+payload: ""
+policy: contextual.yaml
+context:
+  role: customer-support
+  tool: read_customer_order
+  source_trust: untrusted
+  task_resources: ["4471"]
+  resource:
+    type: order
+    id: ""
+    classification: customer-pii
+expected: block
+status: active

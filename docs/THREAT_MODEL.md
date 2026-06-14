@@ -69,6 +69,14 @@ this document, update the document first (via ADR if the change is structural).
   *before* any inspector runs and *before* the upstream is contacted, until a
   human releases it. Containment is message-independent — it stops the probing
   session, not just the individual payload.
+- **Contextual authorization (M4, ADR-0010):** beyond "role may call tool", an
+  already-allowed call can be further restricted to the **resource bound to the
+  current task** (explicit task binding) or by **data classification ceiling**,
+  and high-risk actions can be **held for operator approval**. All checks are
+  deterministic structured comparisons over the `SecurityContext`; the inspector
+  is refine-only (can block/hold, never grant) and runs after default-deny.
+  A held call is released only by a capability-gated (`olive:approve`) operator
+  and is specific to one exact call (one-shot) — never by an LLM.
 
 ## Explicit non-guarantees (current milestone)
 
@@ -109,8 +117,16 @@ this document, update the document first (via ADR if the change is structural).
   (`verified=False`); acceptable only because stdio is single-tenant and spawned
   by a trusting client.
 - Capability attenuation (token capabilities ∩ role) is carried but **not yet
-  enforced** for tool calls (later M2/M3 slice); today capabilities only gate the
-  admin release endpoint (`olive:release`).
+  enforced** for tool calls (later M2/M3 slice); today capabilities gate the
+  admin endpoints only (`olive:release` for session release, `olive:approve`
+  for releasing a held call — distinct scopes, neither implies the other).
+- **Contextual authz limits (M4, ADR-0010):** resource scoping only applies to
+  tools with a declared extractor and to predicates over the *scoping id* and
+  *classification* — **content-aware** authorization (e.g. "the body contains no
+  external address") is deferred to the M6 Data-Leak Sentinel (advisory).
+  Pending-approval state is **in-memory/per-process** (like containment): it does
+  not survive a restart. Task-resource binding is only as trustworthy as the
+  identity that carries it — under stdio's unverified identity it is advisory.
 - Containment keys on the namespaced **(org, agent, session_id)** triple
   (`IdentityClaims.session_key`), so two tokens that reuse a `session_id` across
   different agents/orgs do **not** share breaker/rate-limiter state. State is

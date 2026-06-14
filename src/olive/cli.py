@@ -24,6 +24,7 @@ from olive.config import ConfigError, GatewayConfig, load_config
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway
 from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
+from olive.inspectors.context_policy import ContextPolicyInspector
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector
 from olive.store.events import EventStore
@@ -34,15 +35,17 @@ def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
     so measured detection always reflects the real gateway code path."""
     return InspectorPipeline(
         [
+            # Coarse allowlist first (default-deny). ContextPolicyInspector runs
+            # next so it can only refine an already-allowed call - restrict or
+            # hold, never grant (ADR-0010). Pattern inspection last.
             PolicyInspector(config.roles),
+            ContextPolicyInspector(config.context_rules),
             PatternInspector(config.injection_patterns),
         ]
     )
 
 
-def _resolve_specs(
-    config: GatewayConfig, cli_command: list[str]
-) -> list[tuple[str, list[str]]]:
+def _resolve_specs(config: GatewayConfig, cli_command: list[str]) -> list[tuple[str, list[str]]]:
     """Upstream (name, command) pairs: from the policy's `upstreams:` if present,
     otherwise the single CLI command as an unnamed (bare-tool) upstream."""
     if config.upstreams:
@@ -54,9 +57,7 @@ def _resolve_specs(
         return [(s.name, list(s.command)) for s in config.upstreams]
     if cli_command:
         return [("", cli_command)]
-    raise ConfigError(
-        "no upstream: define `upstreams:` in the policy or pass one after `--`"
-    )
+    raise ConfigError("no upstream: define `upstreams:` in the policy or pass one after `--`")
 
 
 async def _connect_multiplex(
@@ -136,9 +137,7 @@ def serve_http(
             async with AsyncExitStack() as stack:
                 upstream = await _connect_multiplex(stack, specs)
                 gateway = OliveGateway(config, store, build_pipeline(config))
-                server = gateway.build_server(
-                    upstream, identity_resolver=identity_from_context
-                )
+                server = gateway.build_server(upstream, identity_resolver=identity_from_context)
                 yield session_manager_for(server, json_response=json_response), gateway
         finally:
             await store.close()

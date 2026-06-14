@@ -1,0 +1,57 @@
+# Contextual authorization showcase (ADR-0010, M4). One gateway, one upstream,
+# with resource extraction + per-role contextual rules layered on top of the
+# coarse allowlist. The eval corpus (ctx-*) runs against this policy.
+#
+# The coarse allowlist still gates first (default-deny); the `rules:` below can
+# only further restrict (block) or pause (hold) an already-allowed tool.
+
+gateway:
+  agent_id: support-agent-7f3a
+  organization_id: demo-company
+  role: customer-support
+  declared_goal: resolve the specific customer ticket assigned to this task
+  db_path: olive_events.db
+
+roles:
+  customer-support:
+    max_calls_per_minute: 60
+    allowed_tools:
+      - read_faq
+      - read_customer_order
+      - read_payroll
+    forbidden_tools:
+      - delete_record
+    rules:
+      # A support agent may read only the order(s) bound to the current task -
+      # not arbitrary order ids (explicit task binding, ADR-0010).
+      - id: order-must-match-task
+        tool: read_customer_order
+        when:
+          resource.type: order
+        require:
+          resource.id_in: task.resources
+        effect: block
+      # Reading payroll data is high-risk: it is allowed by the list but held
+      # for explicit operator approval before it can proceed.
+      - id: payroll-needs-approval
+        tool: read_payroll
+        require:
+          approval: operator
+        effect: hold
+
+# Resource extractors: lift only the scoping id from the named argument.
+resources:
+  read_customer_order:
+    type: order
+    id_arg: order_id
+    classification: customer-pii
+
+upstream:
+  trust: untrusted
+
+containment:
+  max_blocks_before_quarantine: 3
+
+injection_patterns:
+  - ignore previous instructions
+  - system override

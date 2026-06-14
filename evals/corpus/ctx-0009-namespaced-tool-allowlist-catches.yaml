@@ -1,0 +1,28 @@
+id: ctx-0009
+title: namespaced order tool is stopped by the coarse allowlist before the rule is reached
+category: context.resource_scope
+vector: tool_arguments
+direction: outbound
+payload: ""
+policy: contextual.yaml
+context:
+  role: customer-support
+  tool: acme.read_customer_order
+  source_trust: untrusted
+  task_resources: ["4471"]
+  resource:
+    type: order
+    id: "9999"
+    classification: customer-pii
+expected: block
+status: active
+notes: >
+  Defense-in-depth check. The context rule's `tool: read_customer_order` would
+  NOT match the namespaced call "acme.read_customer_order" (applies_to compares
+  ctx.tool exactly, context_policy.py:55), so the binding rule alone would be
+  inert and order 9999 would slip through. It does not, because the coarse
+  allowlist runs first and "acme.read_customer_order" is not in allowed_tools ->
+  policy.not_allowed block. This case pins that ordering: if an operator ever
+  adds the namespaced name to allowed_tools without also namespacing the rule's
+  `tool` field, this becomes a live bypass (the rule would go inert while the
+  call is allowed). It is the multi-upstream regression to watch.
