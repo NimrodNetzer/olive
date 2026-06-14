@@ -365,6 +365,39 @@ async def test_containment_is_per_identity_session(store):
     assert not b_ok.isError, "agent B's session must be unaffected by A's quarantine"
 
 
+async def test_multi_upstream_routing_and_namespaced_policy(store, tmp_path):
+    import sqlite3
+
+    from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
+
+    config = make_config()
+    config.roles["customer-support"] = RolePolicy(
+        allowed_tools=frozenset({"files.read_faq"}),
+        forbidden_tools=frozenset({"db.read_secret"}),
+    )
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    gw = OliveGateway(config, store, pipeline)
+    files, db = StubUpstream(), StubUpstream()
+    mux = MultiplexUpstream([NamedUpstream("files", files), NamedUpstream("db", db)])
+
+    ok = await gw.handle_call_tool(mux, "files.read_faq", {})
+    assert not ok.isError
+    assert files.calls == ["read_faq"], "routed to 'files' with the prefix stripped"
+    assert db.calls == []
+
+    blocked = await gw.handle_call_tool(mux, "db.read_secret", {})
+    assert blocked.isError
+    assert db.calls == [], "forbidden namespaced tool never routed"
+
+    db_conn = sqlite3.connect(tmp_path / "events.db")
+    tools = {row[0] for row in db_conn.execute("SELECT DISTINCT tool FROM events")}
+    db_conn.close()
+    assert "files.read_faq" in tools, "audit records the namespaced tool name"
+    assert "db.read_secret" in tools
+
+
 async def test_same_session_id_different_agents_do_not_share_containment(store):
     """Hardening: a reused session_id across agents must not share quarantine."""
     gw = make_gateway(store, max_blocks=2)

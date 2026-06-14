@@ -22,6 +22,12 @@ class ConfigError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class UpstreamSpec:
+    name: str  # tool-namespace prefix; "" only for a lone single upstream
+    command: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayConfig:
     agent_id: str
     organization_id: str
@@ -32,6 +38,7 @@ class GatewayConfig:
     roles: dict[str, RolePolicy] = field(default_factory=dict)
     injection_patterns: list[str] = field(default_factory=list)
     max_blocks_before_quarantine: int = 3
+    upstreams: tuple[UpstreamSpec, ...] = ()
 
 
 def load_config(path: str | Path) -> GatewayConfig:
@@ -78,6 +85,8 @@ def load_config(path: str | Path) -> GatewayConfig:
             f"max_blocks_before_quarantine must be an integer >= 1, got {max_blocks!r}"
         )
 
+    upstreams = _parse_upstreams(raw.get("upstreams", []))
+
     return GatewayConfig(
         agent_id=gateway["agent_id"],
         organization_id=gateway.get("organization_id", "default-org"),
@@ -88,4 +97,30 @@ def load_config(path: str | Path) -> GatewayConfig:
         roles=roles,
         injection_patterns=list(raw.get("injection_patterns", [])),
         max_blocks_before_quarantine=max_blocks,
+        upstreams=upstreams,
     )
+
+
+def _parse_upstreams(raw: object) -> tuple[UpstreamSpec, ...]:
+    if not raw:
+        return ()
+    if not isinstance(raw, list):
+        raise ConfigError("'upstreams' must be a list of {name, command}")
+    specs: list[UpstreamSpec] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict) or "name" not in entry or "command" not in entry:
+            raise ConfigError("each upstream needs a 'name' and a 'command'")
+        name = entry["name"]
+        command = entry["command"]
+        if not isinstance(name, str) or not name or "." in name:
+            raise ConfigError(f"upstream name must be a non-empty string without '.', got {name!r}")
+        if not isinstance(command, list) or not command or not all(
+            isinstance(part, str) for part in command
+        ):
+            raise ConfigError(f"upstream '{name}' command must be a non-empty list of strings")
+        if name in seen:
+            raise ConfigError(f"duplicate upstream name: {name!r}")
+        seen.add(name)
+        specs.append(UpstreamSpec(name=name, command=tuple(command)))
+    return tuple(specs)

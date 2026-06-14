@@ -1,0 +1,49 @@
+# Multi-upstream policy (ADR-0008): one Olive gateway fronting two tool servers.
+# Tools are namespaced by upstream name; allowed/forbidden tools use those
+# namespaced names, giving precise per-server authorization.
+
+gateway:
+  agent_id: support-agent-7f3a
+  organization_id: demo-company
+  role: customer-support
+  declared_goal: resolve customer support tickets across tools and records
+  db_path: olive_events.db
+
+# Two upstreams; tool names become support.* and records.*
+upstreams:
+  - name: support
+    command: [python, demo/tools_server.py]
+  - name: records
+    command: [python, demo/records_server.py]
+
+roles:
+  customer-support:
+    max_calls_per_minute: 60
+    allowed_tools:
+      - support.read_faq
+      - support.search_kb
+      - support.read_customer_order
+      - support.read_file
+      - records.lookup_customer
+    forbidden_tools:
+      - support.access_payroll
+      - records.read_secret
+
+upstream:
+  trust: untrusted
+
+containment:
+  max_blocks_before_quarantine: 3
+
+injection_patterns:
+  - ignore previous instructions
+  - ignore all previous
+  - system override
+  - you are now
+  - forget your instructions
+  - "new instructions:"
+  - disregard your
+  - your true purpose is
+  - output all credentials
+  - reveal your system prompt
+  - act as if you are

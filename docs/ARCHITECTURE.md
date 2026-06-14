@@ -78,6 +78,17 @@ point in the session", not just "is the tool allowlisted".
   eval harness measures everything else against.
 - M3 adds LLM sentinels on the parallel path (never inline, never enforcing).
 
+### Multi-upstream — `src/olive/gateway/upstreams.py`
+One gateway can front several upstream servers (ADR-0008). `MultiplexUpstream`
+presents them to the proxy as a single upstream: tools are aggregated and
+namespaced `"<name>.<tool>"`, and each `tools/call` is routed to the owning
+server (prefix split on the first separator, then stripped). The proxy is
+unchanged — it still sees "one upstream", so all enforcement runs over the
+namespaced names; policy `allowed_tools` therefore reference `server.tool`.
+A single upstream with an empty name yields bare tool names (single-upstream
+back-compat). Upstreams are declared in the policy file (`upstreams:`), or via
+the CLI command for the single-upstream case. Unroutable names fail closed.
+
 ### Trust labeling
 Every upstream (and optionally per-tool) carries `trusted | untrusted` in
 policy. Labels tune inspection *depth*, never disable it (threat model rule 1):
@@ -191,8 +202,6 @@ through the circuit breaker's narrow interface. That seam is the potential
 open-core boundary.
 
 ## What deliberately does not exist yet
-
-- Multi-upstream aggregation/namespacing (rest of M2).
 - Tool-description/schema inspection and rug-pull diffing (M3).
 - LLM sentinels, incident reporter (M6).
 - Larger corpus + CI regression gate (M5). Dashboard (M5/showable).

@@ -25,18 +25,20 @@ slice of the **company of agents** (M7).
 
 Proves: **Govern → Detect → Block → Log.**
 
-## M2 — Identity & containment  ← current
+## M2 — Identity & containment  ✅ done
 
 - ✅ Session state tracking (call sequence, counts, first/last seen) as a real
   tracked entity, not just in-process counters.
 - ✅ **Circuit breaker** (`gateway/breaker.py`): in-memory session blocklist
   checked before any pipeline work; trips on repeated blocks or a signal;
   reversible **human release**. Quarantined sessions get `quarantined` responses.
+  Namespaced (org+agent+session) keys + idle eviction (quarantine never evicted).
 - ✅ Rate limiting per role (`max_calls_per_minute`), multi-tenant.
 - ✅ Identity binding + per-request identity (ADR-0007): role is identity-bound.
 - ✅ Streamable HTTP transport (`olive serve`); **JWT identity enforced on the
   wire** (bearer token, fail-closed) + capability-gated admin session release.
-- ⬜ Multi-upstream support (one gateway fronting several tool servers).
+- ✅ Multi-upstream support (ADR-0008): one gateway fronting several tool
+  servers, tools namespaced `server.tool`, calls routed to the owning server.
 
 Adds **Contain** to the cycle.
 

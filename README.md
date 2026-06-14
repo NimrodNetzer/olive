@@ -31,6 +31,12 @@ python evals/run_evals.py
 
 # run the gateway yourself in front of any stdio MCP server
 olive run --config policies/default.yaml -- python demo/tools_server.py
+
+# one gateway fronting several servers (tools namespaced server.tool)
+olive run --config policies/multi.yaml
+
+# or over HTTP with bearer-token identity enforced on the wire
+olive serve --config policies/default.yaml --ca-pubkey ca_pub.pem -- python demo/tools_server.py
 ```
 
 ## What the demo shows
@@ -45,11 +51,14 @@ olive run --config policies/default.yaml -- python demo/tools_server.py
 
 ## Status
 
-Walking skeleton (Milestone 1). Real MCP protocol, real bidirectional
-enforcement, real audit trail — deliberately small. Current detection is
+**Milestones 1–2 complete.** Real MCP protocol, real bidirectional
+enforcement, real audit trail, plus identity & containment: cryptographic
+agent identity **enforced on the wire** (HTTP bearer tokens), deterministic
+session **quarantine** with capability-gated human release, per-role rate
+limiting, and **multi-upstream** routing. Detection itself is still
 deterministic layer zero only; the eval report says so honestly.
-See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next (sessions + circuit
-breaker, LLM sentinels, measured-detection CI gate).
+See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next (M3 tool-description /
+rug-pull inspection, then measured detection and the advisory sentinels).
 
 ## Documentation
 

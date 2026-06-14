@@ -13,15 +13,17 @@ import argparse
 import asyncio
 import contextlib
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server.stdio import stdio_server
 
-from olive.config import GatewayConfig, load_config
+from olive.config import ConfigError, GatewayConfig, load_config
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway
+from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector
 from olive.store.events import EventStore
@@ -38,10 +40,45 @@ def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
     )
 
 
+def _resolve_specs(
+    config: GatewayConfig, cli_command: list[str]
+) -> list[tuple[str, list[str]]]:
+    """Upstream (name, command) pairs: from the policy's `upstreams:` if present,
+    otherwise the single CLI command as an unnamed (bare-tool) upstream."""
+    if config.upstreams:
+        if cli_command:
+            print(
+                "[olive] policy defines `upstreams:`; ignoring the CLI command",
+                file=sys.stderr,
+            )
+        return [(s.name, list(s.command)) for s in config.upstreams]
+    if cli_command:
+        return [("", cli_command)]
+    raise ConfigError(
+        "no upstream: define `upstreams:` in the policy or pass one after `--`"
+    )
+
+
+async def _connect_multiplex(
+    stack: AsyncExitStack, specs: list[tuple[str, list[str]]]
+) -> MultiplexUpstream:
+    """Spawn every upstream subprocess on the given stack and wrap them in a
+    routing multiplexer (a single upstream with an empty name = bare tools)."""
+    upstreams: list[NamedUpstream] = []
+    for name, command in specs:
+        params = StdioServerParameters(command=command[0], args=command[1:])
+        read, write = await stack.enter_async_context(stdio_client(params))
+        session = await stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        upstreams.append(NamedUpstream(name=name, session=session))
+    return MultiplexUpstream(upstreams)
+
+
 async def run_gateway(
     config_path: str, upstream_command: list[str], db_override: str | None
 ) -> None:
     config = load_config(config_path)
+    specs = _resolve_specs(config, upstream_command)
     db_path = db_override or config.db_path
 
     store = EventStore(db_path)
@@ -50,17 +87,14 @@ async def run_gateway(
         gateway = OliveGateway(config, store, build_pipeline(config))
         print(
             f"[olive] session {gateway.session_id} | agent {config.agent_id} "
-            f"| role {config.role} | upstream trust: {config.upstream_trust}",
+            f"| role {config.role} | upstreams: {[n or '(bare)' for n, _ in specs]}",
             file=sys.stderr,
         )
-
-        params = StdioServerParameters(command=upstream_command[0], args=upstream_command[1:])
-        async with stdio_client(params) as (upstream_read, upstream_write):
-            async with ClientSession(upstream_read, upstream_write) as upstream:
-                await upstream.initialize()
-                server = gateway.build_server(upstream)
-                async with stdio_server() as (read, write):
-                    await server.run(read, write, server.create_initialization_options())
+        async with AsyncExitStack() as stack:
+            upstream = await _connect_multiplex(stack, specs)
+            server = gateway.build_server(upstream)
+            async with stdio_server() as (read, write):
+                await server.run(read, write, server.create_initialization_options())
     finally:
         await store.close()
 
@@ -90,6 +124,7 @@ def serve_http(
     )
 
     config = load_config(config_path)
+    specs = _resolve_specs(config, upstream_command)
     public_key_pem = Path(ca_pubkey_path).read_bytes()
     db_path = db_override or config.db_path
 
@@ -98,17 +133,13 @@ def serve_http(
         store = EventStore(db_path)
         await store.open()
         try:
-            params = StdioServerParameters(
-                command=upstream_command[0], args=upstream_command[1:]
-            )
-            async with stdio_client(params) as (read, write):
-                async with ClientSession(read, write) as upstream:
-                    await upstream.initialize()
-                    gateway = OliveGateway(config, store, build_pipeline(config))
-                    server = gateway.build_server(
-                        upstream, identity_resolver=identity_from_context
-                    )
-                    yield session_manager_for(server, json_response=json_response), gateway
+            async with AsyncExitStack() as stack:
+                upstream = await _connect_multiplex(stack, specs)
+                gateway = OliveGateway(config, store, build_pipeline(config))
+                server = gateway.build_server(
+                    upstream, identity_resolver=identity_from_context
+                )
+                yield session_manager_for(server, json_response=json_response), gateway
         finally:
             await store.close()
 
@@ -154,25 +185,25 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    # An upstream may come from the policy's `upstreams:` instead of the CLI, so
+    # an empty command is allowed here; _resolve_specs enforces "at least one".
     upstream = [part for part in args.upstream if part != "--"]
-    if not upstream:
-        parser.error(
-            "missing upstream server command,"
-            " e.g.: olive run --config p.yaml -- python server.py"
-        )
 
-    if args.command == "serve":
-        serve_http(
-            args.config,
-            upstream,
-            args.ca_pubkey,
-            args.host,
-            args.port,
-            args.db,
-            json_response=not args.sse,
-        )
-    else:
-        asyncio.run(run_gateway(args.config, upstream, args.db))
+    try:
+        if args.command == "serve":
+            serve_http(
+                args.config,
+                upstream,
+                args.ca_pubkey,
+                args.host,
+                args.port,
+                args.db,
+                json_response=not args.sse,
+            )
+        else:
+            asyncio.run(run_gateway(args.config, upstream, args.db))
+    except ConfigError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

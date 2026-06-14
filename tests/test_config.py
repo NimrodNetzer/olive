@@ -90,3 +90,46 @@ def test_invalid_rate_limit_rejected(tmp_path):
     )
     with pytest.raises(ConfigError, match="max_calls_per_minute"):
         load_config(bad)
+
+
+def test_no_upstreams_defaults_to_empty():
+    config = load_config(ROOT / "policies" / "default.yaml")
+    assert config.upstreams == ()
+
+
+def test_upstreams_section_parses(tmp_path):
+    good = tmp_path / "good.yaml"
+    good.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: [files.read_faq]}}\n"
+        "upstreams:\n"
+        "  - {name: files, command: [python, files.py]}\n"
+        "  - {name: db, command: [python, db.py, --flag]}\n",
+        encoding="utf-8",
+    )
+    config = load_config(good)
+    assert [u.name for u in config.upstreams] == ["files", "db"]
+    assert config.upstreams[1].command == ("python", "db.py", "--flag")
+
+
+def test_upstream_name_with_dot_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: []}}\n"
+        "upstreams: [{name: 'a.b', command: [python, s.py]}]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="name"):
+        load_config(bad)
+
+
+def test_duplicate_upstream_name_rejected(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "gateway: {agent_id: a, role: r}\nroles: {r: {allowed_tools: []}}\n"
+        "upstreams:\n"
+        "  - {name: x, command: [python, a.py]}\n"
+        "  - {name: x, command: [python, b.py]}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="duplicate"):
+        load_config(bad)
