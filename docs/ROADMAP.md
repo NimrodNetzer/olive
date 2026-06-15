@@ -210,6 +210,17 @@ self-improvement loop.
 - ✅ Advisory-only (never `trip`/`set_mode`/`olive cycle`); Remediation records a
   finding as an intent; humans still gate every promotion (ADR-0013).
 
+**Fifth slice (built — ADR-0017):** the Agentic Command Center.
+- ✅ **`olive ui`** (`src/olive/ui/`): a read-only Textual TUI visualizing the
+  runtime org — department status, the central gateway node, a live
+  mitigation/audit feed, and an attack-theater sidebar over `evals/corpus/`
+  (fires the existing sandbox `run_campaign`/`run_once()`, never live traffic).
+- ✅ `UIBroker` is a third intelligence-side `TelemetrySink` + `IncidentBus`
+  subscriber, projecting into a bounded rule-3 `UIEvent`; read-only by
+  construction (import-set test excludes breaker/proxy/Commander). UI-initiated
+  requests publish an announce-only `operator-request` bus object — they never
+  themselves change mode or trip the breaker.
+
 **Still deferred (later within/after M7):** the supervisor tier of the Command &
 Coordination hierarchy; **event-triggered** Red-Team ("after every incident") +
 runtime **Builder** autonomy; LLM-creative attack generation in CI (stays the

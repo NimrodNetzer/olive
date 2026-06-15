@@ -397,6 +397,45 @@ async def run_redteam_dept(args: argparse.Namespace) -> int:
         await bus.close()
 
 
+async def run_ui(args: argparse.Namespace) -> int:
+    """Launch the Agentic Command Center (ADR-0017): a read-only Textual TUI over
+    `UIBroker`. Runs as its own process - the audit feed is seeded from
+    `incident_events` history on startup, then `UIBroker` subscribes to this
+    process's `IncidentBus` for live fan-out (live telemetry from a separate
+    `olive run`/`serve` process is not available; only bus history/objects
+    published in-process, e.g. via the attack-theater Launch button, are live).
+    Imported locally (intelligence side of the seam, optional `textual` dep)."""
+    import os
+
+    from olive.intelligence.bus import IncidentBus
+    from olive.ui.app import CommandCenterApp
+    from olive.ui.broker import UIBroker, UIEvent
+
+    config = load_config(args.config)
+    bus = IncidentBus(args.db or config.db_path, os.urandom(32))
+    await bus.open()
+    try:
+        broker = UIBroker()
+        for row in await bus.history():
+            broker.seed(
+                UIEvent(
+                    kind=row["kind"],
+                    evidence=row["evidence"],
+                    timestamp=row["created_at"],
+                    source_dept=row["source_dept"],
+                    object_id=row["object_id"],
+                    confidence=row["confidence"],
+                    attack_types=tuple(filter(None, (row["attack_types"] or "").split(","))),
+                )
+            )
+        bus.subscribe(broker.on_incident)
+        app = CommandCenterApp(broker, bus=bus, corpus_dir=_ROOT / "evals" / "corpus")
+        await app.run_async()
+        return 0
+    finally:
+        await bus.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -500,6 +539,14 @@ def main() -> None:
     rtd_run.add_argument("--db", default=None, help="override audit DB path from the policy file")
     rtd_run.add_argument("--policy", default="default.yaml", help="pipeline policy under policies/")
 
+    ui = sub.add_parser(
+        "ui",
+        help="launch the Agentic Command Center: a read-only TUI over the "
+        "incident bus + audit log (ADR-0017, requires the 'ui' extra)",
+    )
+    ui.add_argument("--config", required=True, help="policy YAML file (for the audit DB path)")
+    ui.add_argument("--db", default=None, help="override audit DB path from the policy file")
+
     args = parser.parse_args()
 
     if args.command == "cycle":
@@ -515,6 +562,13 @@ def main() -> None:
     if args.command == "redteam-dept":
         try:
             sys.exit(asyncio.run(run_redteam_dept(args)))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
+
+    if args.command == "ui":
+        try:
+            sys.exit(asyncio.run(run_ui(args)))
         except ConfigError as exc:
             parser.error(str(exc))
         return
