@@ -169,6 +169,51 @@ async def test_scheduled_start_stop(bus):
     assert dept._task is None
 
 
+async def test_single_flight_skip_returns_none_not_zero(bus):
+    # A skip (campaign already in flight) is None - distinct from 0, which means a
+    # campaign ran and found nothing novel. An operator must be able to tell them
+    # apart, so the two outcomes do not share a return value.
+    dept = RedTeamDepartment(bus, corpus_dir=CORPUS)
+    dept._running = True  # simulate an in-flight campaign
+    assert await dept.run_once() is None
+    assert dept.campaigns_run == 0  # the skipped call ran no campaign
+
+
+async def test_scheduled_campaign_failure_is_counted_and_logged(bus, monkeypatch, caplog):
+    # A silently-failing scheduled drill must be detectable: the failure is counted
+    # AND surfaced via a log warning, else an operator believes drills run when every
+    # one is throwing. The error must not kill the scheduler loop.
+    dept = RedTeamDepartment(bus, corpus_dir=CORPUS, interval=30.0)
+
+    async def boom(self):
+        raise RuntimeError("campaign exploded")
+
+    monkeypatch.setattr(RedTeamDepartment, "run_once", boom)
+    with caplog.at_level("WARNING", logger="olive.intelligence.redteam_dept"):
+        # drive one scheduler iteration directly (no real 30s sleep)
+        monkeypatch.setattr(rtd.asyncio, "sleep", _raise_after_first_call())
+        with pytest.raises(_StopLoop):
+            await dept._loop()
+    assert dept.campaign_failures == 1
+    assert any("scheduled campaign failed" in r.message for r in caplog.records)
+
+
+class _StopLoop(Exception):
+    pass
+
+
+def _raise_after_first_call():
+    state = {"calls": 0}
+
+    async def _sleep(_seconds):
+        state["calls"] += 1
+        if state["calls"] >= 2:
+            raise _StopLoop  # let exactly one failing iteration complete, then bail
+        return None
+
+    return _sleep
+
+
 async def test_build_runtime_org_includes_redteam_default_off(bus, tmp_path):
     ledger = RemediationLedger(tmp_path / "led.db")
     await ledger.open()

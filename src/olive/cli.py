@@ -378,6 +378,12 @@ async def run_redteam_dept(args: argparse.Namespace) -> int:
             bus, policy=args.policy, corpus_dir=_ROOT / "evals" / "corpus"
         )
         published = await dept.run_once()
+        if published is None:
+            print(
+                "[olive] red-team department: skipped, a campaign is already in flight",
+                file=sys.stderr,
+            )
+            return 0
         print(
             f"[olive] red-team department: campaign run, {published} novel finding(s) "
             "published to the bus (awaiting human triage)",

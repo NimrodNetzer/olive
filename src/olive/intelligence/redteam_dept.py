@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from pathlib import Path
 
 from olive.intelligence.bus import IncidentBus
@@ -31,6 +32,8 @@ from olive.redteam.engine import Bypass, load_known_keys, run_campaign
 
 # A misconfigured short interval would be a self-DoS; clamp to this hard floor.
 _MIN_INTERVAL_SECONDS = 30.0
+
+_log = logging.getLogger(__name__)
 
 
 def _finding_report(bypass: Bypass) -> IncidentReport:
@@ -78,12 +81,14 @@ class RedTeamDepartment:
         self.findings_published = 0
         self.campaign_failures = 0
 
-    async def run_once(self) -> int:
+    async def run_once(self) -> int | None:
         """Run one sandbox campaign and publish only the NOVEL bypasses (deduped
         against the corpus) as `redteam-finding` objects. Returns the count
-        published. Single-flight: a call while a campaign is in flight is skipped."""
+        published, or None if skipped because a campaign was already in flight
+        (single-flight) - distinct from 0, which means a campaign ran and found
+        nothing novel."""
         if self._running:
-            return 0
+            return None
         self._running = True
         try:
             known = load_known_keys(self._corpus_dir) if self._corpus_dir else set()
@@ -124,3 +129,10 @@ class RedTeamDepartment:
                 await self.run_once()
             except Exception:  # noqa: BLE001 - a campaign error must not kill the scheduler
                 self.campaign_failures += 1
+                # Surface it: a silently-failing scheduled drill must be detectable,
+                # else an operator believes drills run when every one is throwing.
+                _log.warning(
+                    "red-team scheduled campaign failed (%d total failure(s))",
+                    self.campaign_failures,
+                    exc_info=True,
+                )
