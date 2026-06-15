@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OLIVE — Agentic Command Center</title>
+<style>
+  :root {
+    --bg:       #0a0e14;
+    --surface:  #0d1117;
+    --border:   #21262d;
+    --text:     #c9d1d9;
+    --muted:    #6e7681;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --purple:   #bc8cff;
+    --blue:     #58a6ff;
+    --orange:   #e3b341;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 14px; font-weight: bold; color: var(--green); letter-spacing: 1px; }
+  header .subtitle { color: var(--muted); font-size: 11px; }
+  #conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red); margin-left: auto; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  #conn-dot.connected { background: var(--green); }
+  #conn-label { color: var(--muted); font-size: 11px; }
+
+  /* ── Main grid ─────────────────────────────────────────────── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    grid-template-rows: 1fr 180px;
+    gap: 8px;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  /* ── Shared panel style ─────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-title {
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+
+  /* ── Left column: department offices ──────────────────────── */
+  #dept-column {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.4s, box-shadow 0.4s;
+    position: relative;
+    overflow: hidden;
+  }
+  .dept-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--border);
+    transition: background 0.4s;
+  }
+  .dept-card.active { border-color: var(--green); box-shadow: 0 0 12px rgba(63,185,80,0.15); }
+  .dept-card.active::before { background: var(--green); }
+
+  .dept-icon { font-size: 18px; line-height: 1; }
+  .dept-name { font-size: 11px; font-weight: bold; letter-spacing: 1px; color: var(--text); }
+  .dept-status { font-size: 10px; color: var(--muted); }
+  .dept-last  { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Center: gateway node ──────────────────────────────────── */
+  #gateway-panel {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    transition: border-color 0.4s, box-shadow 0.4s;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  #gateway-panel.allow { border-color: var(--green); box-shadow: 0 0 24px rgba(63,185,80,0.2); }
+  #gateway-panel.block { border-color: var(--red);   box-shadow: 0 0 24px rgba(248,81,73,0.2); }
+  #gateway-panel.hold  { border-color: var(--yellow); box-shadow: 0 0 24px rgba(210,153,34,0.2); }
+  #gateway-panel.quarantine { border-color: var(--purple); box-shadow: 0 0 24px rgba(188,140,255,0.2); }
+
+  /* Animated ring around gateway */
+  #gateway-ring {
+    position: relative;
+    width: 90px; height: 90px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #gateway-ring svg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  }
+  #gateway-ring svg circle {
+    fill: none; stroke: var(--border); stroke-width: 2;
+    stroke-dasharray: 251; stroke-dashoffset: 0;
+    transform-origin: 50% 50%;
+    animation: spin 8s linear infinite;
+  }
+  #gateway-ring svg circle.pulse {
+    stroke: var(--green);
+    stroke-dasharray: 60 191;
+    animation: spin 2s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #gateway-icon { font-size: 32px; line-height: 1; z-index: 1; }
+
+  #gateway-name { font-size: 16px; font-weight: bold; letter-spacing: 2px; color: var(--text); }
+  #gateway-subtitle { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+
+  #gateway-decision {
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: var(--muted);
+    transition: color 0.3s;
+    min-height: 28px;
+  }
+  #gateway-decision.allow { color: var(--green); }
+  #gateway-decision.block { color: var(--red); }
+  #gateway-decision.hold  { color: var(--yellow); }
+  #gateway-decision.quarantine { color: var(--purple); }
+
+  #gateway-rule { font-size: 11px; color: var(--muted); max-width: 300px; text-align: center; }
+
+  /* Stats row */
+  #gateway-stats {
+    display: flex; gap: 24px; margin-top: 4px;
+  }
+  .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stat-value { font-size: 18px; font-weight: bold; }
+  .stat-label { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+  .stat-allow .stat-value { color: var(--green); }
+  .stat-block .stat-value { color: var(--red); }
+  .stat-hold  .stat-value { color: var(--yellow); }
+
+  /* ── Right column: attack theater ─────────────────────────── */
+  #attack-panel {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  #attack-panel .panel-title { color: var(--orange); }
+  #attack-panel { border-color: var(--yellow); }
+
+  #corpus-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+  }
+  #corpus-list::-webkit-scrollbar { width: 4px; }
+  #corpus-list::-webkit-scrollbar-track { background: transparent; }
+  #corpus-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .corpus-item {
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .corpus-item:hover { background: rgba(88,166,255,0.1); color: var(--blue); }
+  .corpus-item.selected { background: rgba(210,153,34,0.15); color: var(--orange); }
+
+  #launch-btn {
+    width: 100%;
+    padding: 7px;
+    background: rgba(210,153,34,0.15);
+    border: 1px solid var(--yellow);
+    border-radius: 4px;
+    color: var(--orange);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  #launch-btn:hover { background: rgba(210,153,34,0.25); }
+  #launch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Bottom: mitigation feed ───────────────────────────────── */
+  #feed-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    overflow: hidden;
+  }
+  #feed-panel .panel-title { color: var(--blue); }
+
+  #feed-log {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+  }
+  #feed-log::-webkit-scrollbar { width: 4px; }
+  #feed-log::-webkit-scrollbar-track { background: transparent; }
+  #feed-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .feed-entry {
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: fadein 0.3s ease;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+  .feed-entry.decision-allow { color: var(--green); }
+  .feed-entry.decision-block { color: var(--red); }
+  .feed-entry.decision-hold  { color: var(--yellow); }
+  .feed-entry.decision-quarantine { color: var(--purple); }
+  .feed-entry.redteam-finding { color: var(--orange); }
+  .feed-entry.operator-request { color: var(--blue); }
+  .feed-entry.default { color: var(--muted); }
+
+  .feed-ts { color: var(--muted); margin-right: 6px; }
+  .feed-kind { font-weight: bold; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:18px">🫒</span>
+  <h1>OLIVE</h1>
+  <span class="subtitle">Agentic Command Center &mdash; zero-trust MCP gateway</span>
+  <div id="conn-dot"></div>
+  <span id="conn-label">disconnected</span>
+</header>
+
+<main>
+  <!-- Left: departments -->
+  <div id="dept-column">
+    <div class="dept-card" id="dept-defense">
+      <div class="dept-icon">🛡</div>
+      <div class="dept-name">DEFENSE</div>
+      <div class="dept-status">idle</div>
+      <div class="dept-last"></div>
+    </div>
+    <div class="dept-card" id="dept-remediation">
+      <div class="dept-icon">🔧</div>
+      <div class="dept-name">REMEDIATION</div>
+      <div class="dept-status">idle</div>
+      <div class="dept-last"></div>
+    </div>
+    <div class="dept-card" id="dept-redteam">
+      <div class="dept-icon">⚔</div>
+      <div class="dept-name">RED TEAM</div>
+      <div class="dept-status">idle</div>
+      <div class="dept-last"></div>
+    </div>
+  </div>
+
+  <!-- Center: gateway node -->
+  <div id="gateway-panel" class="panel">
+    <div id="gateway-ring">
+      <svg viewBox="0 0 90 90">
+        <circle cx="45" cy="45" r="40"/>
+        <circle cx="45" cy="45" r="40" class="pulse"/>
+      </svg>
+      <div id="gateway-icon">🟢</div>
+    </div>
+    <div id="gateway-name">OLIVE GATEWAY</div>
+    <div id="gateway-subtitle">AI FIREWALL · ZERO TRUST MCP</div>
+    <div id="gateway-decision">—</div>
+    <div id="gateway-rule" style="color:var(--muted)">awaiting events…</div>
+    <div id="gateway-stats">
+      <div class="stat stat-allow">
+        <span class="stat-value" id="stat-allow">0</span>
+        <span class="stat-label">ALLOW</span>
+      </div>
+      <div class="stat stat-block">
+        <span class="stat-value" id="stat-block">0</span>
+        <span class="stat-label">BLOCK</span>
+      </div>
+      <div class="stat stat-hold">
+        <span class="stat-value" id="stat-hold">0</span>
+        <span class="stat-label">HOLD</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: attack theater -->
+  <div class="panel" id="attack-panel">
+    <div class="panel-title">🎯 ATTACK THEATER &mdash; SANDBOX ONLY</div>
+    <div id="corpus-list"></div>
+    <button id="launch-btn" disabled>Launch (request)</button>
+  </div>
+
+  <!-- Bottom: mitigation feed -->
+  <div class="panel" id="feed-panel">
+    <div class="panel-title">⚡ MITIGATION FEED</div>
+    <div id="feed-log"></div>
+  </div>
+</main>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  const stats = { allow: 0, block: 0, hold: 0 };
+  let selectedCase = null;
+  const deptTimers = {};
+
+  const DEPT_IDS = { defense: 'dept-defense', remediation: 'dept-remediation', redteam: 'dept-redteam' };
+  const DECISION_COLORS = { allow: 'allow', block: 'block', hold: 'hold', quarantine: 'quarantine' };
+
+  // ── DOM refs ───────────────────────────────────────────────────────────────
+  const connDot    = document.getElementById('conn-dot');
+  const connLabel  = document.getElementById('conn-label');
+  const gwPanel    = document.getElementById('gateway-panel');
+  const gwDecision = document.getElementById('gateway-decision');
+  const gwRule     = document.getElementById('gateway-rule');
+  const feedLog    = document.getElementById('feed-log');
+  const launchBtn  = document.getElementById('launch-btn');
+  const corpusList = document.getElementById('corpus-list');
+
+  // ── WebSocket connection ───────────────────────────────────────────────────
+  let ws = null;
+  let reconnectDelay = 1000;
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      connDot.classList.add('connected');
+      connLabel.textContent = 'live';
+      reconnectDelay = 1000;
+    };
+
+    ws.onmessage = (e) => {
+      try { handleEvent(JSON.parse(e.data)); } catch (_) {}
+    };
+
+    ws.onclose = ws.onerror = () => {
+      connDot.classList.remove('connected');
+      connLabel.textContent = `reconnecting in ${Math.round(reconnectDelay/1000)}s…`;
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+    };
+  }
+
+  // ── Event handling ─────────────────────────────────────────────────────────
+  function handleEvent(ev) {
+    if (ev.kind === 'decision') {
+      applyDecision(ev);
+    } else {
+      applyDeptEvent(ev);
+    }
+    addFeedEntry(ev);
+  }
+
+  function applyDecision(ev) {
+    const d = ev.decision || '';
+    // Gateway panel color
+    gwPanel.className = 'panel ' + (DECISION_COLORS[d] || '');
+    gwDecision.className = DECISION_COLORS[d] || '';
+    gwDecision.textContent = d.toUpperCase() || '—';
+    gwRule.textContent = ev.rule ? `rule: ${ev.rule}` : '';
+    // Stats
+    if (d === 'allow' || d === 'block' || d === 'hold') {
+      stats[d]++;
+      document.getElementById('stat-' + d).textContent = stats[d];
+    }
+    // Flash ring
+    const pulse = document.querySelector('#gateway-ring svg circle.pulse');
+    pulse.style.stroke = d === 'block' ? 'var(--red)' : d === 'hold' ? 'var(--yellow)' : d === 'quarantine' ? 'var(--purple)' : 'var(--green)';
+  }
+
+  function applyDeptEvent(ev) {
+    const cardId = DEPT_IDS[ev.source_dept];
+    if (!cardId) return;
+    const card = document.getElementById(cardId);
+    const statusEl = card.querySelector('.dept-status');
+    const lastEl   = card.querySelector('.dept-last');
+    statusEl.textContent = ev.kind || 'active';
+    lastEl.textContent   = ev.evidence ? ev.evidence.substring(0, 60) : '';
+    card.classList.add('active');
+    clearTimeout(deptTimers[cardId]);
+    deptTimers[cardId] = setTimeout(() => {
+      card.classList.remove('active');
+      statusEl.textContent = 'idle';
+    }, 4000);
+  }
+
+  // ── Feed log ───────────────────────────────────────────────────────────────
+  function addFeedEntry(ev) {
+    const entry = document.createElement('div');
+    let cls = 'feed-entry default';
+    if (ev.kind === 'decision') cls = `feed-entry decision-${ev.decision || 'default'}`;
+    else if (ev.kind === 'redteam-finding') cls = 'feed-entry redteam-finding';
+    else if (ev.kind === 'operator-request') cls = 'feed-entry operator-request';
+    entry.className = cls;
+
+    const ts = ev.timestamp ? ev.timestamp.toString().substring(11, 19) : '';
+    const dept = ev.source_dept ? ` [${ev.source_dept}]` : '';
+    const detail = ev.kind === 'decision'
+      ? `${ev.decision?.toUpperCase()} rule=${ev.rule} ${ev.evidence || ''}`
+      : `${ev.kind}${dept} ${ev.object_id || ''} ${ev.evidence || ''}`;
+
+    entry.innerHTML = `<span class="feed-ts">${ts}</span><span class="feed-kind">${ev.kind}</span>${detail}`;
+    feedLog.prepend(entry);
+
+    // Cap at 200 entries
+    while (feedLog.children.length > 200) feedLog.removeChild(feedLog.lastChild);
+  }
+
+  // ── Corpus list ────────────────────────────────────────────────────────────
+  async function loadCorpus() {
+    try {
+      const r = await fetch('/corpus');
+      if (!r.ok) return;
+      const cases = await r.json();
+      corpusList.innerHTML = '';
+      cases.forEach((c, i) => {
+        const el = document.createElement('div');
+        el.className = 'corpus-item';
+        el.textContent = c;
+        el.dataset.case = c;
+        el.addEventListener('click', () => {
+          document.querySelectorAll('.corpus-item').forEach(x => x.classList.remove('selected'));
+          el.classList.add('selected');
+          selectedCase = c;
+          launchBtn.disabled = false;
+        });
+        corpusList.appendChild(el);
+      });
+    } catch (_) {}
+  }
+
+  launchBtn.addEventListener('click', async () => {
+    if (!selectedCase) return;
+    launchBtn.disabled = true;
+    try {
+      const r = await fetch('/operator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run-campaign-request', evidence: `corpus case: ${selectedCase}` }),
+      });
+      const data = await r.json();
+      addFeedEntry({ kind: 'operator-request', source_dept: 'ui', object_id: data.object_id,
+                     evidence: `run-campaign-request (${selectedCase}) published` });
+    } catch (err) {
+      addFeedEntry({ kind: 'operator-request', source_dept: 'ui', evidence: `error: ${err}` });
+    } finally {
+      setTimeout(() => { launchBtn.disabled = false; }, 1000);
+    }
+  });
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  connect();
+  loadCorpus();
+</script>
+</body>
+</html>

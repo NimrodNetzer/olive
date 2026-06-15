@@ -287,21 +287,28 @@ publishes deduped novel findings, which Remediation records as intents awaiting
 human triage. Wired as an optional department in `build_runtime_org` (default off).
 
 ### Agentic Command Center — `src/olive/ui/`
-A read-only observability TUI (ADR-0017, Textual-based, `olive ui`) that
-visualizes the runtime agent company: department status, the central gateway
-node, a live mitigation/audit feed, and an attack-theater sidebar over
-`evals/corpus/`. `UIBroker` (`ui/broker.py`) is a third intelligence-side
-consumer of the two existing sanctioned crossings — it implements `TelemetrySink`
-(registered alongside, never replacing, the configured sink) and subscribes to
-the `IncidentBus`, projecting both into a bounded `UIEvent` DTO that never
-carries `content`/`arguments` (rule 3). It is read-only by construction: a test
-asserts its import set excludes `gateway.breaker`, `gateway.proxy`, and
-`intelligence.commander`. The attack theater fires the existing sandbox
-`run_campaign`/`run_once()` primitive (ADR-0015/0016) — no new live-traffic seam.
-UI-initiated requests (e.g. "force siege mode") publish an announce-only
-`operator-request` bus object; they do not themselves change mode or trip the
-breaker (ADR-0017 §5). Runs as its own process by default; additive and
-removable like the other intelligence-side components.
+A read-only observability layer (ADR-0017/0018) that visualizes the runtime
+agent company. Two presentation modes share a single `UIBroker`:
+
+- **Textual TUI** (`olive ui`, `ui/app.py`): terminal dashboard — department
+  status panels, central gateway node, live mitigation feed, attack-theater
+  sidebar over `evals/corpus/`.
+- **Web dashboard** (`olive ui --web`, `ui/web.py` + `ui/static/`): a
+  Starlette/WebSocket server that pushes the same `UIEvent` stream to a browser
+  for the richer "agent offices" visual. Static HTML/CSS/JS, no build step,
+  loopback-only by default. `POST /operator` is the single inbound write surface
+  (announce-only `operator-request`, same closed action set as ADR-0017 §5).
+
+`UIBroker` (`ui/broker.py`) is a third intelligence-side consumer of the two
+existing sanctioned crossings — it implements `TelemetrySink` (registered
+alongside, never replacing, the configured sink) and subscribes to the
+`IncidentBus`, projecting both into a bounded `UIEvent` DTO that never carries
+`content`/`arguments` (rule 3). It is read-only by construction: a test asserts
+its import set excludes `gateway.breaker`, `gateway.proxy`, and
+`intelligence.commander` (enforced for both `broker.py` and `web.py`). The attack
+theater fires the existing sandbox `run_campaign`/`run_once()` primitive
+(ADR-0015/0016) — no new live-traffic seam. Runs as its own process; additive
+and removable like the other intelligence-side components.
 
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
@@ -336,6 +343,7 @@ That seam is the potential open-core boundary.
 - Credential/token freezing in Siege; cross-process / fleet mode propagation;
   durable mode/bus across restarts (mode is in-memory/per-process for now).
 - Cross-session/fleet behavioral baselines and the enterprise control plane.
-- A true multi-tenant/fleet dashboard. A read-only observability TUI now exists
-  (ADR-0017, `olive ui`); it is single-process, single-deployment, and cannot
-  itself change mode, trip the breaker, or attack live traffic.
+- A true multi-tenant/fleet dashboard. A read-only observability layer now exists
+  (ADR-0017/0018, `olive ui` TUI + `olive ui --web` browser dashboard); both are
+  single-process, single-deployment, and cannot themselves change mode, trip the
+  breaker, or attack live traffic.

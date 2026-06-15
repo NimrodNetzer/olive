@@ -21,10 +21,21 @@ from olive.ui.broker import UIBroker, UIEvent, make_operator_request
 # Runtime departments that actually publish onto the incident bus (ADR-0014/0016).
 DEPARTMENTS = ("defense", "remediation", "redteam")
 
+DEPT_ICONS = {"defense": "\U0001f6e1", "remediation": "\U0001f527", "redteam": "⚔"}
+
+# Decision -> (border/text colour, CSS class suffix). Mirrors gateway/pipeline.Decision.
+DECISION_STYLE = {
+    "allow": "#3fb950",
+    "block": "#f85149",
+    "hold": "#d29922",
+    "quarantine": "#bc8cff",
+}
+
 
 class DepartmentPanel(Static):
     """A single department's last-seen activity. `activity` reflects the most
-    recent `UIEvent.kind` seen with this `source_dept`."""
+    recent `UIEvent.kind` seen with this `source_dept`. The panel border flashes
+    green briefly whenever a new event arrives, then settles back to idle."""
 
     activity: reactive[str] = reactive("idle")
 
@@ -33,17 +44,37 @@ class DepartmentPanel(Static):
         self.dept = dept
 
     def render(self) -> str:
-        return f"[b]{self.dept.upper()}[/b]\nactivity: {self.activity}"
+        icon = DEPT_ICONS.get(self.dept, "•")
+        return f"{icon} [b]{self.dept.upper()}[/b]\n[dim]last:[/dim] {self.activity}"
+
+    def watch_activity(self, activity: str) -> None:
+        self.add_class("active")
+        self.set_timer(3.0, lambda: self.remove_class("active"))
 
 
 class GatewayNode(Static):
-    """The central Olive gateway. `last_decision` reflects the most recent
-    inline pipeline verdict (`UIEvent.kind == 'decision'`)."""
+    """The central Olive gateway. `last_decision`/`last_rule` reflect the most
+    recent inline pipeline verdict (`UIEvent.kind == 'decision'`); the panel
+    border is coloured by the decision (allow/block/hold/quarantine)."""
 
     last_decision: reactive[str] = reactive("-")
+    last_rule: reactive[str] = reactive("-")
 
     def render(self) -> str:
-        return f"[b]OLIVE[/b]\nAI Firewall Gateway\nlast decision: {self.last_decision}"
+        decision = self.last_decision
+        label = decision.upper() if decision != "-" else "-"
+        color = DECISION_STYLE.get(decision)
+        decision_text = f"[{color}][b]{label}[/b][/{color}]" if color else f"[b]{label}[/b]"
+        return (
+            "[b]\U0001f7e2 OLIVE[/b]\nAI Firewall Gateway\n"
+            f"last decision: {decision_text}\n[dim]rule:[/dim] {self.last_rule}"
+        )
+
+    def watch_last_decision(self, decision: str) -> None:
+        for name in DECISION_STYLE:
+            self.remove_class(f"decision-{name}")
+        if decision in DECISION_STYLE:
+            self.add_class(f"decision-{decision}")
 
 
 class CommandCenterApp(App):
@@ -51,11 +82,20 @@ class CommandCenterApp(App):
     optionally an open `IncidentBus` (to enable the attack-theater "Launch"
     button) and a corpus directory (default `evals/corpus`)."""
 
+    TITLE = "OLIVE — Agentic Command Center"
+    SUB_TITLE = "zero-trust MCP gateway (read-only, ADR-0017)"
+    BINDINGS = [("ctrl+q", "quit", "Quit"), ("ctrl+c", "quit", "Quit")]
+
     CSS = """
     Screen { background: #0a0e14; }
     #top-row { height: 18; }
     DepartmentPanel { border: round #30363d; padding: 1; height: 5; }
+    DepartmentPanel.active { border: round #3fb950; }
     GatewayNode { border: round #30363d; padding: 1; height: 100%; width: 1fr; }
+    GatewayNode.decision-allow { border: round #3fb950; }
+    GatewayNode.decision-block { border: round #f85149; }
+    GatewayNode.decision-hold { border: round #d29922; }
+    GatewayNode.decision-quarantine { border: round #bc8cff; }
     #attack-theater { border: round #d29922; padding: 1; height: 100%; width: 40; }
     #corpus-list { height: 1fr; }
     #feed-container { height: 1fr; }
@@ -87,7 +127,10 @@ class CommandCenterApp(App):
                 yield from self._panels.values()
             yield self._gateway
             with Vertical(id="attack-theater"):
-                yield Label("[b]ATTACK THEATER[/b] [yellow](SANDBOX - never live traffic)[/yellow]")
+                yield Label(
+                    "[b]\U0001f3af ATTACK THEATER[/b] "
+                    "[yellow](SANDBOX - never live traffic)[/yellow]"
+                )
                 yield ListView(*self._corpus_items(), id="corpus-list")
                 yield Button("Launch (request)", id="launch", variant="warning")
         with VerticalScroll(id="feed-container"):
@@ -109,14 +152,19 @@ class CommandCenterApp(App):
 
     def _apply(self, event: UIEvent, log: RichLog) -> None:
         if event.kind == "decision":
-            self._gateway.last_decision = f"{event.decision} ({event.rule})"
-            log.write(f"[decision] {event.decision} rule={event.rule} {event.evidence or ''}")
+            self._gateway.last_decision = event.decision or "-"
+            self._gateway.last_rule = event.rule or "-"
+            color = DECISION_STYLE.get(event.decision or "")
+            label = (event.decision or "?").upper()
+            decision_text = f"[{color}][b]{label}[/b][/{color}]" if color else f"[b]{label}[/b]"
+            log.write(f"{decision_text} rule={event.rule} {event.evidence or ''}")
             return
         if event.source_dept in self._panels:
             self._panels[event.source_dept].activity = event.kind
+        icon = DEPT_ICONS.get(event.source_dept or "", "•")
         log.write(
-            f"[{event.kind}] dept={event.source_dept or '-'} {event.object_id or ''} "
-            f"{event.evidence or ''}"
+            f"{icon} [b]{event.kind}[/b] dept={event.source_dept or '-'} "
+            f"{event.object_id or ''} {event.evidence or ''}"
         )
 
     async def on_button_pressed(self, message: Button.Pressed) -> None:

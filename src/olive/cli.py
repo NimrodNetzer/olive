@@ -397,40 +397,65 @@ async def run_redteam_dept(args: argparse.Namespace) -> int:
         await bus.close()
 
 
+async def _seed_broker(broker, bus) -> None:
+    """Replay non-UI-request history from the audit log into the broker on startup."""
+    from olive.ui.broker import UIEvent
+
+    for row in await bus.history():
+        if row["kind"] == "operator-request":
+            continue
+        broker.seed(
+            UIEvent(
+                kind=row["kind"],
+                evidence=row["evidence"],
+                timestamp=row["created_at"],
+                source_dept=row["source_dept"],
+                object_id=row["object_id"],
+                confidence=row["confidence"],
+                attack_types=tuple(filter(None, (row["attack_types"] or "").split(","))),
+            )
+        )
+
+
 async def run_ui(args: argparse.Namespace) -> int:
-    """Launch the Agentic Command Center (ADR-0017): a read-only Textual TUI over
-    `UIBroker`. Runs as its own process - the audit feed is seeded from
-    `incident_events` history on startup, then `UIBroker` subscribes to this
-    process's `IncidentBus` for live fan-out (live telemetry from a separate
-    `olive run`/`serve` process is not available; only bus history/objects
-    published in-process, e.g. via the attack-theater Launch button, are live).
-    Imported locally (intelligence side of the seam, optional `textual` dep)."""
+    """Launch the Agentic Command Center (ADR-0017/0018). Without --web: a
+    read-only Textual TUI. With --web: a Starlette/WebSocket server pushing
+    UIEvents to a browser dashboard. Both modes seed from audit log history and
+    subscribe to the IncidentBus for live events."""
     import os
 
     from olive.intelligence.bus import IncidentBus
-    from olive.ui.app import CommandCenterApp
-    from olive.ui.broker import UIBroker, UIEvent
+    from olive.ui.broker import UIBroker
 
     config = load_config(args.config)
     bus = IncidentBus(args.db or config.db_path, os.urandom(32))
     await bus.open()
     try:
         broker = UIBroker()
-        for row in await bus.history():
-            broker.seed(
-                UIEvent(
-                    kind=row["kind"],
-                    evidence=row["evidence"],
-                    timestamp=row["created_at"],
-                    source_dept=row["source_dept"],
-                    object_id=row["object_id"],
-                    confidence=row["confidence"],
-                    attack_types=tuple(filter(None, (row["attack_types"] or "").split(","))),
-                )
-            )
+        await _seed_broker(broker, bus)
         bus.subscribe(broker.on_incident)
-        app = CommandCenterApp(broker, bus=bus, corpus_dir=_ROOT / "evals" / "corpus")
-        await app.run_async()
+        corpus_dir = _ROOT / "evals" / "corpus"
+
+        if getattr(args, "web", False):
+            import uvicorn
+
+            from olive.ui.web import build_app
+
+            app = build_app(broker, bus=bus, corpus_dir=corpus_dir)
+            host = getattr(args, "host", "127.0.0.1")
+            port = getattr(args, "port", 7700)
+            print(
+                f"[olive] Agentic Command Center web dashboard at http://{host}:{port}",
+                file=sys.stderr,
+            )
+            cfg = uvicorn.Config(app, host=host, port=port, log_level="warning")
+            server = uvicorn.Server(cfg)
+            await server.serve()
+        else:
+            from olive.ui.app import CommandCenterApp
+
+            tui = CommandCenterApp(broker, bus=bus, corpus_dir=corpus_dir)
+            await tui.run_async()
         return 0
     finally:
         await bus.close()
@@ -541,11 +566,23 @@ def main() -> None:
 
     ui = sub.add_parser(
         "ui",
-        help="launch the Agentic Command Center: a read-only TUI over the "
-        "incident bus + audit log (ADR-0017, requires the 'ui' extra)",
+        help="launch the Agentic Command Center: Textual TUI (default) or web dashboard "
+        "(--web) over the incident bus + audit log (ADR-0017/0018)",
     )
     ui.add_argument("--config", required=True, help="policy YAML file (for the audit DB path)")
     ui.add_argument("--db", default=None, help="override audit DB path from the policy file")
+    ui.add_argument(
+        "--web", action="store_true",
+        help="serve a browser dashboard (Starlette/WebSocket) instead of the Textual TUI",
+    )
+    ui.add_argument(
+        "--host", default="127.0.0.1",
+        help="bind host for --web mode (default 127.0.0.1 — loopback only; "
+        "exposing to 0.0.0.0 requires a network boundary, no auth is built in)",
+    )
+    ui.add_argument(
+        "--port", type=int, default=7700, help="bind port for --web mode (default 7700)"
+    )
 
     args = parser.parse_args()
 

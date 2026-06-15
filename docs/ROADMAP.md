@@ -210,7 +210,7 @@ self-improvement loop.
 - ✅ Advisory-only (never `trip`/`set_mode`/`olive cycle`); Remediation records a
   finding as an intent; humans still gate every promotion (ADR-0013).
 
-**Fifth slice (built — ADR-0017):** the Agentic Command Center.
+**Fifth slice (built — ADR-0017):** the Agentic Command Center (Textual TUI).
 - ✅ **`olive ui`** (`src/olive/ui/`): a read-only Textual TUI visualizing the
   runtime org — department status, the central gateway node, a live
   mitigation/audit feed, and an attack-theater sidebar over `evals/corpus/`
@@ -220,6 +220,12 @@ self-improvement loop.
   construction (import-set test excludes breaker/proxy/Commander). UI-initiated
   requests publish an announce-only `operator-request` bus object — they never
   themselves change mode or trip the breaker.
+
+**Sixth slice (built — ADR-0018):** the web dashboard.
+- ✅ **`olive ui --web`** (`ui/web.py` + `ui/static/`): Starlette/WebSocket
+  server pushing the same `UIEvent` stream to a browser. Plain HTML/CSS/JS, no
+  build step, loopback-only default. `POST /operator` is the single inbound write
+  (announce-only, same closed action set as ADR-0017 §5).
 
 **Still deferred (later within/after M7):** the supervisor tier of the Command &
 Coordination hierarchy; **event-triggered** Red-Team ("after every incident") +
