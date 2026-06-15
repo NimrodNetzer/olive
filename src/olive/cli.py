@@ -294,6 +294,71 @@ async def run_cycle(args: argparse.Namespace) -> int:
         await ledger.close()
 
 
+async def run_redteam(args: argparse.Namespace) -> int:
+    """Run a deterministic red-team campaign against Olive's own pipeline
+    (ADR-0015) and surface bypasses as `known-miss` candidate cases. Offline and
+    authorized-testing-only; the engine has no enforcement-write path, so this
+    can only ever produce backlog, never weaken detection. Imported locally so
+    the gateway paths never pull the engine in."""
+    import yaml
+
+    from olive.redteam import run_campaign
+    from olive.redteam.engine import RedTeamError, load_known_keys
+
+    # Candidate payloads can contain non-ASCII (homoglyph attacks); the protocol
+    # channel is not in use for this command, so make stdout UTF-8 safe.
+    with contextlib.suppress(AttributeError, ValueError):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    corpus_dir = Path(args.corpus) if args.corpus else _ROOT / "evals" / "corpus"
+    known = load_known_keys(corpus_dir)
+    try:
+        report = await run_campaign(policy=args.policy, known_keys=known)
+    except RedTeamError as exc:
+        print(f"[olive] {exc}", file=sys.stderr)
+        return 1
+    print(report.render(), file=sys.stderr)
+
+    if args.emit:
+        try:
+            emit_dir = _emit_candidates(args.emit, report.novel)
+        except ValueError as exc:
+            print(f"[olive] {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"[olive] wrote {len(report.novel)} candidate case(s) to {emit_dir} "
+            "(review, then commit as known-miss)",
+            file=sys.stderr,
+        )
+    else:
+        for bypass in report.novel:  # stdout: review the candidate YAML
+            print("---")
+            print(yaml.safe_dump(bypass.candidate(), sort_keys=False, allow_unicode=True))
+    return 0
+
+
+def _emit_candidates(emit_arg: str, novel: list) -> Path:
+    """Write known-miss candidate YAML to a quarantine dir for human review (gate
+    1). Sync (filesystem) helper. Refuses to write into the live corpus - the
+    engine produces backlog for review, it never commits a case itself."""
+    import yaml
+
+    emit_dir = Path(emit_arg).resolve()
+    corpus_root = (_ROOT / "evals" / "corpus").resolve()
+    if emit_dir == corpus_root or corpus_root in emit_dir.parents:
+        raise ValueError(
+            "refusing to emit into evals/corpus (or below it); pick a quarantine "
+            "dir for human review before committing"
+        )
+    emit_dir.mkdir(parents=True, exist_ok=True)
+    for bypass in novel:
+        cand = bypass.candidate()
+        (emit_dir / f"{cand['id']}.yaml").write_text(
+            yaml.safe_dump(cand, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        )
+    return emit_dir
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -370,6 +435,22 @@ def main() -> None:
     c_show = cyc.add_parser("show", help="print a cycle's current state")
     c_show.add_argument("--cycle", required=True, help="cycle id (CYC-NNNN)")
 
+    redteam = sub.add_parser(
+        "redteam",
+        help="run a deterministic red-team campaign against Olive's own pipeline (ADR-0015)",
+    )
+    rt = redteam.add_subparsers(dest="redteam_command", required=True)
+    rt_run = rt.add_parser("run", help="attack the real pipeline and surface bypasses")
+    rt_run.add_argument("--policy", default="default.yaml", help="policy file under policies/")
+    rt_run.add_argument(
+        "--corpus", default=None, help="corpus dir for dedup (default evals/corpus)"
+    )
+    rt_run.add_argument(
+        "--emit",
+        default=None,
+        help="write known-miss candidate cases to this quarantine dir (default: print to stdout)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "cycle":
@@ -378,6 +459,9 @@ def main() -> None:
         except ConfigError as exc:
             parser.error(str(exc))
         return
+
+    if args.command == "redteam":
+        sys.exit(asyncio.run(run_redteam(args)))
 
     if args.command == "reset-baselines":
         try:

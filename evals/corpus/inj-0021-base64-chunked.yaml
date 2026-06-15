@@ -3,6 +3,7 @@ title: base64 instruction override split into whitespace-separated chunks
 category: injection.encoded
 vector: tool_response
 direction: inbound
+redteam_key: instruction-override:encode.base64_chunked
 # base64 of the override, broken into 8-char groups by spaces. Each group is
 # below the 16-symbol run threshold, and the whole body is not a single run.
 payload: |

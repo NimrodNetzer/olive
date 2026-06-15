@@ -9,7 +9,10 @@ red-team bypass, and competitors can't copy operational history.
 
 1. Every new or changed detection mechanism ships with corpus cases.
 2. Every red-team bypass becomes a corpus case (status: `known-miss` until
-   fixed). Known misses are honest — they stay visible in the report.
+   fixed). Known misses are honest — they stay visible in the report. The
+   `olive redteam` engine (ADR-0015) *auto-generates* these as candidates carrying
+   a `redteam_key` (the `intent:strategy` dedup id), but a human reviews and
+   commits them — the engine never writes the corpus or the baseline itself.
 3. Every real incident (once the product runs anywhere) becomes a corpus case.
 4. Detection rate may never silently drop: the eval runner is a CI regression
    gate from M4.

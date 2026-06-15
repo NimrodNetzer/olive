@@ -140,6 +140,15 @@ this document, update the document first (via ADR if the change is structural).
   malicious `olive:approve` holder. The cycle narrows the blast radius (fixes are
   proposed as diffs, re-tested, and the approver is recorded) but does not
   eliminate insider risk; `olive:remediate` must be issued narrowly.
+- **Red-team engine (M7, ADR-0015):** the `olive redteam` engine attacks Olive's
+  OWN pipeline offline and has **no enforcement-write path** — its only outputs are
+  a report and `known-miss` candidate cases, so it can never weaken detection to
+  fake a win, and it refuses to run if a plain trigger is not caught (no findings
+  against a mock). It targets only `build_pipeline` in local/CI context: no network
+  egress, no external target (authorized-testing-only, VISION). Residual risk: a
+  malicious operator could commit a poisoned candidate, but it lands as inert
+  `known-miss` and any promotion still requires the eval gate + an `olive:remediate`
+  approval — the same insider class as the remediation cycle.
 - **Runtime agent company (M7, ADR-0014):** the Security Commander is
   deterministic code — no LLM decides the operating mode or any enforcement
   action. LLM agents only publish evidence objects to the bus; the deterministic

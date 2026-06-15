@@ -182,9 +182,26 @@ and the Command & Coordination hierarchy.
   (`SentinelRunner.on_report` → bus) and Remediation (ledger subscribes; a
   `reproduced` object opens a cycle). `build_runtime_org` shares one breaker.
 
+**Third slice (built — ADR-0015):** the autonomous red-team engine that closes the
+self-improvement loop.
+- ✅ **`olive redteam`** (`src/olive/redteam/`): deterministic, offline. Applies
+  `AttackStrategy` mutators (base32 / double-base64 / chunked-base64 /
+  capital-homoglyph — mapped to existing known-miss cases) to seed intents and runs
+  every variant through the **real** `build_pipeline`; an allowed variant is a
+  bypass. Proves the pipeline is live (plain trigger must block) before trusting a
+  finding; has **no enforcement-write path** (only emits `known-miss` candidates) —
+  so it can never weaken detection to fake a win.
+- ✅ Closes the loop with the existing pieces: bypass → human commits known-miss →
+  `builder` fixes → `olive cycle` verify → human approve → baseline rises. "Stronger"
+  is measured on the existing baseline + bypass count, not a new metric.
+- ✅ The four seed-mapped known-miss cases carry a `redteam_key`, so the engine
+  reports them as rediscovered (not novel) — and surfaces genuinely new gaps.
+
 **Still deferred (later within/after M7):** the supervisor tier of the Command &
-Coordination hierarchy; runtime Red-Team/Builder **autonomy** (build-time agents
-only for now); credential/token freezing in Siege; durable/fleet-wide mode + bus.
+Coordination hierarchy; **runtime / scheduled** Red-Team + Builder **autonomy**
+(the offline engine exists; live-gateway scheduling does not); LLM-creative attack
+generation in CI (stays the human-supervised build-time agent); credential/token
+freezing in Siege; durable/fleet-wide mode + bus.
 
 ## Later — the bets
 

@@ -258,6 +258,20 @@ forge a `mode-change` or `verified` object. The two first-slice departments are
 objects) and **Remediation** (the `RemediationLedger` subscribes; a `reproduced`
 object opens a cycle). Wired by `build_runtime_org`, sharing one breaker.
 
+### Red-team engine — `src/olive/redteam/`
+The autonomous attacker (ADR-0015), offline and deterministic — same category as
+the eval runner, not a runtime sentinel. `olive redteam run` applies pure
+`AttackStrategy` mutators (base32, double-base64, chunked-base64, capital-homoglyph
+— the set mapped to existing `known-miss` cases) to seed malicious intents and
+runs every variant through the **real** `build_pipeline`; a variant the pipeline
+*allows* is a bypass. Two structural guarantees: it **proves the pipeline is live**
+(every seed's plain trigger must block, else it refuses to run — no finding bypasses
+against a mock), and it has **no enforcement-write path** — its only outputs are a
+report and `known-miss` candidate cases, so it can never weaken detection to fake a
+win. The loop closes through the existing human gates (review→commit known-miss,
+then `olive cycle` → human approval → baseline). Imports core one-directionally
+(like `run_evals.py`); **core never imports it**.
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
@@ -282,8 +296,10 @@ That seam is the potential open-core boundary.
   *supervisors* → specialists). The first slice (ADR-0014) ships the deterministic
   Commander, operating modes, the incident bus, and **two** departments (Defense,
   Remediation); the supervisor tier is deferred.
-- Runtime Red-Team / Builder **autonomy** — the build-time `.claude/agents`
-  versions remain the only ones; nothing auto-attacks or auto-patches at runtime.
+- Runtime Red-Team / Builder **autonomy** — an *offline* deterministic red-team
+  engine exists (`olive redteam`, ADR-0015), but nothing auto-attacks the live
+  gateway on a schedule and nothing auto-patches at runtime; the build-time
+  `.claude/agents` remain the only LLM-creative attack/fix authors.
 - Auto-apply/auto-deploy of a proposed fix — permanently human-gated by design.
 - Credential/token freezing in Siege; cross-process / fleet mode propagation;
   durable mode/bus across restarts (mode is in-memory/per-process for now).
