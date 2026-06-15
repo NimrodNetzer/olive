@@ -222,6 +222,42 @@ local import, like `serve_http` does for the HTTP stack. Rule 3 holds: the table
 stores the proposed diff's SHA-256 + a bounded ≤200-char summary, never the diff
 body.
 
+### Operating mode — `src/olive/gateway/mode.py` + the breaker
+`OperatingMode` (`normal | suspicious | siege`, ADR-0014) is the fleet-wide
+enforcement posture. It lives in **core** (pure data, no intelligence imports)
+and the circuit breaker **owns the value** behind its existing lock. The breaker
+gains two methods that mirror `trip`/`release`: `set_mode(mode, reason,
+incident_id)` — the **second narrow inward seam crossing**, the only way the
+intelligence-side Commander delivers a posture change — and `mode()` for the
+fast-path read. Mode tunes deterministic inline behavior the core already owns:
+suspicious halves the containment threshold (quarantine sooner); siege collapses
+it to one block. Inline enforcement only ever *reads* the mode; it never imports
+the orchestration layer.
+
+### Security Commander — `src/olive/intelligence/commander.py`
+The runtime org's coordinator (ADR-0014), **deterministic code, not an LLM**. Its
+only authorities are deciding the operating mode and routing incident objects. It
+is the **sole caller of `breaker.set_mode`** (just as `SentinelRunner` is the
+sole caller of `trip`) — two state machines, one writer each, so there are never
+two places claiming to be "the one place." It escalates the mode from the
+deterministic detection stream via a pure `target_mode()` policy (monotonic up;
+only a capability-gated human `force_mode` with `olive:command` de-escalates),
+and audits every change as a signed `mode-change` object on the bus.
+
+### Incident bus — `src/olive/intelligence/bus.py`
+How runtime departments collaborate — "structured incident objects, never group
+chat" (ADR-0014). An in-process async pub/sub for live fan-out plus an
+append-only `incident_events` table (own `aiosqlite`, same DB file, the
+`RemediationLedger` precedent) for audit + replay. The `IncidentObject` envelope
+wraps the existing `IncidentReport`, so it carries only bounded, hashed evidence —
+it has **no `content`/`arguments` field**, and raw `TelemetryEvent` payloads
+never reach it (rule 3, tested). Objects are HMAC-signed and verified: an unsigned
+or tampered object is rejected fail-closed, so a compromised LLM agent cannot
+forge a `mode-change` or `verified` object. The two first-slice departments are
+**Defense** (the `SentinelRunner`'s `on_report` hook publishes `detection`
+objects) and **Remediation** (the `RemediationLedger` subscribes; a `reproduced`
+object opens a cycle). Wired by `build_runtime_org`, sharing one breaker.
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
@@ -235,13 +271,21 @@ deadlock.
 ## Layering rule (keeps the business split clean — ADR-0003)
 
 `src/olive/` (gateway core) must never import from intelligence/fleet
-layers. Telemetry flows out through a queue; quarantine signals flow back in
-through the circuit breaker's narrow interface. That seam is the potential
-open-core boundary.
+layers. Telemetry flows **out** through a queue; two narrow signals flow back
+**in** through the circuit breaker's interface — `trip` (contain a session) and,
+since ADR-0014, `set_mode` (set the fleet-wide posture). Both are the same shape:
+the intelligence side passes a plain value inward; core imports nothing outward.
+That seam is the potential open-core boundary.
 
 ## What deliberately does not exist yet
-- Operating modes (Normal/Suspicious/Siege) and the Command & Coordination
-  hierarchy (deferred within/after M7 — ADR-0013 builds the loop, not the org).
+- The full Command & Coordination hierarchy (Security Commander → department
+  *supervisors* → specialists). The first slice (ADR-0014) ships the deterministic
+  Commander, operating modes, the incident bus, and **two** departments (Defense,
+  Remediation); the supervisor tier is deferred.
+- Runtime Red-Team / Builder **autonomy** — the build-time `.claude/agents`
+  versions remain the only ones; nothing auto-attacks or auto-patches at runtime.
 - Auto-apply/auto-deploy of a proposed fix — permanently human-gated by design.
+- Credential/token freezing in Siege; cross-process / fleet mode propagation;
+  durable mode/bus across restarts (mode is in-memory/per-process for now).
 - Cross-session/fleet behavioral baselines and the enterprise control plane.
 - Dashboard (showable).

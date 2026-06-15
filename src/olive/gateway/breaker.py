@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from time import monotonic
 
 from olive.gateway.context import SecurityContext
+from olive.gateway.mode import OperatingMode
 from olive.gateway.session import SessionState, SessionStatus
 
 
@@ -50,6 +51,20 @@ class CircuitBreaker:
         self._last_sweep = monotonic()
         self._sessions: dict[str, SessionState] = {}
         self._lock = asyncio.Lock()
+        # Fleet-wide enforcement posture (ADR-0014). Owned here behind the same
+        # lock as session state; the deterministic Commander is the only caller
+        # of set_mode, just as SentinelRunner is the only caller of trip.
+        self._mode = OperatingMode.NORMAL
+
+    def _effective_max_blocks(self) -> int:
+        """Mode-aware containment threshold (deterministic). Tighter posture
+        quarantines sooner: suspicious halves the budget, siege trips on the
+        first block. Never below 1."""
+        if self._mode is OperatingMode.SIEGE:
+            return 1
+        if self._mode is OperatingMode.SUSPICIOUS:
+            return max(1, (self._max_blocks + 1) // 2)
+        return self._max_blocks
 
     def _get(self, session_id: str) -> SessionState:
         state = self._sessions.get(session_id)
@@ -117,11 +132,12 @@ class CircuitBreaker:
             if state.quarantined:
                 return False
             state.block_count += 1
-            if state.block_count >= self._max_blocks:
+            threshold = self._effective_max_blocks()
+            if state.block_count >= threshold:
                 state.status = SessionStatus.QUARANTINED
                 state.quarantine_reason = (
                     f"{state.block_count} blocked calls reached the "
-                    f"containment threshold ({self._max_blocks})"
+                    f"containment threshold ({threshold}, mode={self._mode})"
                 )
                 state.quarantine_incident_id = incident_id
                 return True
@@ -152,6 +168,24 @@ class CircuitBreaker:
             state.quarantine_incident_id = None
             self._touch(state)
             return True
+
+    async def set_mode(
+        self, mode: OperatingMode, reason: str, incident_id: str | None = None
+    ) -> bool:
+        """Set the fleet-wide operating posture (ADR-0014) - the second inward
+        seam crossing, the same shape as `trip`. The deterministic Commander is
+        the only caller. Returns True if the mode actually changed (so the caller
+        audits exactly once). `reason`/`incident_id` are for the caller's audit
+        row; the breaker itself stays log-free (ADR-0003)."""
+        async with self._lock:
+            if self._mode is mode:
+                return False
+            self._mode = mode
+            return True
+
+    async def mode(self) -> OperatingMode:
+        async with self._lock:
+            return self._mode
 
     async def status(self, session_id: str) -> SessionStatus:
         async with self._lock:

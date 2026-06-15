@@ -165,9 +165,26 @@ and the Command & Coordination hierarchy.
   the Learn mechanism (`--update-baseline`), `incidents`/`IncidentReport` = the
   structured incident.
 
-**Deferred (later slice within/after M7):** the operating modes (Normal /
-Suspicious / Siege), the full Command & Coordination hierarchy, and credential
-rotation. ADR-0013 builds the loop, not the org chart.
+**Second slice (built — ADR-0014):** the runtime agent company foundation.
+- ✅ **Operating modes** (`gateway/mode.py` + breaker): `normal/suspicious/siege`
+  as a core-owned value the breaker holds; mode tunes the deterministic inline
+  containment threshold. Delivered through `breaker.set_mode` — a second narrow
+  inward seam crossing, the same shape as `trip`.
+- ✅ **Security Commander** (`intelligence/commander.py`): deterministic, not an
+  LLM. Sole caller of `set_mode`; escalates from the detection stream via a pure
+  `target_mode()` policy; only a capability-gated (`olive:command`) human
+  de-escalates. `SentinelRunner` keeps sole `trip` authority — one writer each.
+- ✅ **Incident bus** (`intelligence/bus.py`): async pub/sub + append-only
+  `incident_events` audit table; HMAC-signed `IncidentObject`s (forged/tampered
+  rejected fail-closed); rule-3 envelope (no raw payloads). Departments collaborate
+  through structured objects, never group chat.
+- ✅ **Two departments wired** (`intelligence/departments.py`): Defense
+  (`SentinelRunner.on_report` → bus) and Remediation (ledger subscribes; a
+  `reproduced` object opens a cycle). `build_runtime_org` shares one breaker.
+
+**Still deferred (later within/after M7):** the supervisor tier of the Command &
+Coordination hierarchy; runtime Red-Team/Builder **autonomy** (build-time agents
+only for now); credential/token freezing in Siege; durable/fleet-wide mode + bus.
 
 ## Later — the bets
 

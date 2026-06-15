@@ -12,6 +12,12 @@ this document, update the document first (via ADR if the change is structural).
 - The **remediation cycle ledger** (`remediation_cycles`, ADR-0013) — its
   integrity is what guarantees a fix was actually verified by the gate and
   approved by a human before its baseline win was locked in.
+- The **operating mode** and the **incident bus** (ADR-0014). A forged
+  mode-change could stand the organization down (force Normal during an attack)
+  or wedge it into Siege as a denial-of-service; a forged bus object could fake a
+  detection or a verification. Bus objects are therefore signed and verified, and
+  the mode is writable only through the breaker's narrow `set_mode` by the
+  deterministic Commander.
 
 ## Trusted components
 
@@ -134,6 +140,19 @@ this document, update the document first (via ADR if the change is structural).
   malicious `olive:approve` holder. The cycle narrows the blast radius (fixes are
   proposed as diffs, re-tested, and the approver is recorded) but does not
   eliminate insider risk; `olive:remediate` must be issued narrowly.
+- **Runtime agent company (M7, ADR-0014):** the Security Commander is
+  deterministic code — no LLM decides the operating mode or any enforcement
+  action. LLM agents only publish evidence objects to the bus; the deterministic
+  Commander (or a capability-gated `olive:command` human) moves the mode, and the
+  `SentinelRunner` remains the sole `trip` authority. Bus objects are
+  HMAC-signed so a compromised agent cannot forge a mode-change/verification.
+  Honest limits: the operating mode and the in-process bus queue are
+  **in-memory/per-process** (like containment) — they do not survive a restart
+  and do not propagate across a fleet; the first slice's bus signing uses a
+  per-process key, so bus integrity rests on that key (a process-memory
+  compromise undermines it, the same class as the mock-CA key assumption). Only
+  Defense and Remediation are wired; runtime Red-Team/Builder autonomy and the
+  supervisor hierarchy do not exist yet.
 - **Contextual authz limits (M4, ADR-0010):** resource scoping only applies to
   tools with a declared extractor and to predicates over the *scoping id* and
   *classification* — **content-aware** authorization (e.g. "the body contains no
