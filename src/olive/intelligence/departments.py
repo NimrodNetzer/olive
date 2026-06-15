@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from olive.gateway.breaker import CircuitBreaker
 from olive.intelligence.bus import IncidentBus, IncidentObject
 from olive.intelligence.commander import SecurityCommander
+from olive.intelligence.redteam_dept import RedTeamDepartment
 from olive.intelligence.remediation import RemediationLedger
 from olive.intelligence.reporter import IncidentReport
 from olive.intelligence.runner import SentinelRunner
@@ -73,22 +74,31 @@ class RemediationDepartment:
     def __init__(self, ledger: RemediationLedger) -> None:
         self._ledger = ledger
         self.intents: list[str] = []  # incident ids captured, awaiting reproduction
+        self.redteam_intents: list[str] = []  # red-team findings awaiting reproduction
 
     async def handle(self, obj: IncidentObject) -> None:
         if obj.kind == "reproduced" and obj.incident_id and obj.corpus_case_id:
             await self._ledger.open_cycle(obj.incident_id, obj.corpus_case_id)
         elif obj.kind == "detection" and obj.incident_id:
             self.intents.append(obj.incident_id)
+        elif obj.kind == "redteam-finding":
+            # A drill finding (ADR-0016): record it as an intent awaiting human
+            # reproduction - NEVER auto-open a cycle (it has no committed case id).
+            # The evidence carries the bypass key + bounded note (rule 3).
+            evidence = obj.report.signals[0]["evidence"] if obj.report.signals else "redteam"
+            self.redteam_intents.append(evidence)
 
     def subscribe(self, bus: IncidentBus) -> None:
         bus.subscribe(self.handle, kind="detection")
         bus.subscribe(self.handle, kind="reproduced")
+        bus.subscribe(self.handle, kind="redteam-finding")
 
 
 @dataclass(slots=True)
 class RuntimeOrg:
     """The wired runtime organization. `start`/`stop` drive the SentinelRunner's
-    drain loop; everything else reacts through the bus."""
+    drain loop and the (optional) red-team scheduler; everything else reacts
+    through the bus."""
 
     breaker: CircuitBreaker
     bus: IncidentBus
@@ -96,12 +106,15 @@ class RuntimeOrg:
     defense: DefenseDepartment
     remediation: RemediationDepartment
     runner: SentinelRunner
+    redteam: RedTeamDepartment
 
     def start(self) -> None:
         self.runner.start()
+        self.redteam.start()  # no-op unless a scheduling interval was configured
 
     async def stop(self) -> None:
         await self.runner.stop()
+        await self.redteam.stop()
 
 
 def build_runtime_org(
@@ -113,10 +126,15 @@ def build_runtime_org(
     sentinels,
     store=None,
     threshold: float = 0.8,
+    redteam_policy: str = "default.yaml",
+    redteam_corpus_dir=None,
+    redteam_interval: float | None = None,
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
-    subscribe to the bus. The bus must already be open."""
+    subscribe to the bus. The red-team department is constructed always but only
+    *schedules* autonomous campaigns when `redteam_interval` is set (default off,
+    additive - ADR-0016). The bus must already be open."""
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
     commander = SecurityCommander(breaker, bus)
@@ -125,11 +143,15 @@ def build_runtime_org(
     runner = SentinelRunner(
         queue, breaker, sentinels, threshold=threshold, store=store, on_report=defense.on_report
     )
+    redteam = RedTeamDepartment(
+        bus, policy=redteam_policy, corpus_dir=redteam_corpus_dir, interval=redteam_interval
+    )
     return RuntimeOrg(
         breaker=breaker,
         bus=bus,
         commander=commander,
         defense=defense,
         remediation=remediation,
+        redteam=redteam,
         runner=runner,
     )

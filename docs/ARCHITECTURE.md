@@ -272,6 +272,20 @@ win. The loop closes through the existing human gates (review→commit known-mis
 then `olive cycle` → human approval → baseline). Imports core one-directionally
 (like `run_evals.py`); **core never imports it**.
 
+### Runtime Red-Team department — `src/olive/intelligence/redteam_dept.py`
+VISION department 2 as a runtime component (ADR-0016): on a trigger (on-demand
+`run_once()` or a scheduled interval loop, mirroring `SentinelRunner.start/stop`)
+it runs the deterministic engine and publishes bypass findings onto the bus as a
+**distinct `redteam-finding` kind**. Three structural guarantees: **sandbox-only**
+(its only attack primitive is `run_campaign`, which targets `build_pipeline`; the
+module cannot import the proxy/upstreams/`ClientSession`/live breaker, so it can
+never reach live traffic — a test asserts the import set); **a drill never
+escalates** (the Commander only reads `detection`, so a `redteam-finding` cannot
+move the mode — no self-inflicted Siege); and **no feedback loop** (it publishes
+but subscribes to nothing). Advisory-only: it never calls `trip`/`set_mode`, only
+publishes deduped novel findings, which Remediation records as intents awaiting
+human triage. Wired as an optional department in `build_runtime_org` (default off).
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
@@ -296,10 +310,11 @@ That seam is the potential open-core boundary.
   *supervisors* → specialists). The first slice (ADR-0014) ships the deterministic
   Commander, operating modes, the incident bus, and **two** departments (Defense,
   Remediation); the supervisor tier is deferred.
-- Runtime Red-Team / Builder **autonomy** — an *offline* deterministic red-team
-  engine exists (`olive redteam`, ADR-0015), but nothing auto-attacks the live
-  gateway on a schedule and nothing auto-patches at runtime; the build-time
-  `.claude/agents` remain the only LLM-creative attack/fix authors.
+- Runtime Red-Team / Builder **autonomy** — a *scheduled* runtime Red-Team
+  department now exists (ADR-0016), but it attacks only the sandboxed
+  `build_pipeline`, **never the live gateway**; event-triggering ("after every
+  incident"), runtime Builder autonomy, and the supervisor tier remain deferred.
+  The build-time `.claude/agents` remain the only LLM-creative attack/fix authors.
 - Auto-apply/auto-deploy of a proposed fix — permanently human-gated by design.
 - Credential/token freezing in Siege; cross-process / fleet mode propagation;
   durable mode/bus across restarts (mode is in-memory/per-process for now).

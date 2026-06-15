@@ -197,11 +197,24 @@ self-improvement loop.
 - ✅ The four seed-mapped known-miss cases carry a `redteam_key`, so the engine
   reports them as rediscovered (not novel) — and surfaces genuinely new gaps.
 
+**Fourth slice (built — ADR-0016):** the runtime Red-Team **department**.
+- ✅ **`intelligence/redteam_dept.py`**: wraps the ADR-0015 engine as a runtime
+  department that, on a trigger (`run_once()` or a scheduled interval), runs a
+  **sandbox** campaign and publishes bypass findings onto the bus as a distinct
+  `redteam-finding` kind. `olive redteam-dept run` is the operator/CI trigger.
+- ✅ Three structural guarantees: **sandbox-only** (cannot import the
+  proxy/upstreams/ClientSession/live breaker — a test asserts it; it attacks only
+  `build_pipeline`, never live traffic); **a drill never escalates the mode**
+  (Commander only reads `detection`); **no feedback loop** (publishes, subscribes
+  to nothing). Anti-DoS: min-interval floor + single-flight + novel-only dedup.
+- ✅ Advisory-only (never `trip`/`set_mode`/`olive cycle`); Remediation records a
+  finding as an intent; humans still gate every promotion (ADR-0013).
+
 **Still deferred (later within/after M7):** the supervisor tier of the Command &
-Coordination hierarchy; **runtime / scheduled** Red-Team + Builder **autonomy**
-(the offline engine exists; live-gateway scheduling does not); LLM-creative attack
-generation in CI (stays the human-supervised build-time agent); credential/token
-freezing in Siege; durable/fleet-wide mode + bus.
+Coordination hierarchy; **event-triggered** Red-Team ("after every incident") +
+runtime **Builder** autonomy; LLM-creative attack generation in CI (stays the
+human-supervised build-time agent); CI plumbing for deploy/PR triggers;
+credential/token freezing in Siege; durable/fleet-wide mode + bus.
 
 ## Later — the bets
 

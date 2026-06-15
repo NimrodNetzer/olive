@@ -149,6 +149,17 @@ this document, update the document first (via ADR if the change is structural).
   malicious operator could commit a poisoned candidate, but it lands as inert
   `known-miss` and any promotion still requires the eval gate + an `olive:remediate`
   approval — the same insider class as the remediation cycle.
+- **Runtime Red-Team department (M7, ADR-0016):** the scheduled department adds
+  *autonomy, not reach*. It attacks only the sandboxed `build_pipeline` — by
+  construction it cannot import or be handed the proxy, an upstream, a
+  `ClientSession`, or the live breaker, so it can **never inject attacks into real
+  agent sessions or tools**. It is advisory-only (never `trip`/`set_mode`), has no
+  enforcement-write path, and its findings are a distinct bus kind that **cannot
+  move the operating mode** (a drill can't force Siege). Residual risk: a
+  misconfigured short interval is a self-DoS class, bounded by the min-interval
+  floor + single-flight; the scheduler is in-memory/per-process (same
+  non-guarantee as mode/bus). Event-triggered campaigns are deferred precisely
+  because they reintroduce a feedback-loop risk this slice structurally avoids.
 - **Runtime agent company (M7, ADR-0014):** the Security Commander is
   deterministic code — no LLM decides the operating mode or any enforcement
   action. LLM agents only publish evidence objects to the bus; the deterministic

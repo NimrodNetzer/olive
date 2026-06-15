@@ -359,6 +359,38 @@ def _emit_candidates(emit_arg: str, novel: list) -> Path:
     return emit_dir
 
 
+async def run_redteam_dept(args: argparse.Namespace) -> int:
+    """Trigger the runtime Red-Team department once (ADR-0016): run a sandbox
+    campaign and publish novel findings onto the incident bus. This is the
+    external (CI/operator) trigger surface; the scheduler loop calls the same
+    `run_once`. Sandbox-only by construction - the engine attacks `build_pipeline`,
+    never the live gateway. Imported locally (intelligence side of the seam)."""
+    import os
+
+    from olive.intelligence.bus import IncidentBus
+    from olive.intelligence.redteam_dept import RedTeamDepartment
+
+    config = load_config(args.config)
+    bus = IncidentBus(args.db or config.db_path, os.urandom(32))
+    await bus.open()
+    try:
+        dept = RedTeamDepartment(
+            bus, policy=args.policy, corpus_dir=_ROOT / "evals" / "corpus"
+        )
+        published = await dept.run_once()
+        print(
+            f"[olive] red-team department: campaign run, {published} novel finding(s) "
+            "published to the bus (awaiting human triage)",
+            file=sys.stderr,
+        )
+        for row in await bus.history():
+            if row["kind"] == "redteam-finding":
+                print(f"  {row['object_id']}: {row['evidence']}", file=sys.stderr)
+        return 0
+    finally:
+        await bus.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -451,6 +483,17 @@ def main() -> None:
         help="write known-miss candidate cases to this quarantine dir (default: print to stdout)",
     )
 
+    redteam_dept = sub.add_parser(
+        "redteam-dept",
+        help="trigger the runtime Red-Team department: a sandbox campaign that "
+        "publishes findings onto the incident bus (ADR-0016)",
+    )
+    rtd = redteam_dept.add_subparsers(dest="redteam_dept_command", required=True)
+    rtd_run = rtd.add_parser("run", help="run one sandbox campaign now and publish findings")
+    rtd_run.add_argument("--config", required=True, help="policy YAML file (for the audit DB path)")
+    rtd_run.add_argument("--db", default=None, help="override audit DB path from the policy file")
+    rtd_run.add_argument("--policy", default="default.yaml", help="pipeline policy under policies/")
+
     args = parser.parse_args()
 
     if args.command == "cycle":
@@ -462,6 +505,13 @@ def main() -> None:
 
     if args.command == "redteam":
         sys.exit(asyncio.run(run_redteam(args)))
+
+    if args.command == "redteam-dept":
+        try:
+            sys.exit(asyncio.run(run_redteam_dept(args)))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
 
     if args.command == "reset-baselines":
         try:
