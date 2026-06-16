@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Olive — Project Overview</title>
+<style>
+  :root {
+    --olive: #6b7d3a;
+    --olive-dark: #4f5e2a;
+    --bg: #fafaf7;
+    --card: #ffffff;
+    --ink: #2b2b22;
+    --muted: #6b6b5e;
+    --border: #e3e3d8;
+    --done: #4f7d3a;
+    --progress: #b8860b;
+    --future: #9a9a8c;
+    --code-bg: #f1f1e8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, var(--olive-dark), var(--olive));
+    color: #fff;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 2.4rem; letter-spacing: 0.05em; }
+  header p { margin: 0.5rem 0 0; font-size: 1.1rem; opacity: 0.9; }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    background: var(--olive-dark);
+    padding: 0.6rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    transition: background 0.15s;
+  }
+  nav a:hover { background: rgba(255,255,255,0.22); }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.8rem;
+    margin: 1.5rem 0;
+  }
+  h2 {
+    color: var(--olive-dark);
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.4rem;
+    margin-top: 0;
+  }
+  h3 { color: var(--olive-dark); margin-bottom: 0.4rem; }
+  .tagline {
+    font-style: italic;
+    color: var(--muted);
+    text-align: center;
+    margin: 0.5rem 0 0;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  .pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    color: #fff;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+  .pill.done { background: var(--done); }
+  .pill.progress { background: var(--progress); }
+  .pill.future { background: var(--future); }
+  table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  th { color: var(--olive-dark); }
+  ul { padding-left: 1.3rem; }
+  li { margin-bottom: 0.35rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-top: 0.8rem;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    background: #fdfdf9;
+  }
+  .card h4 { margin: 0 0 0.3rem; color: var(--olive-dark); font-size: 0.95rem; }
+  .card p { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  .law {
+    border-left: 4px solid var(--olive);
+    background: #f4f6ec;
+    padding: 0.8rem 1rem;
+    margin: 0.8rem 0;
+    border-radius: 0 8px 8px 0;
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding: 1.5rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🫒 OLIVE</h1>
+  <p class="tagline">Zero-trust runtime security gateway for AI agents</p>
+  <p class="tagline">Govern → Detect → Contain → Reproduce → Repair → Verify → Learn &amp; strengthen</p>
+</header>
+
+<nav>
+  <a href="#vision">Vision</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#components">Components</a>
+  <a href="#rules">Security Rules</a>
+  <a href="#company">Company of Agents</a>
+  <a href="#status">Build Status</a>
+  <a href="#future">What's Next</a>
+</nav>
+
+<main>
+
+<section id="vision">
+  <h2>Vision</h2>
+  <p>
+    Every technological era creates a new attack surface, and therefore a new
+    defensive layer. Swords created the need for <strong>shields</strong>.
+    Networks created the need for <strong>firewalls</strong>. Autonomous agents
+    create the need for the <strong>Agent Wall</strong>.
+  </p>
+  <p>
+    <strong>The central promise:</strong> let companies use autonomous agents
+    without giving up control.
+  </p>
+  <p>
+    The most dangerous attack direction is the one almost everyone ignores:
+    <strong>content flowing back from tools into the agent</strong>. A poisoned
+    document, a manipulated API response, or a malicious tool description can
+    silently re-program a legitimate, fully-authorized agent mid-session.
+    Perimeter security, SAST, and human code review don't see this traffic at
+    all.
+  </p>
+
+  <h3>What Olive protects against</h3>
+  <ul>
+    <li>External agents attempting to manipulate company agents</li>
+    <li>Legitimate agents compromised by prompt injection</li>
+    <li>Internal agents operating outside their assigned roles</li>
+    <li>Agents attempting to gain additional permissions</li>
+    <li>Agents extracting sensitive company information</li>
+    <li>One agent manipulating or impersonating another</li>
+    <li>Malicious content hidden inside files, websites, or API responses</li>
+    <li>Compromised MCP servers or tools (incl. tool-description "rug-pulls")</li>
+    <li>Several individually-harmless actions combining into one dangerous outcome</li>
+    <li>Agents making serious mistakes without malicious intent</li>
+  </ul>
+
+  <h3>The full security cycle</h3>
+  <pre>Govern → Detect → Contain → Reproduce → Repair → Verify → Learn &amp; strengthen</pre>
+  <p>
+    Not just defense, but <strong>adaptive resilience</strong>: the system
+    shouldn't merely survive an attack — it should understand it, repair the
+    weakness, and become harder to attack next time. ("Olive" — olive trees
+    regrow from the roots after being cut down or burned, and live for
+    millennia.)
+  </p>
+
+  <h3>Differentiation</h3>
+  <div class="grid">
+    <div class="card"><h4>MCP-native, drop-in</h4><p>A transparent proxy — point any MCP client at it, zero changes to agent or tool server.</p></div>
+    <div class="card"><h4>Measured detection</h4><p>A maintained attack corpus + eval harness producing real detection-rate and false-positive numbers, not marketing claims.</p></div>
+    <div class="card"><h4>Behavioral session intelligence</h4><p>Sequence-level analysis of what an agent is doing across a session vs. its declared role/goal.</p></div>
+    <div class="card"><h4>Agent identity</h4><p>Cryptographically bound identity per agent/session — "SPIFFE for agents."</p></div>
+    <div class="card"><h4>The full loop</h4><p>Everyone detects and blocks. Almost nobody does Reproduce → Repair → Verify — closing the loop is the moat.</p></div>
+  </div>
+</section>
+
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p>
+    Olive is a <strong>transparent MCP proxy</strong>. To the agent's MCP
+    client it looks like a normal MCP server; to the real tool server it looks
+    like a normal MCP client. Everything that crosses it is inspected in both
+    directions.
+  </p>
+  <pre>
+                        ┌──────────────────────────────────────────────┐
+                        │                   OLIVE                       │
+  ┌──────────┐  MCP     │  ┌──────────────────────────────┐    MCP     │  ┌────────────┐
+  │  Agent   │ ───────► │  │     FAST PATH (inline)       │  ────────► │  │  Upstream  │
+  │ (client) │          │  │  SecurityContext per call    │            │  │ MCP server │
+  │          │ ◄─────── │  │  Inspector pipeline:         │  ◄──────── │  │  (tools)   │
+  └──────────┘          │  │   outbound: policy, context  │            │  └────────────┘
+                        │  │   inbound:  patterns, decode │            │
+                        │  │  Decision: allow|block|hold  │            │
+                        │  └───────────┬──────────────────┘            │
+                        │              │ telemetry (async)             │
+                        │  ┌───────────▼──────────────────┐            │
+                        │  │   PARALLEL PATH               │            │
+                        │  │   LLM sentinels (advisory)   │            │
+                        │  │   → circuit breaker          │            │
+                        │  │   → session quarantine       │            │
+                        │  │   → Security Commander       │            │
+                        │  │   → operating mode           │            │
+                        │  └──────────────────────────────┘            │
+                        │              │                               │
+                        │        SQLite audit store                    │
+                        │   (events, incidents, incident_events)       │
+                        └──────────────────────────────────────────────┘
+  </pre>
+  <p>
+    <strong>Two paths, one rule:</strong> the fast path is deterministic and
+    <em>enforces</em>; the parallel path is intelligent and <em>advises</em>.
+    LLM sentinels can only signal the circuit breaker / Commander, which apply
+    deterministic containment.
+  </p>
+</section>
+
+<section id="components">
+  <h2>Components implemented so far</h2>
+
+  <h3>Gateway core (<code>src/olive/gateway/</code>)</h3>
+  <ul>
+    <li><strong>proxy.py</strong> — presents an MCP server over stdio (<code>olive run</code>) or streamable HTTP (<code>olive serve</code>); forwards <code>initialize</code>, <code>tools/list</code>, <code>tools/call</code>, <code>resources/*</code>, <code>prompts/*</code>; runs the inspector pipeline both directions.</li>
+    <li><strong>context.py</strong> — <code>SecurityContext</code>: one frozen object per message (agent/session/role/tool/arguments-hash/direction/trust/resource-ref/task-resources).</li>
+    <li><strong>pipeline.py</strong> — inspector pipeline; first non-allow verdict wins; <strong>fails closed</strong> on any inspector error.</li>
+    <li><strong>session.py / breaker.py</strong> — per-session state + circuit breaker: trips to quarantine after repeated blocks or a sentinel signal; reversible human release; idle eviction (quarantine never evicted).</li>
+    <li><strong>ratelimit.py</strong> — per-role sliding-window throttle, independent lock from the breaker.</li>
+    <li><strong>upstreams.py</strong> — multi-upstream: one gateway fronts several tool servers, tools namespaced <code>server.tool</code>.</li>
+    <li><strong>mode.py</strong> — <code>OperatingMode</code> (normal/suspicious/siege), core-owned value the breaker holds; tunes containment thresholds.</li>
+    <li><strong>telemetry.py</strong> — async telemetry seam to the intelligence layer (default no-op).</li>
+    <li><strong>approvals.py</strong> — capability-gated approval registry for <code>hold</code> decisions.</li>
+  </ul>
+
+  <h3>Inspectors (<code>src/olive/inspectors/</code>)</h3>
+  <ul>
+    <li><strong>policy.py</strong> — outbound role-based tool allowlist, default-deny.</li>
+    <li><strong>context_policy.py</strong> — outbound, refine-only: task-binding, classification ceilings, approval holds.</li>
+    <li><strong>patterns.py</strong> — inbound deterministic injection-phrase matching (layer zero), Unicode-normalized.</li>
+    <li><strong>decode.py</strong> — layer 0.5: decodes base64/hex/rot13/url-encoding + folds homoglyphs before re-running the trigger matcher.</li>
+  </ul>
+
+  <h3>Identity (<code>src/olive/identity/</code>)</h3>
+  <ul>
+    <li><strong>tokens.py</strong> — Mock CA, RS256 JWT signing/verification (algorithm pinned, expiry + audience checked).</li>
+    <li><strong>claims.py</strong> — <code>IdentityClaims</code>: role comes from verified identity, never self-asserted config.</li>
+  </ul>
+
+  <h3>Transport (<code>src/olive/transport/</code>)</h3>
+  <ul>
+    <li><strong>http.py</strong> — streamable HTTP with bearer-token enforcement on the wire (401 before the gateway is reached); capability-gated admin endpoint for session release.</li>
+  </ul>
+
+  <h3>Store (<code>src/olive/store/</code>)</h3>
+  <ul>
+    <li><strong>events.py</strong> — SQLite (<code>aiosqlite</code>): <code>events</code>, <code>incidents</code>, <code>tool_baselines</code> tables. Raw payloads never stored — hashes + bounded evidence excerpts only.</li>
+  </ul>
+
+  <h3>Intelligence layer (<code>src/olive/intelligence/</code>, advisory only)</h3>
+  <ul>
+    <li><strong>sentinels.py</strong> — Prompt-Injection, Data-Leak, Behavior sentinels.</li>
+    <li><strong>runner.py</strong> — <code>SentinelRunner</code>: aggregates signals, the only place a signal becomes <code>breaker.trip</code>.</li>
+    <li><strong>reporter.py</strong> — structured, human-readable incident reports.</li>
+    <li><strong>remediation.py</strong> — remediation cycle ledger: <code>reproduced → fix-proposed → verified → approved → learned</code>.</li>
+    <li><strong>commander.py</strong> — Security Commander: deterministic, sole caller of <code>breaker.set_mode</code>.</li>
+    <li><strong>bus.py</strong> — incident-object bus: signed, append-only, async pub/sub between departments.</li>
+    <li><strong>departments.py</strong> — Defense + Remediation departments wired via <code>build_runtime_org</code>.</li>
+  </ul>
+
+  <h3>Evals &amp; CLI</h3>
+  <ul>
+    <li><strong>evals/run_evals.py</strong> — loads the 62-case attack corpus, runs the real inspector pipeline, reports detection rate / false-positive rate / latency / per-category breakdown; CI regression gate (<code>evals/baseline.json</code>).</li>
+    <li><strong>cli.py</strong> — <code>olive run / serve / reset-baselines / cycle (open/propose/verify/approve/learn/show)</code>.</li>
+  </ul>
+</section>
+
+<section id="rules">
+  <h2>Non-negotiable security rules</h2>
+  <div class="law"><strong>1. All tool output is untrusted input.</strong> Trust labels only decide how much inspection runs, never zero.</div>
+  <div class="law"><strong>2. LLM verdicts are advisory only.</strong> Enforcement (allow/block/quarantine/mode) is made by deterministic code. An LLM may only emit a signal.</div>
+  <div class="law"><strong>3. Never log raw payloads.</strong> SHA-256 hashes + bounded evidence excerpts (≤200 chars) only.</div>
+  <div class="law"><strong>4. Fail closed.</strong> If an inspector or pipeline errors, the decision is <code>block</code>, logged with the error as evidence.</div>
+  <div class="law"><strong>5. Every decision is auditable.</strong> Each allow/block/hold/quarantine writes an event row with the rule that fired and why.</div>
+</section>
+
+<section id="company">
+  <h2>The "company of agents" (runtime org)</h2>
+  <p>
+    The architectural law that governs all of it:
+    <strong>agents provide intelligence; deterministic systems enforce
+    authority.</strong> An LLM may conclude "this looks suspicious." Only
+    deterministic code decides "this identity may not access payroll, ever."
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h4>1. Defense department <span class="pill done">built</span></h4>
+      <p>SentinelRunner + sentinels (Prompt-Injection, Data-Leak, Behavior). Publishes <code>detection</code> objects to the bus when it acts.</p>
+    </div>
+    <div class="card">
+      <h4>2. Red-team / attack-simulation <span class="pill done">build-time</span></h4>
+      <p>The <code>.claude/agents/red-team</code> agent generates bypass attempts against new/changed detection logic; every bypass becomes a corpus case.</p>
+    </div>
+    <div class="card">
+      <h4>3. Remediation / builder <span class="pill done">built</span></h4>
+      <p>The <code>builder</code> agent proposes a fix as a reviewable diff; the remediation ledger walks it through <code>reproduced → fix-proposed → verified → approved → learned</code>, human-gated throughout.</p>
+    </div>
+    <div class="card">
+      <h4>4. Verification <span class="pill done">built</span></h4>
+      <p>Not a new LLM — the <code>qa</code> agent + the real <code>run_evals.py</code> gate. "Verify" is only writable from an actual passing gate result.</p>
+    </div>
+    <div class="card">
+      <h4>5. Security Commander <span class="pill done">built</span></h4>
+      <p>Deterministic; sole authority over the fleet's <code>OperatingMode</code> (normal/suspicious/siege); routes incident objects between departments.</p>
+    </div>
+    <div class="card">
+      <h4>6. Command &amp; Coordination hierarchy <span class="pill future">future</span></h4>
+      <p>Full Supervisor tier (Defense/Red-Team/Builder supervisors under the Commander) — deferred.</p>
+    </div>
+  </div>
+
+  <h3>Operating modes</h3>
+  <table>
+    <tr><th>Mode</th><th>Behavior</th></tr>
+    <tr><td><strong>Normal</strong></td><td>Standard thresholds, normal permissions, scheduled simulations.</td></tr>
+    <tr><td><strong>Suspicious</strong></td><td>Containment threshold halves (quarantine sooner); more context rules escalate to <code>hold</code>.</td></tr>
+    <tr><td><strong>Siege</strong></td><td>Threshold collapses to one block; sensitive tools denied inline; new sessions default to <code>hold</code>.</td></tr>
+  </table>
+  <p>Mode only ever escalates automatically (monotonic); de-escalation requires a capability-gated (<code>olive:command</code>) human.</p>
+</section>
+
+<section id="status">
+  <h2>Build status (roadmap)</h2>
+  <table>
+    <tr><th>Milestone</th><th>What it adds</th><th>Status</th></tr>
+    <tr><td>M1 — Foundation + walking skeleton</td><td>MCP proxy, policy + pattern inspectors, SQLite store, identity module, demo, seed corpus. Proves Govern → Detect → Block → Log.</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>M2 — Identity &amp; containment</td><td>Circuit breaker, rate limiting, identity-bound roles, HTTP transport with bearer JWT, multi-upstream. Adds Contain.</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>M3 — Complete MCP-surface protection</td><td>Tool/resource/prompt declarations content-inspected; rug-pull (trust-on-first-use) detection.</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>M4 — Contextual authorization</td><td>Structured resource extraction, context-policy inspector, <code>HOLD</code> decision + approvals.</td><td><span class="pill progress">in progress</span></td></tr>
+    <tr><td>M5 — Measured detection (the moat)</td><td>62-case attack corpus, detection/FP/latency metrics, CI regression gate.</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>M6 — Intelligence agents (advisory)</td><td>Deterministic decode layer, telemetry seam, Prompt-Injection/Data-Leak/Behavior sentinels, SentinelRunner.</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>M7 — First complete department cycle</td><td>Remediation ledger + builder agent (slice 1); operating modes + Security Commander + incident bus + Defense/Remediation departments (slice 2).</td><td><span class="pill progress">in progress</span></td></tr>
+  </table>
+  <p style="font-size:0.85rem;color:var(--muted)">
+    260 tests passing. M4 still needs broader policy coverage; M7 still needs
+    the supervisor tier and runtime red-team/builder autonomy.
+  </p>
+</section>
+
+<section id="future">
+  <h2>What deliberately doesn't exist yet</h2>
+  <ul>
+    <li>The full Command &amp; Coordination hierarchy (Commander → department <em>supervisors</em> → specialists).</li>
+    <li>Runtime Red-Team / Builder <strong>autonomy</strong> — only the build-time <code>.claude/agents</code> versions exist; nothing auto-attacks or auto-patches at runtime.</li>
+    <li>Auto-apply / auto-deploy of a proposed fix — permanently human-gated by design.</li>
+    <li>Credential/token freezing in Siege mode.</li>
+    <li>Cross-process / fleet-wide mode propagation; durable mode/bus across restarts (currently in-memory/per-process).</li>
+    <li>Cross-session / fleet behavioral baselines and the enterprise control plane.</li>
+    <li>A dashboard.</li>
+  </ul>
+
+  <h3>The "Later" bets</h3>
+  <ul>
+    <li>Real agent identity — "SPIFFE for agents", delegation chains, capability attenuation.</li>
+    <li>Enterprise control plane — centralized policy, agent inventory, attack replay, cross-session behavioral detection, compliance evidence, fleet management.</li>
+    <li>Business posture decision (open-core vs. closed) — deliberately deferred until after first external feedback.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Generated from <code>docs/VISION.md</code>, <code>docs/ARCHITECTURE.md</code> and <code>docs/ROADMAP.md</code> — see those files for full detail.
+</footer>
+
+</body>
+</html>

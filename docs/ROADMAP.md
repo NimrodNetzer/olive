@@ -234,6 +234,23 @@ agents); CI plumbing for deploy/PR triggers; per-department **CA-signed bus**
 identities (parallel, non-gating); credential/token freezing in Siege;
 durable/fleet-wide mode + bus.
 
+**Sixth slice (built — ADR-0017):** the Agentic Command Center (Textual TUI).
+- ✅ **`olive ui`** (`src/olive/ui/`): a read-only Textual TUI visualizing the
+  runtime org — department status, the central gateway node, a live
+  mitigation/audit feed, and an attack-theater sidebar over `evals/corpus/`
+  (fires the existing sandbox `run_campaign`/`run_once()`, never live traffic).
+- ✅ `UIBroker` is a third intelligence-side `TelemetrySink` + `IncidentBus`
+  subscriber, projecting into a bounded rule-3 `UIEvent`; read-only by
+  construction (import-set test excludes breaker/proxy/Commander). UI-initiated
+  requests publish an announce-only `operator-request` bus object — they never
+  themselves change mode or trip the breaker.
+
+**Seventh slice (built — ADR-0019):** the web dashboard.
+- ✅ **`olive ui --web`** (`ui/web.py` + `ui/static/`): Starlette/WebSocket
+  server pushing the same `UIEvent` stream to a browser. Plain HTML/CSS/JS, no
+  build step, loopback-only default. `POST /operator` is the single inbound write
+  (announce-only, same closed action set as ADR-0017 §5).
+
 ## Later — the bets
 
 - Real agent identity: toward "SPIFFE for agents", delegation chains,
