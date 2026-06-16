@@ -24,13 +24,25 @@
   --def:     #58a6ff;
   --rem:     #d29922;
   --rt:      #f85149;
+  --mode-tint: transparent;
+  --mode-ring: #1a2235;
 }
+
+/* ── Mode tints ────────────────────────────────────────────── */
+body.suspicious { --mode-tint:rgba(210,153,34,.04); --mode-ring:rgba(210,153,34,.35); }
+body.siege      { --mode-tint:rgba(248,81,73,.06);  --mode-ring:rgba(248,81,73,.45);  }
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{
   background:var(--bg);color:var(--text);
   font-family:'Courier New',Courier,monospace;font-size:13px;
-  height:100vh;display:flex;flex-direction:column;overflow:hidden
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;transition:background .6s
 }
+body::after{
+  content:'';position:fixed;inset:0;
+  background:var(--mode-tint);pointer-events:none;z-index:0;transition:background .8s
+}
+main,header{position:relative;z-index:1}
 
 /* ── Keyframes ────────────────────────────────────────────── */
 @keyframes spin      { to{transform:rotate(360deg)} }
@@ -38,38 +50,31 @@ body{
 @keyframes breathe   { 0%,100%{transform:scaleY(1)}  50%{transform:scaleY(1.04)} }
 @keyframes arm-l     { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(12deg)} }
 @keyframes arm-r     { 0%,100%{transform:rotate(12deg)}  50%{transform:rotate(-12deg)} }
-@keyframes eye-idle  { 0%,100%{opacity:.5} 50%{opacity:.9} }
 @keyframes eye-hot   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:1;transform:scale(1.4)} }
 @keyframes line-a    { 0%,100%{opacity:.2} 50%{opacity:.85} }
 @keyframes line-b    { 0%,100%{opacity:.1} 50%{opacity:.6} }
 @keyframes screen-on { 0%,100%{opacity:.85} 50%{opacity:1} }
 @keyframes fadein    { from{opacity:0;transform:translateY(4px)} to{opacity:1} }
 @keyframes mode-blink{ 0%,100%{opacity:1} 50%{opacity:.25} }
-/* Agent appears (opacity 0→1 when dept activates) */
-@keyframes agent-appear { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-/* Attack bolt travels from right panel to gateway center */
+@keyframes siege-pulse{ 0%,100%{box-shadow:0 0 0 rgba(248,81,73,0)} 50%{box-shadow:0 0 40px rgba(248,81,73,.2)} }
 @keyframes bolt-fly {
   0%   { opacity:1; transform:translateX(0) scaleX(1); }
   75%  { opacity:1; transform:translateX(var(--bolt-dist)) scaleX(0.6); }
   100% { opacity:0; transform:translateX(var(--bolt-dist)) scale(3,.2); }
 }
-/* Gateway impact ring expands and fades */
-@keyframes impact-ring {
-  0%   { transform:scale(1);   opacity:.9; }
-  100% { transform:scale(2.4); opacity:0; }
-}
-/* Block flash on gateway panel */
-@keyframes gw-block-flash {
-  0%,100%{ box-shadow:none }
-  40%    { box-shadow:0 0 60px 20px rgba(248,81,73,.45) }
-}
+@keyframes impact-ring { 0%{transform:scale(1);opacity:.9} 100%{transform:scale(2.4);opacity:0} }
+@keyframes gw-block-flash { 0%,100%{box-shadow:none} 40%{box-shadow:0 0 60px 20px rgba(248,81,73,.45)} }
+@keyframes toast-in  { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+@keyframes toast-out { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(20px)} }
+@keyframes neu-pop   { 0%{transform:scale(1.5);color:var(--red)} 100%{transform:scale(1)} }
 
 /* ── Header ──────────────────────────────────────────────── */
 header{
   display:flex;align-items:center;gap:10px;
   padding:6px 14px;background:var(--surf);
-  border-bottom:1px solid var(--border);flex-shrink:0
+  border-bottom:1px solid var(--mode-ring);flex-shrink:0;transition:border-color .6s
 }
+body.siege header{animation:siege-pulse 1.5s ease-in-out infinite}
 header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 .hsub{color:var(--muted);font-size:10px;letter-spacing:.5px}
 #mode-badge{
@@ -90,7 +95,7 @@ header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 main{
   flex:1;display:grid;
   grid-template-columns:240px 1fr 280px;
-  grid-template-rows:1fr 160px;
+  grid-template-rows:1fr 180px;
   gap:7px;padding:7px;overflow:hidden
 }
 
@@ -104,8 +109,7 @@ main{
 }
 .dc::before{
   content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:var(--dc-clr,var(--border));opacity:.3;
-  transition:opacity .4s;z-index:1
+  background:var(--dc-clr,var(--border));opacity:.3;transition:opacity .4s;z-index:1
 }
 .dc.active{border-color:var(--dc-clr);box-shadow:0 0 18px color-mix(in srgb,var(--dc-clr) 18%,transparent)}
 .dc.active::before{opacity:1}
@@ -118,44 +122,32 @@ main{
 
 .dc-info{
   padding:5px 10px;border-top:1px solid var(--border);
-  display:flex;align-items:center;gap:6px;flex-shrink:0;
-  background:var(--surf2)
+  display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--surf2)
 }
 .dc-name{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--dc-clr);flex:1}
 .dc-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);transition:background .3s,box-shadow .3s}
 .dc.active .dc-dot{background:var(--dc-clr);box-shadow:0 0 4px var(--dc-clr)}
-.dc-ev{font-size:10px;color:var(--muted);transition:color .3s}
-.dc.active .dc-ev{color:var(--dc-clr)}
+.dc-ev{font-size:10px;color:var(--muted);transition:color .3s;max-width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dc.active .dc-ev{color:var(--dc-clr);font-weight:bold}
 
-/* ── Agent SVG visibility ──────────────────────────────────
-   Agents are INVISIBLE when idle; fade in when dept activates */
-.ab,.eye,.al,.ar{
-  opacity:0;
-  transition:opacity .5s ease;
-}
-/* When dept is active: agents become visible */
-.dc.active .ab,
-.dc.active .al,
-.dc.active .ar  { opacity:1; }
-.dc.active .eye { opacity:1; }
-
-/* Agent animations (only kick in when active = visible) */
-.ab{ transform-box:fill-box; transform-origin:center bottom; }
-.dc.active .ab  { animation:breathe 2.5s ease-in-out infinite; }
-.eye{ transform-box:fill-box; transform-origin:center; }
-.dc.active .eye { animation:eye-hot .45s ease-in-out infinite; }
-.al { transform-box:fill-box; transform-origin:100% 50%; }
-.dc.active .al  { animation:arm-l .28s ease-in-out infinite; }
-.ar { transform-box:fill-box; transform-origin:0% 50%; }
-.dc.active .ar  { animation:arm-r .28s ease-in-out infinite .14s; }
-
-/* Monitor lines */
+/* ── Agent SVG visibility ─────────────────────────────────── */
+.ab,.eye,.al,.ar{opacity:0;transition:opacity .5s ease}
+.dc.active .ab,.dc.active .al,.dc.active .ar{opacity:1}
+.dc.active .eye{opacity:1}
+.ab{transform-box:fill-box;transform-origin:center bottom}
+.dc.active .ab{animation:breathe 2.5s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.dc.active .eye{animation:eye-hot .45s ease-in-out infinite}
+.al{transform-box:fill-box;transform-origin:100% 50%}
+.dc.active .al{animation:arm-l .28s ease-in-out infinite}
+.ar{transform-box:fill-box;transform-origin:0% 50%}
+.dc.active .ar{animation:arm-r .28s ease-in-out infinite .14s}
 .ml{animation:line-a 2.5s ease-in-out infinite}
 .ml:nth-child(2){animation-delay:.4s}
 .ml:nth-child(3){animation:line-b 2.5s ease-in-out infinite .8s}
 .ml:nth-child(4){animation-delay:1.2s}
 .ml:nth-child(5){animation:line-a 2.5s ease-in-out infinite 1.6s}
-.dc.active .ml  {animation:line-a .7s ease-in-out infinite}
+.dc.active .ml{animation:line-a .7s ease-in-out infinite}
 .dc.active .ml:nth-child(2){animation-delay:.12s}
 .dc.active .ml:nth-child(3){animation-delay:.24s}
 .dc.active .ml:nth-child(4){animation-delay:.36s}
@@ -167,7 +159,7 @@ main{
 /* ── Gateway ──────────────────────────────────────────────── */
 #gw{
   grid-column:2;grid-row:1;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
   border-radius:8px;border:1px solid var(--border);background:var(--surf);
   position:relative;overflow:hidden;transition:border-color .4s,box-shadow .4s
 }
@@ -176,23 +168,39 @@ main{
   background:radial-gradient(ellipse 55% 45% at 50% 50%,rgba(63,185,80,.04) 0%,transparent 70%);
   pointer-events:none
 }
+body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgba(248,81,73,.05) 0%,transparent 70%)}
 #gw.allow    {border-color:var(--green); box-shadow:0 0 28px rgba(63,185,80,.14)}
 #gw.block    {border-color:var(--red);   box-shadow:0 0 28px rgba(248,81,73,.14)}
 #gw.hold     {border-color:var(--yellow);box-shadow:0 0 28px rgba(210,153,34,.14)}
 #gw.quarantine{border-color:var(--purple);box-shadow:0 0 28px rgba(188,140,255,.14)}
 #gw.blocked-flash{animation:gw-block-flash .6s ease-out}
 
-/* Impact ring overlay (injected by JS) */
 #gw-impact-ring{
   position:absolute;width:80px;height:80px;border-radius:50%;
   border:2px solid var(--red);pointer-events:none;
-  top:50%;left:50%;transform:translate(-50%,-50%);
-  display:none;
+  top:50%;left:50%;transform:translate(-50%,-50%);display:none
 }
 #gw-impact-ring.pop{display:block;animation:impact-ring .6s ease-out forwards}
 
+/* Decision toast (top-right corner of gateway) */
+#toast{
+  position:absolute;right:12px;top:12px;
+  background:var(--surf2);border:1px solid var(--border2);
+  border-radius:6px;padding:7px 10px;min-width:155px;max-width:210px;
+  pointer-events:none;z-index:10;display:none
+}
+#toast.show{display:block;animation:toast-in .25s ease-out}
+#toast.hide{animation:toast-out .3s ease-in forwards}
+#toast-dec{font-size:11px;font-weight:bold;letter-spacing:1.5px;margin-bottom:3px}
+#toast-rule{font-size:10px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast-agent{font-size:9px;color:var(--dim)}
+#toast.ta #toast-dec{color:var(--green)}
+#toast.tb #toast-dec{color:var(--red);border-left:2px solid var(--red);padding-left:5px}
+#toast.th #toast-dec{color:var(--yellow)}
+#toast.tq #toast-dec{color:var(--purple)}
+
 #gw-rings{
-  position:relative;width:148px;height:148px;
+  position:relative;width:140px;height:140px;
   display:flex;align-items:center;justify-content:center
 }
 #gw-rings svg{position:absolute;top:0;left:0;width:100%;height:100%}
@@ -200,114 +208,117 @@ main{
 .rm{animation:spinrev  9s linear infinite}
 .ri{animation:spin    5s  linear infinite}
 #gw-core{
-  z-index:1;width:58px;height:58px;border-radius:50%;
+  z-index:1;width:56px;height:56px;border-radius:50%;
   background:var(--surf2);border:2px solid var(--border);
-  display:flex;align-items:center;justify-content:center;font-size:26px;
+  display:flex;align-items:center;justify-content:center;font-size:24px;
   transition:border-color .4s,box-shadow .4s
 }
 #gw.allow      #gw-core{border-color:var(--green); box-shadow:0 0 14px rgba(63,185,80,.45)}
 #gw.block      #gw-core{border-color:var(--red);   box-shadow:0 0 14px rgba(248,81,73,.45)}
 #gw.quarantine #gw-core{border-color:var(--purple);box-shadow:0 0 14px rgba(188,140,255,.45)}
-#gw-name{font-size:14px;font-weight:bold;letter-spacing:3px;color:var(--text)}
+
+/* Threats neutralized hero */
+#gw-neutralized{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:38px}
+#neu-count{font-size:34px;font-weight:bold;color:var(--red);letter-spacing:2px;line-height:1;transition:color .4s}
+#neu-count.zero{color:var(--dim)}
+#neu-count.tick{animation:neu-pop .3s ease-out}
+#neu-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+
+#gw-name{font-size:13px;font-weight:bold;letter-spacing:3px;color:var(--text)}
 #gw-sub{font-size:9px;color:var(--muted);letter-spacing:1.5px}
-#gw-dec{
-  font-size:22px;font-weight:bold;letter-spacing:3px;
-  color:var(--muted);transition:color .3s;min-height:30px;text-align:center
-}
+#gw-dec{font-size:20px;font-weight:bold;letter-spacing:3px;color:var(--muted);transition:color .3s;min-height:26px;text-align:center}
 #gw-dec.allow    {color:var(--green)}
 #gw-dec.block    {color:var(--red)}
 #gw-dec.hold     {color:var(--yellow)}
 #gw-dec.quarantine{color:var(--purple)}
-#gw-rule{font-size:10px;color:var(--muted);max-width:320px;text-align:center;min-height:15px}
-#gw-stats{display:flex;gap:18px;margin-top:4px}
-.sv{font-size:20px;font-weight:bold}
+#gw-rule{font-size:10px;color:var(--muted);max-width:320px;text-align:center;min-height:14px}
+#gw-stats{display:flex;gap:16px;margin-top:2px}
+.sv{font-size:18px;font-weight:bold}
 .sl{font-size:9px;color:var(--muted);letter-spacing:1px}
 .sa .sv{color:var(--green)} .sb .sv{color:var(--red)}
 .sh .sv{color:var(--yellow)}.sq .sv{color:var(--purple)}
-.stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+.stat{display:flex;flex-direction:column;align-items:center;gap:1px}
 
 /* ── Attack Theater ──────────────────────────────────────── */
 #atk{
-  grid-column:3;grid-row:1;
+  grid-column:3;grid-row:1 / span 2;
   background:var(--surf);border:1px solid var(--border2);
   border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;overflow:hidden
 }
 .ptitle{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;flex-shrink:0}
 #atk .ptitle{color:var(--orange)}
-
-/* mini counters */
 .msrow{display:flex;gap:8px;flex-shrink:0}
-.ms{
-  flex:1;background:var(--surf2);border:1px solid var(--border);
-  border-radius:6px;padding:6px 8px;text-align:center
-}
+.ms{flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;text-align:center}
 .msv{font-size:18px;font-weight:bold;color:var(--orange)}
 .msl{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-top:1px}
-
-/* Category tiles grid */
-.atk-cats{
-  display:grid;grid-template-columns:1fr 1fr;
-  gap:7px;flex:1;min-height:0
-}
+.atk-cats{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;min-height:0}
 .atk-cat{
-  background:var(--surf2);border:1px solid var(--border);
-  border-radius:7px;padding:10px 10px 8px;
+  background:var(--surf2);border:1px solid var(--border);border-radius:7px;padding:10px 10px 8px;
   cursor:pointer;transition:border-color .2s,background .2s,box-shadow .2s;
   display:flex;flex-direction:column;gap:3px
 }
 .atk-cat:hover{border-color:var(--orange);background:rgba(227,179,65,.06)}
-.atk-cat.sel{
-  border-color:var(--orange);background:rgba(227,179,65,.1);
-  box-shadow:0 0 10px rgba(227,179,65,.15)
-}
+.atk-cat.sel{border-color:var(--orange);background:rgba(227,179,65,.1);box-shadow:0 0 10px rgba(227,179,65,.15)}
 .atk-cat-icon{font-size:18px;line-height:1;margin-bottom:2px}
-.atk-cat-name{
-  font-size:10px;font-weight:bold;letter-spacing:1px;
-  color:var(--text);text-transform:uppercase
-}
+.atk-cat-name{font-size:10px;font-weight:bold;letter-spacing:1px;color:var(--text);text-transform:uppercase}
 .atk-cat-desc{font-size:9px;color:var(--muted);line-height:1.4}
-.atk-cat-cnt{
-  margin-top:auto;font-size:13px;font-weight:bold;
-  color:var(--muted);padding-top:4px
-}
+.atk-cat-cnt{margin-top:auto;font-size:13px;font-weight:bold;color:var(--muted);padding-top:4px}
 .atk-cat.sel .atk-cat-cnt{color:var(--orange)}
-/* Per-category accent colors */
 .atk-cat[data-cat="inj"]     .atk-cat-name{color:var(--red)}
 .atk-cat[data-cat="inj"].sel {border-color:var(--red);background:rgba(248,81,73,.1);box-shadow:0 0 10px rgba(248,81,73,.15)}
 .atk-cat[data-cat="inj"].sel .atk-cat-cnt{color:var(--red)}
-.atk-cat[data-cat="exf"]     .atk-cat-name{color:var(--orange)}
 .atk-cat[data-cat="esc"]     .atk-cat-name{color:var(--purple)}
 .atk-cat[data-cat="esc"].sel {border-color:var(--purple);background:rgba(188,140,255,.1);box-shadow:0 0 10px rgba(188,140,255,.15)}
 .atk-cat[data-cat="esc"].sel .atk-cat-cnt{color:var(--purple)}
 .atk-cat[data-cat="evd"]     .atk-cat-name{color:var(--cyan)}
 .atk-cat[data-cat="evd"].sel {border-color:var(--cyan);background:rgba(57,211,195,.08);box-shadow:0 0 10px rgba(57,211,195,.12)}
 .atk-cat[data-cat="evd"].sel .atk-cat-cnt{color:var(--cyan)}
-
-/* Launch button */
 #fire-btn{
   width:100%;padding:10px;flex-shrink:0;
-  background:rgba(248,81,73,.12);
-  border:1px solid var(--red);border-radius:6px;
+  background:rgba(248,81,73,.12);border:1px solid var(--red);border-radius:6px;
   color:var(--red);font-family:inherit;font-size:12px;font-weight:bold;
-  letter-spacing:2px;cursor:pointer;
-  transition:background .2s,box-shadow .2s
+  letter-spacing:2px;cursor:pointer;transition:background .2s,box-shadow .2s
 }
 #fire-btn:hover:not(:disabled){background:rgba(248,81,73,.22);box-shadow:0 0 16px rgba(248,81,73,.3)}
 #fire-btn:disabled{opacity:.35;cursor:not-allowed}
 #fire-btn.firing{animation:mode-blink .3s ease-in-out infinite}
-
-/* Attack bolt (created by JS, positioned via CSS var) */
 .atk-bolt{
   position:fixed;height:3px;border-radius:2px;
   background:linear-gradient(to left,transparent,var(--bolt-clr));
   box-shadow:0 0 8px var(--bolt-clr),0 0 2px var(--bolt-clr);
-  pointer-events:none;z-index:9999;
-  animation:bolt-fly .7s ease-in forwards
+  pointer-events:none;z-index:9999;animation:bolt-fly .7s ease-in forwards
 }
 
-/* ── Feed panel ───────────────────────────────────────────── */
+/* ── Trust panel ─────────────────────────────────────────── */
+#trust{
+  grid-column:1;grid-row:2;
+  background:var(--surf);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:hidden
+}
+#trust .ptitle{color:var(--cyan)}
+#trust-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+#trust-list::-webkit-scrollbar{width:2px}
+#trust-list::-webkit-scrollbar-thumb{background:var(--border)}
+.ta-row{display:flex;align-items:center;gap:6px}
+.ta-name{font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ta-score{font-size:9px;font-weight:bold;width:30px;text-align:right;flex-shrink:0}
+.ta-bar-bg{height:4px;width:50px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
+.ta-bar{height:100%;border-radius:2px;transition:width .5s,background .5s}
+.ta-badge{font-size:8px;padding:1px 4px;border-radius:2px;letter-spacing:.5px;flex-shrink:0}
+.ta-trust  .ta-score,.ta-trust  .ta-badge{color:var(--green)}
+.ta-trust  .ta-bar{background:var(--green)}
+.ta-trust  .ta-badge{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.3)}
+.ta-warn   .ta-score,.ta-warn   .ta-badge{color:var(--yellow)}
+.ta-warn   .ta-bar{background:var(--yellow)}
+.ta-warn   .ta-badge{background:rgba(210,153,34,.15);border:1px solid rgba(210,153,34,.3)}
+.ta-danger .ta-score,.ta-danger .ta-badge{color:var(--red)}
+.ta-danger .ta-bar{background:var(--red)}
+.ta-danger .ta-badge{background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.3)}
+#trust-empty{font-size:10px;color:var(--muted);text-align:center;padding:14px 0}
+
+/* ── Feed panel ─────────────────────────────────────────── */
 #feed{
-  grid-column:1/-1;grid-row:2;
+  grid-column:2;grid-row:2;
   background:var(--surf);border:1px solid var(--border);
   border-radius:8px;padding:7px 12px;overflow:hidden;display:flex;flex-direction:column
 }
@@ -365,14 +376,11 @@ main{
         <path d="M210,8 L210,38 L172,38" stroke="#131f30" stroke-width=".6" fill="none"/>
         <circle cx="10" cy="8" r="1.8" fill="#131f30"/>
         <circle cx="210" cy="8" r="1.8" fill="#131f30"/>
-        <!-- Shield on wall -->
         <path d="M193,5 L204,5 L204,18 L198.5,23 L193,18 Z" fill="none" stroke="#58a6ff" stroke-width="1.2" opacity=".4"/>
         <line x1="198.5" y1="8" x2="198.5" y2="16" stroke="#58a6ff" stroke-width="1" opacity=".25"/>
-        <!-- Desk -->
         <rect x="15" y="80" width="190" height="10" rx="2" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
         <rect x="20" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
         <rect x="193" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
-        <!-- Left monitor -->
         <rect x="28" y="46" width="54" height="36" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
         <rect x="30" y="48" width="50" height="28" rx="1.5" class="msbg" fill="#001830" opacity=".15"/>
         <rect x="32" y="50" width="32" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
@@ -381,7 +389,6 @@ main{
         <rect x="32" y="65" width="16" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
         <rect x="32" y="70" width="28" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".18"/>
         <rect x="53" y="82" width="7" height="5" rx="1" fill="#0f1520"/>
-        <!-- Right monitor -->
         <rect x="130" y="44" width="66" height="38" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
         <rect x="132" y="46" width="62" height="30" rx="1.5" class="msbg" fill="#001030" opacity=".15"/>
         <rect x="134" y="48" width="30" height="2" rx="1" class="ml" fill="#3fb950" opacity=".22"/>
@@ -390,7 +397,6 @@ main{
         <rect x="134" y="63" width="36" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".2"/>
         <rect x="134" y="68" width="26" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
         <rect x="159" y="82" width="8" height="5" rx="1" fill="#0f1520"/>
-        <!-- Agent (invisible when idle via CSS) -->
         <g class="ab">
           <rect x="97" y="56" width="24" height="26" rx="4" fill="#0f1520" stroke="#1a2235" stroke-width=".8"/>
           <rect x="108" y="51" width="4" height="7" fill="#0f1520"/>
@@ -472,7 +478,6 @@ main{
         <line x1="0" y1="90" x2="220" y2="90" stroke="#2d1515" stroke-width="1"/>
         <path d="M12,8 L12,44 L55,44" stroke="#2a1010" stroke-width=".6" fill="none"/>
         <path d="M208,8 L208,40 L165,40" stroke="#2a1010" stroke-width=".6" fill="none"/>
-        <!-- Crosshair -->
         <circle cx="197" cy="14" r="10" fill="none" stroke="#f85149" stroke-width="1" opacity=".35"/>
         <circle cx="197" cy="14" r="6"  fill="none" stroke="#f85149" stroke-width=".8" opacity=".25"/>
         <circle cx="197" cy="14" r="1.5" fill="#f85149" opacity=".3"/>
@@ -481,7 +486,6 @@ main{
         <rect x="15" y="80" width="190" height="10" rx="2" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
         <rect x="20" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
         <rect x="193" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
-        <!-- Main hacking terminal -->
         <rect x="108" y="38" width="78" height="44" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
         <rect x="110" y="40" width="74" height="36" rx="1.5" class="msbg" fill="#200000" opacity=".15"/>
         <rect x="112" y="42" width="40" height="2" rx=".5" class="ml" fill="#f85149" opacity=".65"/>
@@ -491,7 +495,6 @@ main{
         <rect x="112" y="62" width="36" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
         <rect x="112" y="67" width="10" height="2" rx=".5" class="ml" fill="#f85149" opacity=".55"/>
         <rect x="143" y="82" width="8" height="4" rx="1" fill="#140808"/>
-        <!-- Small secondary monitor -->
         <rect x="22" y="44" width="50" height="34" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
         <rect x="24" y="46" width="46" height="26" rx="1.5" class="msbg" fill="#180000" opacity=".15"/>
         <rect x="26" y="48" width="26" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
@@ -499,7 +502,6 @@ main{
         <rect x="26" y="58" width="34" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
         <rect x="26" y="63" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".3"/>
         <rect x="43" y="78" width="7" height="4" rx="1" fill="#140808"/>
-        <!-- Agent -->
         <g class="ab">
           <rect x="80" y="50" width="22" height="30" rx="4" fill="#140808" stroke="#2d1515" stroke-width=".8"/>
           <rect x="90" y="45" width="4" height="7" fill="#140808"/>
@@ -527,6 +529,13 @@ main{
 <!-- ── Gateway ───────────────────────────────────────────────── -->
 <div id="gw">
   <div id="gw-impact-ring"></div>
+
+  <div id="toast">
+    <div id="toast-dec">ALLOW</div>
+    <div id="toast-rule"></div>
+    <div id="toast-agent"></div>
+  </div>
+
   <div id="gw-rings">
     <svg viewBox="0 0 148 148" xmlns="http://www.w3.org/2000/svg">
       <path d="M8,8 L26,8 L26,26"   stroke="#1a2235" stroke-width=".6" fill="none"/>
@@ -549,6 +558,12 @@ main{
     </svg>
     <div id="gw-core">🫒</div>
   </div>
+
+  <div id="gw-neutralized">
+    <div id="neu-count" class="zero">0</div>
+    <div id="neu-label">threats neutralized</div>
+  </div>
+
   <div id="gw-name">OLIVE GATEWAY</div>
   <div id="gw-sub">AI FIREWALL &middot; ZERO TRUST MCP</div>
   <div id="gw-dec">—</div>
@@ -564,13 +579,10 @@ main{
 <!-- ── Attack Theater ─────────────────────────────────────────── -->
 <div id="atk">
   <div class="ptitle">🎯 ATTACK THEATER &mdash; SANDBOX</div>
-
   <div class="msrow">
     <div class="ms"><div class="msv" id="ms-rt">0</div><div class="msl">RT FINDINGS</div></div>
     <div class="ms"><div class="msv" id="ms-fp">0</div><div class="msl">FIX PROPS</div></div>
   </div>
-
-  <!-- Attack category selector -->
   <div class="atk-cats">
     <div class="atk-cat sel" data-cat="inj">
       <div class="atk-cat-icon">💉</div>
@@ -597,8 +609,15 @@ main{
       <div class="atk-cat-cnt" id="cnt-evd">—</div>
     </div>
   </div>
-
   <button id="fire-btn" disabled>&#9889; LAUNCH ATTACK</button>
+</div>
+
+<!-- ── Trust panel ────────────────────────────────────────────── -->
+<div id="trust">
+  <div class="ptitle">&#128274; AGENT TRUST SCORES</div>
+  <div id="trust-list">
+    <div id="trust-empty">no agents observed yet</div>
+  </div>
 </div>
 
 <!-- ── Mitigation feed ────────────────────────────────────────── -->
@@ -610,11 +629,12 @@ main{
 </main>
 
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 const st={allow:0,block:0,hold:0,quar:0};
 const dce={def:0,rem:0,rt:0};
-let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0;
+let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0, neuCnt=0;
 const dtimers={};
+const agents={}; // agent_id -> {allow,block,hold,quar}
 
 const DEPT_CARD={defense:'dc-def',remediation:'dc-rem',redteam:'dc-rt'};
 const DEPT_EV  ={defense:'ev-def',remediation:'ev-rem',redteam:'ev-rt'};
@@ -624,15 +644,27 @@ const KIND_DEPT={
   'redteam-finding':'redteam',
   'fix-proposed':'remediation',
 };
-// Which corpus prefixes map to which attack category
 const PREFIX_CAT={
   inj:'inj', exf:'exf',
-  esc:'esc', ctx:'esc',        // context-policy = escalation family
-  chn:'evd', rug:'evd', desc:'evd',  // chained/rug-pull/desc-poison = evasion
+  esc:'esc', ctx:'esc',
+  chn:'evd', rug:'evd', desc:'evd',
 };
 const CAT_COLOR={inj:'#f85149', exf:'#e3b341', esc:'#bc8cff', evd:'#39d3c3'};
 
-// ── DOM ──────────────────────────────────────────────────────────────────────
+// Per-dept status labels keyed by event kind
+const KIND_STATUS={
+  'decision:block':      {defense:'BLOCKING THREAT'},
+  'decision:quarantine': {defense:'QUARANTINING'},
+  'decision:allow':      {defense:'CLEARED'},
+  'decision:hold':       {defense:'HOLDING'},
+  detection:             {defense:'ANOMALY DETECTED'},
+  reproduced:            {defense:'INCIDENT CONFIRMED', remediation:'ANALYZING INCIDENT'},
+  'redteam-finding':     {redteam:'FINDING REPORTED'},
+  'fix-proposed':        {remediation:'PATCH PROPOSED'},
+  'operator-request':    {redteam:'ATTACK LAUNCHED', remediation:'STANDING BY'},
+};
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
 const dot    =document.getElementById('conn-dot');
 const lbl    =document.getElementById('conn-lbl');
 const gw     =document.getElementById('gw');
@@ -643,8 +675,11 @@ const mode   =document.getElementById('mode-badge');
 const feedLog=document.getElementById('feed-log');
 const fireBtn=document.getElementById('fire-btn');
 const impRing=document.getElementById('gw-impact-ring');
+const neuEl  =document.getElementById('neu-count');
+const toastEl=document.getElementById('toast');
+let toastTimer=null;
 
-// ── WebSocket ────────────────────────────────────────────────────────────────
+// ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws, rdelay=1500, _wsAt=0;
 function connect(){
   const proto=location.protocol==='https:'?'wss':'ws';
@@ -677,93 +712,159 @@ function onDecision(ev){
   gwRule.textContent=ev.rule?`rule: ${ev.rule}`:'';
   const arcClr={allow:'var(--green)',block:'var(--red)',hold:'var(--yellow)',quarantine:'var(--purple)'};
   if(arc) arc.style.stroke=arcClr[d]||'var(--green)';
-  if(d==='allow'){st.allow++;document.getElementById('st-a').textContent=st.allow;}
-  else if(d==='block'){st.block++;document.getElementById('st-b').textContent=st.block;}
-  else if(d==='hold'){st.hold++;document.getElementById('st-h').textContent=st.hold;}
+  if(d==='allow')          {st.allow++;document.getElementById('st-a').textContent=st.allow;}
+  else if(d==='block')     {st.block++;document.getElementById('st-b').textContent=st.block;}
+  else if(d==='hold')      {st.hold++;document.getElementById('st-h').textContent=st.hold;}
   else if(d==='quarantine'){st.quar++;document.getElementById('st-q').textContent=st.quar;}
+
   if(d==='block'||d==='quarantine'){
     detCnt++;document.getElementById('hc-det').textContent=detCnt;
-    flash('defense',5000);
+    // Threats neutralized hero
+    neuCnt++;
+    neuEl.textContent=neuCnt;
+    neuEl.classList.remove('zero','tick');
+    void neuEl.offsetWidth;
+    neuEl.classList.add('tick');
+    flash('defense',5000,'decision:'+d);
+  } else {
+    flash('defense',3000,'decision:'+d);
   }
+
+  // Agent trust tracking
+  const aid=ev.agent_id;
+  if(aid){
+    if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0};
+    if(agents[aid][d]!==undefined) agents[aid][d]++;
+    renderTrust();
+  }
+
+  showToast(d, ev.rule||'', ev.agent_id||'');
 }
 
 function onIntel(ev){
   if(ev.kind==='mode-change'){
     const e=(ev.evidence||'').toLowerCase();
     const m=e.includes('siege')?'siege':e.includes('suspicious')?'suspicious':'normal';
-    mode.textContent=m.toUpperCase(); mode.className=m==='normal'?'':m;
+    mode.textContent=m.toUpperCase();
+    mode.className=m==='normal'?'':m;
+    document.body.className=m==='normal'?'':m;
   }
   if(ev.kind==='redteam-finding'){
     findCnt++;document.getElementById('hc-rt').textContent=findCnt;
     document.getElementById('ms-rt').textContent=findCnt;
-    flash('redteam',4000);
+    flash('redteam',4000,'redteam-finding');
   }
   if(ev.kind==='fix-proposed'){
     propCnt++;document.getElementById('hc-fp').textContent=propCnt;
     document.getElementById('ms-fp').textContent=propCnt;
-    flash('remediation',4000);
+    flash('remediation',4000,'fix-proposed');
+  }
+  if(ev.kind==='reproduced'){
+    flash('defense',3000,'reproduced');
+    flash('remediation',3000,'reproduced');
+  }
+  if(ev.kind==='operator-request'&&(ev.evidence||'').includes('campaign')){
+    flash('remediation',2000,'operator-request');
   }
   const dept=KIND_DEPT[ev.kind]||ev.source_dept;
-  if(dept) flash(dept,4000);
-  if(dept&&DKEY[dept]){
-    const k=DKEY[dept];
-    dce[k]=(dce[k]||0)+1;
-    const el=document.getElementById(DEPT_EV[dept]);
-    if(el) el.textContent=`${dce[k]} event${dce[k]===1?'':'s'}`;
-  }
+  if(dept) flash(dept,4000,ev.kind);
+  if(dept&&DKEY[dept]) dce[DKEY[dept]]=(dce[DKEY[dept]]||0)+1;
 }
 
-function flash(dept,dur=4000){
+// ── Flash dept ─────────────────────────────────────────────────────────────────
+function flash(dept, dur=4000, statusKey=''){
   const cid=DEPT_CARD[dept]; if(!cid)return;
   const card=document.getElementById(cid); if(!card)return;
   card.classList.add('active');
   clearTimeout(dtimers[cid]);
+  const evEl=document.getElementById(DEPT_EV[dept]);
+  if(evEl&&statusKey){
+    const map=KIND_STATUS[statusKey]||{};
+    evEl.textContent=map[dept]||(statusKey.replace('decision:','').toUpperCase());
+  }
   dtimers[cid]=setTimeout(()=>{
     card.classList.remove('active');
-    const ev=document.getElementById(DEPT_EV[dept]);
-    if(ev) ev.textContent='idle';
+    if(evEl){
+      const k=DKEY[dept];
+      evEl.textContent=dce[k]?`${dce[k]} events`:'idle';
+    }
   },dur);
 }
 
-// ── Attack animation ──────────────────────────────────────────────────────────
+// ── Decision toast ─────────────────────────────────────────────────────────────
+function showToast(decision, rule, agentId){
+  clearTimeout(toastTimer);
+  toastEl.classList.remove('hide','ta','tb','th','tq');
+  void toastEl.offsetWidth;
+  const clsMap={allow:'ta',block:'tb',hold:'th',quarantine:'tq'};
+  toastEl.classList.add('show', clsMap[decision]||'ta');
+  document.getElementById('toast-dec').textContent=decision.toUpperCase();
+  document.getElementById('toast-rule').textContent=rule?`rule: ${rule}`:'';
+  document.getElementById('toast-agent').textContent=agentId?`agent: ${agentId}`:'';
+  toastEl.style.display='block';
+  toastTimer=setTimeout(()=>{
+    toastEl.classList.remove('show');
+    toastEl.classList.add('hide');
+    setTimeout(()=>{toastEl.style.display='none';toastEl.classList.remove('hide');},320);
+  },3200);
+}
+
+// ── Agent trust panel ──────────────────────────────────────────────────────────
+function renderTrust(){
+  const list=document.getElementById('trust-list');
+  const empty=document.getElementById('trust-empty');
+  const ids=Object.keys(agents);
+  if(!ids.length){empty.style.display='';return;}
+  empty.style.display='none';
+  list.innerHTML='';
+  ids.forEach(id=>{
+    const a=agents[id];
+    const total=(a.allow||0)+(a.block||0)+(a.hold||0)+(a.quar||0);
+    const bad=(a.block||0)+(a.quar||0);
+    const score=total?Math.round((1-bad/total)*100):100;
+    const tierCls=score>=85?'ta-trust':score>=50?'ta-warn':'ta-danger';
+    const tierLbl=score>=85?'TRUSTED':score>=50?'SUSPECT':'HOSTILE';
+    const barW=Math.max(4,score)+'%';
+    const row=document.createElement('div');
+    row.className=`ta-row ${tierCls}`;
+    row.innerHTML=`
+      <div class="ta-name" title="${id}">${id}</div>
+      <div class="ta-bar-bg"><div class="ta-bar" style="width:${barW}"></div></div>
+      <div class="ta-score">${score}%</div>
+      <div class="ta-badge">${tierLbl}</div>`;
+    list.appendChild(row);
+  });
+}
+
+// ── Attack animation ───────────────────────────────────────────────────────────
 function launchAttackAnim(){
   const atkEl=document.getElementById('atk');
   const gwEl =document.getElementById('gw');
-  if(!atkEl||!gwEl) return;
+  if(!atkEl||!gwEl)return;
   const ar=atkEl.getBoundingClientRect();
   const gr=gwEl.getBoundingClientRect();
-
   const clr=CAT_COLOR[selCat]||'#f85149';
   const bolt=document.createElement('div');
   bolt.className='atk-bolt';
-  // Bolt starts at the LEFT edge of the attack panel, vertically centered
   const startX=ar.left-90;
   const startY=ar.top+ar.height/2-1;
-  // Distance to gateway center
   const dist=gr.left+gr.width/2-startX-45;
   bolt.style.cssText=`left:${startX}px;top:${startY}px;width:90px;--bolt-clr:${clr};--bolt-dist:${dist}px`;
   document.body.appendChild(bolt);
-
-  // Impact effect after bolt arrives
   bolt.addEventListener('animationend',()=>{
     bolt.remove();
-    // Impact ring
     impRing.style.borderColor=clr;
     impRing.classList.remove('pop');
-    void impRing.offsetWidth; // reflow to restart animation
+    void impRing.offsetWidth;
     impRing.classList.add('pop');
-    // Gateway flash
     gw.classList.add('blocked-flash');
     setTimeout(()=>gw.classList.remove('blocked-flash'),700);
-    // Wake defense
-    flash('defense',3000);
-  },{ once:true });
-
-  // Red team active while bolt travels
-  flash('redteam',2000);
+    flash('defense',3000,'decision:block');
+  },{once:true});
+  flash('redteam',2000,'operator-request');
 }
 
-// ── Feed ──────────────────────────────────────────────────────────────────────
+// ── Feed ───────────────────────────────────────────────────────────────────────
 const KIND_CLS={
   'decision:allow':'da','decision:block':'db','decision:hold':'dh','decision:quarantine':'dq',
   'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'mc',
@@ -781,39 +882,32 @@ function addFeed(ev){
     :`${ev.kind}${dept} ${ev.object_id||''} ${ev.evidence||''}`;
   el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${ev.kind}</span>${detail}`;
   feedLog.prepend(el);
-  while(feedLog.children.length>200) feedLog.removeChild(feedLog.lastChild);
+  while(feedLog.children.length>200)feedLog.removeChild(feedLog.lastChild);
 }
 
 // ── Corpus & category tiles ────────────────────────────────────────────────────
 async function loadCorpus(){
   try{
-    const r=await fetch('/corpus'); if(!r.ok) return;
+    const r=await fetch('/corpus');if(!r.ok)return;
     const cases=await r.json();
-    // Group by category
     cases.forEach(c=>{
       const prefix=c.split('-')[0]||'';
       const cat=PREFIX_CAT[prefix];
       if(cat){
-        if(!corpusByCat[cat]) corpusByCat[cat]=[];
+        if(!corpusByCat[cat])corpusByCat[cat]=[];
         corpusByCat[cat].push(c);
       }
     });
-    // Update tile counts
     Object.entries(corpusByCat).forEach(([cat,list])=>{
       const el=document.getElementById('cnt-'+cat);
-      if(el) el.textContent=`${list.length} cases`;
+      if(el)el.textContent=`${list.length} cases`;
     });
-    // Enable fire button if current category has cases
     updateFireBtn();
   }catch(_){}
 }
-
 function updateFireBtn(){
-  const cases=corpusByCat[selCat]||[];
-  fireBtn.disabled=cases.length===0;
+  fireBtn.disabled=(corpusByCat[selCat]||[]).length===0;
 }
-
-// Category tile clicks
 document.querySelectorAll('.atk-cat').forEach(tile=>{
   tile.addEventListener('click',()=>{
     document.querySelectorAll('.atk-cat').forEach(t=>t.classList.remove('sel'));
@@ -823,17 +917,13 @@ document.querySelectorAll('.atk-cat').forEach(tile=>{
   });
 });
 
-// Launch attack
 fireBtn.addEventListener('click',async()=>{
   const cases=corpusByCat[selCat]||[];
-  if(!cases.length) return;
+  if(!cases.length)return;
   const chosen=cases[Math.floor(Math.random()*cases.length)];
   fireBtn.disabled=true;
   fireBtn.classList.add('firing');
-
-  // Visual animation first
   launchAttackAnim();
-
   try{
     const r=await fetch('/operator',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -850,7 +940,7 @@ fireBtn.addEventListener('click',async()=>{
   }
 });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 connect();
 loadCorpus();
 </script>
