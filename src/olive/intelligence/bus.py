@@ -63,6 +63,16 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def format_evidence(report: IncidentReport) -> str:
+    """The canonical, bounded evidence string the bus persists for a report. Shared
+    (not re-derived) so any other department that needs the persisted form - e.g.
+    to derive a stable dedup key that matches across the live and replay paths -
+    cannot drift from what `_persist` actually writes (rule 3: ≤200 chars)."""
+    return "; ".join(
+        f"{s.get('sentinel', '?')}: {s.get('evidence', '')}" for s in report.signals
+    )[:_EVIDENCE_MAX]
+
+
 @dataclass(frozen=True, slots=True)
 class IncidentObject:
     """One structured message on the bus. Deliberately has NO `content` /
@@ -183,9 +193,7 @@ class IncidentBus:
         return persisted
 
     async def _persist(self, obj: IncidentObject, signature: str) -> IncidentObject:
-        evidence = "; ".join(
-            f"{s.get('sentinel', '?')}: {s.get('evidence', '')}" for s in obj.report.signals
-        )[:_EVIDENCE_MAX]
+        evidence = format_evidence(obj.report)
         async with self._persist_lock:
             cursor = await self._conn.execute(
                 "INSERT INTO incident_events"

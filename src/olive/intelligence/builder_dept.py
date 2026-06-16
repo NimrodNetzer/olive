@@ -30,16 +30,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
 
-from olive.intelligence.bus import IncidentBus, IncidentObject
+from olive.intelligence.bus import IncidentBus, IncidentObject, format_evidence
 from olive.intelligence.reporter import IncidentReport
 
 _SUMMARY_MAX = 200  # rule 3: bounded evidence excerpt
+_ID_RETRIES = 5  # bounded retries for a cross-process PRP-NNNN id race
 
 # The two confirmed-weakness kinds the Builder reacts to. A bare `detection` has no
 # committed corpus case yet, so a proposal for it would be vague (ADR-0018 §1); it
@@ -63,15 +65,6 @@ CREATE TABLE IF NOT EXISTS builder_proposals (
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
-
-
-def _persisted_evidence(report: IncidentReport) -> str:
-    """The evidence string exactly as the bus persists it (bus._persist). Computing
-    a finding's key from THIS form makes the live path and the history-replay path
-    derive identical keys, so dedup holds across both."""
-    return "; ".join(
-        f"{s.get('sentinel', '?')}: {s.get('evidence', '')}" for s in report.signals
-    )[:_SUMMARY_MAX]
 
 
 def _finding_key(*, corpus_case_id: str | None, incident_id: str | None, evidence: str) -> str:
@@ -155,28 +148,43 @@ class ProposalLedger:
         """Create a 'proposed' row for a NOVEL weakness; return it. If a proposal
         for this `finding_key` already exists, insert nothing and return None (the
         dedup that bounds proposal-spam, ADR-0018 §6). `patch_hash` is null: the
-        runtime department authors no diff (ADR-0018 §3)."""
+        runtime department authors no diff (ADR-0018 §3).
+
+        The `PRP-NNNN` id is a server-side COUNT; the in-process `_lock` serializes
+        it here, but a second OS process (e.g. a concurrent `olive builder-dept
+        run` on the same DB) is not covered by that lock. We therefore distinguish
+        the two UNIQUE constraints on conflict: a `finding_key` collision is a real
+        dedup (return None); a `proposal_id` collision is a cross-process id race
+        and is retried with a fresh COUNT. This never silently drops a novel
+        proposal (a plain INSERT OR IGNORE would have)."""
         async with self._lock:
-            cursor = await self._conn.execute(
-                "INSERT OR IGNORE INTO builder_proposals"
-                " (proposal_id, object_id, incident_id, corpus_case_id, finding_key,"
-                "  patch_hash, summary, status, created_at)"
-                " VALUES ((SELECT 'PRP-' || printf('%04d', COUNT(*) + 1) FROM builder_proposals),"
-                " ?, ?, ?, ?, NULL, ?, 'proposed', ?) RETURNING proposal_id",
-                (
-                    object_id,
-                    incident_id,
-                    corpus_case_id,
-                    finding_key,
-                    summary[:_SUMMARY_MAX],
-                    _now(),
-                ),
-            )
-            row = await cursor.fetchone()
-            await self._conn.commit()
-        if row is None:
-            return None  # UNIQUE(finding_key) conflict - already proposed
-        return await self.get(row[0])
+            for _attempt in range(_ID_RETRIES):
+                try:
+                    cursor = await self._conn.execute(
+                        "INSERT INTO builder_proposals"
+                        " (proposal_id, object_id, incident_id, corpus_case_id, finding_key,"
+                        "  patch_hash, summary, status, created_at)"
+                        " VALUES ((SELECT 'PRP-' || printf('%04d', COUNT(*) + 1)"
+                        "          FROM builder_proposals),"
+                        " ?, ?, ?, ?, NULL, ?, 'proposed', ?) RETURNING proposal_id",
+                        (
+                            object_id,
+                            incident_id,
+                            corpus_case_id,
+                            finding_key,
+                            summary[:_SUMMARY_MAX],
+                            _now(),
+                        ),
+                    )
+                    row = await cursor.fetchone()
+                    await self._conn.commit()
+                    return await self.get(row[0])
+                except sqlite3.IntegrityError as exc:
+                    await self._conn.rollback()
+                    if "finding_key" in str(exc):
+                        return None  # another writer proposed this weakness first
+                    # else a proposal_id race with another process - retry.
+        raise RuntimeError("could not assign a unique proposal id after retries")
 
     async def get(self, proposal_id: str) -> Proposal:
         cursor = await self._conn.execute(
@@ -222,7 +230,7 @@ class BuilderDepartment:
             incident_id=obj.incident_id,
             corpus_case_id=obj.corpus_case_id,
             attack_types=list(obj.report.attack_types),
-            evidence=_persisted_evidence(obj.report),
+            evidence=format_evidence(obj.report),
         )
 
     async def run_once(self) -> int | None:
