@@ -72,3 +72,27 @@ class QueueSink:
             self._queue.put_nowait(event)
         except asyncio.QueueFull:
             self.dropped += 1
+
+
+class MultiSink:
+    """Fan one telemetry event out to several sinks (ADR-0020). The gateway takes a
+    single `telemetry=` sink, but `olive serve --ui` needs BOTH the SentinelRunner's
+    `QueueSink` and the read-only `UIBroker` fed (ADR-0017 §2: the UI is registered
+    *alongside*, never replacing, the configured sink).
+
+    Each wrapped sink keeps its own drop/never-block contract: this wrapper must not
+    let a slow or failing sink perturb the fast path, so a sink that raises is
+    isolated (counted) and the remaining sinks are still published to. It imports
+    nothing intelligence-side - the sinks are passed in as the `TelemetrySink`
+    protocol, so the layering rule (ADR-0003) holds."""
+
+    def __init__(self, *sinks: TelemetrySink) -> None:
+        self._sinks = tuple(sinks)
+        self.errors = 0  # observable: a sink that raised, never silently swallowed
+
+    async def publish(self, event: TelemetryEvent) -> None:
+        for sink in self._sinks:
+            try:
+                await sink.publish(event)
+            except Exception:  # noqa: BLE001 - one broken sink must not stop the others or the fast path
+                self.errors += 1

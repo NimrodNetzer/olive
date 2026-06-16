@@ -145,11 +145,20 @@ def build_http_app(
     lifespan,
     *,
     mcp_path: str = "/mcp",
+    extra_routes: list | None = None,
 ) -> Starlette:
-    """Assemble the Starlette app: bearer auth on every request, the MCP
-    endpoint behind RequireAuthMiddleware, and a capability-gated release
-    endpoint. The caller's `lifespan` must set `app.state.session_manager` and
-    `app.state.gateway` and run the session manager."""
+    """Assemble the Starlette app: bearer auth context on every request, the MCP
+    endpoint behind RequireAuthMiddleware, and capability-gated admin endpoints.
+    The caller's `lifespan` must set `app.state.session_manager` and
+    `app.state.gateway` and run the session manager.
+
+    `extra_routes` (ADR-0020) are appended AS-IS, deliberately NOT wrapped in
+    `RequireAuthMiddleware`: the co-mounted Command Center dashboard is read-only
+    and its `POST /operator` is announce-only (ADR-0017 §5), so it is reachable
+    without a bearer token. They are passed in by the composition root so this
+    transport module never imports `olive.ui` (the layering rule, ADR-0003). The
+    global auth-context middleware still runs but does not reject a request that
+    carries no token; only `RequireAuthMiddleware` (on `/mcp`) rejects."""
     verifier = OliveTokenVerifier(public_key_pem)
     middleware = [
         Middleware(AuthenticationMiddleware, backend=BearerAuthBackend(verifier)),
@@ -159,6 +168,7 @@ def build_http_app(
         Route(mcp_path, endpoint=RequireAuthMiddleware(_McpAsgiApp(), [], None)),
         Route("/admin/release", endpoint=_release, methods=["POST"]),
         Route("/admin/approve", endpoint=_approve, methods=["POST"]),
+        *(extra_routes or []),
     ]
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
 
@@ -182,5 +192,35 @@ def serving_lifespan(
             app.state.gateway = gateway
             async with session_manager.run():
                 yield
+
+    return lifespan
+
+
+def serving_lifespan_with_org(
+    make_resources: Callable[[], AbstractAsyncContextManager[tuple]],
+) -> Callable:
+    """Like `serving_lifespan`, but the factory yields
+    `(session_manager, gateway, org, ui_state)` (ADR-0020). `ui_state` is a dict of
+    attributes to set on `app.state` for the co-mounted dashboard (e.g. `broker`,
+    `bus`, `corpus`). The runtime org's background tasks are started AFTER the
+    session manager is running and stopped on shutdown — neither blocks the serve
+    loop. `org`/`ui_state` may be falsy, in which case this behaves like the bare
+    lifespan (so one code path serves both the demo and a plain run)."""
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        async with make_resources() as (session_manager, gateway, org, ui_state):
+            app.state.session_manager = session_manager
+            app.state.gateway = gateway
+            for key, value in (ui_state or {}).items():
+                setattr(app.state, key, value)
+            async with session_manager.run():
+                if org is not None:
+                    org.start()
+                try:
+                    yield
+                finally:
+                    if org is not None:
+                        await org.stop()
 
     return lifespan

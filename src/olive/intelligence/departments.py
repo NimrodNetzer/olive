@@ -30,6 +30,24 @@ from olive.intelligence.redteam_dept import RedTeamDepartment
 from olive.intelligence.remediation import RemediationLedger
 from olive.intelligence.reporter import IncidentReport
 from olive.intelligence.runner import SentinelRunner
+from olive.intelligence.sentinels import (
+    BehaviorSentinel,
+    DataLeakSentinel,
+    PromptInjectionSentinel,
+)
+
+
+def build_sentinels(config) -> list:
+    """The three advisory sentinels, constructed from policy (ADR-0012). All three
+    are deterministic-capable: PromptInjection is deterministic-first (re-runs the
+    trigger matcher before any LLM call), DataLeak/Behavior are pure regex/sequence.
+    So `olive serve --ui` produces real detections with NO `ANTHROPIC_API_KEY`; the
+    semantic path simply adds nothing without a key (ADR-0020 §7)."""
+    return [
+        PromptInjectionSentinel(config.injection_patterns),
+        DataLeakSentinel(),
+        BehaviorSentinel(),
+    ]
 
 
 class DefenseDepartment:
@@ -95,6 +113,30 @@ class RemediationDepartment:
         bus.subscribe(self.handle, kind="redteam-finding")
 
 
+class OperatorBridge:
+    """Turns a UI `operator-request` into the one sanctioned on-demand action: a
+    sandbox red-team drill (ADR-0017 §5 / ADR-0020 §6). Subscribes ONLY to
+    `operator-request` (never to `redteam-finding`/`fix-proposed`), so a drill it
+    triggers can never re-trigger it - no feedback loop. It calls
+    `RedTeamDepartment.run_once()` (single-flight guarded); it has NO enforcement
+    path: `force-mode-request` stays announce-only (a human with `olive:command`
+    must act), and unknown/other actions are ignored (the request object is already
+    on the audit trail)."""
+
+    def __init__(self, bus: IncidentBus, redteam: RedTeamDepartment) -> None:
+        self._bus = bus
+        self._redteam = redteam
+        self.campaigns_triggered = 0
+
+    async def handle(self, obj: IncidentObject) -> None:
+        if obj.report.action == "run-campaign-request":
+            await self._redteam.run_once()
+            self.campaigns_triggered += 1
+
+    def subscribe(self) -> None:
+        self._bus.subscribe(self.handle, kind="operator-request")
+
+
 @dataclass(slots=True)
 class RuntimeOrg:
     """The wired runtime organization. `start`/`stop` drive the SentinelRunner's
@@ -109,6 +151,7 @@ class RuntimeOrg:
     runner: SentinelRunner
     redteam: RedTeamDepartment
     builder: BuilderDepartment | None = None  # optional (ADR-0018); off unless wired
+    operator_bridge: OperatorBridge | None = None  # optional (ADR-0020); on-demand drills
 
     def start(self) -> None:
         self.runner.start()
@@ -132,6 +175,7 @@ def build_runtime_org(
     redteam_corpus_dir=None,
     redteam_interval: float | None = None,
     proposal_ledger: ProposalLedger | None = None,
+    operator_bridge: bool = False,
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
@@ -156,6 +200,10 @@ def build_runtime_org(
     if proposal_ledger is not None:
         builder = BuilderDepartment(bus, proposal_ledger)
         builder.subscribe()
+    bridge: OperatorBridge | None = None
+    if operator_bridge:
+        bridge = OperatorBridge(bus, redteam)
+        bridge.subscribe()
     return RuntimeOrg(
         breaker=breaker,
         bus=bus,
@@ -165,4 +213,5 @@ def build_runtime_org(
         redteam=redteam,
         runner=runner,
         builder=builder,
+        operator_bridge=bridge,
     )

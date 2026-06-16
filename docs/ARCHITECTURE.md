@@ -329,6 +329,22 @@ theater fires the existing sandbox `run_campaign`/`run_once()` primitive
 (ADR-0015/0016) — no new live-traffic seam. Runs as its own process; additive
 and removable like the other intelligence-side components.
 
+**Live co-mount — `olive serve --ui` (ADR-0020):** by default the dashboard is a
+separate process that only replays `history()`. Because the bus is in-process,
+`olive serve --ui` instead builds the gateway AND the Command Center in ONE
+process sharing one `IncidentBus`, one `CircuitBreaker`, one `UIBroker`, and one
+event loop, so the dashboard shows the live incident stream. A `MultiSink`
+(`gateway/telemetry.py`) fans gateway telemetry to both the SentinelRunner's
+`QueueSink` and the `UIBroker` (each keeps its own drop-on-full contract). The
+runtime org's background tasks start/stop in the ASGI lifespan. The UI routes are
+co-mounted **without** the gateway's bearer auth (injected into `build_http_app`
+from the composition root, so core never imports `olive.ui`); `/mcp` stays
+token-protected. The "fire drill" button posts `run-campaign-request`, which a
+deterministic `OperatorBridge` turns into a sandbox `run_once()` — the only
+on-demand action; `force-mode-request` stays announce-only. All additive and
+default-off; bare `olive serve` is unchanged. Works with no `ANTHROPIC_API_KEY`
+(deterministic inspectors + deterministic-first sentinels still detect).
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the

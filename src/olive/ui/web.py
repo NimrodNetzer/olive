@@ -115,27 +115,40 @@ async def _operator_endpoint(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "object_id": published.object_id, "action": action})
 
 
-def build_app(
-    broker: UIBroker,
-    bus: IncidentBus | None = None,
-    corpus_dir: Path | None = None,
-) -> Starlette:
-    """Build the Starlette ASGI app. `broker` is required (stream source);
-    `bus` is optional (enables POST /operator — without it the endpoint returns 503);
-    `corpus_dir` populates the GET /corpus list for the attack-theater."""
-    corpus: list[str] = (
+def _corpus_stems(corpus_dir: Path | None) -> list[str]:
+    return (
         sorted(p.stem for p in corpus_dir.glob("*.yaml"))
         if corpus_dir and corpus_dir.is_dir()
         else []
     )
-    routes = [
+
+
+def ui_routes() -> list:
+    """The dashboard's routes, for co-mounting onto the gateway's Starlette app
+    (ADR-0020). The endpoints read `broker`/`bus`/`corpus` from
+    `request.app.state`, which the host app's lifespan must set. Returned WITHOUT
+    any auth middleware: the dashboard is read-only and `POST /operator` is
+    announce-only (ADR-0017 §5). The static Mount is last so the specific gateway
+    routes (`/mcp`, `/admin/*`) and UI routes match first."""
+    return [
         WebSocketRoute("/ws", _ws_endpoint),
         Route("/corpus", _corpus_endpoint, methods=["GET"]),
         Route("/operator", _operator_endpoint, methods=["POST"]),
         Mount("/", StaticFiles(directory=str(_STATIC), html=True)),
     ]
-    app = Starlette(routes=routes)
+
+
+def build_app(
+    broker: UIBroker,
+    bus: IncidentBus | None = None,
+    corpus_dir: Path | None = None,
+) -> Starlette:
+    """Build the standalone Starlette ASGI app (`olive ui --web`, a separate
+    process). `broker` is required (stream source); `bus` is optional (enables
+    POST /operator — without it the endpoint returns 503); `corpus_dir` populates
+    the GET /corpus list for the attack-theater."""
+    app = Starlette(routes=ui_routes())
     app.state.broker = broker
     app.state.bus = bus
-    app.state.corpus = corpus
+    app.state.corpus = _corpus_stems(corpus_dir)
     return app

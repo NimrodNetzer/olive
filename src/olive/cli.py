@@ -119,12 +119,19 @@ def serve_http(
     port: int,
     db_override: str | None,
     json_response: bool,
+    ui: bool = False,
 ) -> None:
     """Serve over streamable HTTP with bearer-token identity enforcement.
 
     Every request must present a CA-signed token; identity is verified on the
     wire and the gateway enforces as that identity (ADR-0007). Imports are local
     so the stdio path never pays for the HTTP/ASGI stack.
+
+    When `ui` is set (ADR-0020) the gateway is wired LIVE: telemetry flows to the
+    SentinelRunner AND the read-only Command Center, the runtime org (Commander,
+    operating modes, incident bus, Defense/Remediation/Red-Team/Builder
+    departments) runs in-process, and the dashboard is co-mounted on the same app
+    so it shows the live incident stream. Default off — bare `serve` is unchanged.
     """
     import uvicorn
 
@@ -139,6 +146,12 @@ def serve_http(
     specs = _resolve_specs(config, upstream_command)
     public_key_pem = Path(ca_pubkey_path).read_bytes()
     db_path = db_override or config.db_path
+
+    if ui:
+        serve_http_live(
+            config, specs, public_key_pem, host, port, db_path, json_response, build_http_app
+        )
+        return
 
     @contextlib.asynccontextmanager
     async def make_resources():
@@ -157,6 +170,106 @@ def serve_http(
     print(
         f"[olive] serving HTTP on {host}:{port} | agent {config.agent_id} "
         f"| token-verified identity enforced",
+        file=sys.stderr,
+    )
+    uvicorn.run(app, host=host, port=port)
+
+
+def serve_http_live(
+    config, specs, public_key_pem, host, port, db_path, json_response, build_http_app
+) -> None:
+    """The `olive serve --ui` assembly (ADR-0020): one process, one event loop,
+    sharing ONE breaker + bus + UIBroker between the gateway and the co-mounted
+    Command Center. All wiring is here at the composition root; the gateway core
+    never imports the intelligence/ui layers. Works with NO ANTHROPIC_API_KEY (the
+    deterministic inspectors + deterministic-first sentinels still detect)."""
+    import os
+
+    import uvicorn
+
+    from olive.gateway.breaker import CircuitBreaker
+    from olive.gateway.telemetry import MultiSink, QueueSink
+    from olive.intelligence.builder_dept import ProposalLedger
+    from olive.intelligence.bus import IncidentBus
+    from olive.intelligence.departments import build_runtime_org, build_sentinels
+    from olive.intelligence.remediation import RemediationLedger
+    from olive.transport.http import (
+        identity_from_context,
+        serving_lifespan_with_org,
+        session_manager_for,
+    )
+    from olive.ui.broker import UIBroker
+    from olive.ui.web import _corpus_stems, ui_routes
+
+    corpus_dir = _ROOT / "evals" / "corpus"
+    hmac_key = os.urandom(32)  # one per-process bus key, reused by every department
+
+    @contextlib.asynccontextmanager
+    async def make_resources():
+        store = EventStore(db_path)
+        bus = IncidentBus(db_path, hmac_key)
+        ledger = RemediationLedger(db_path)
+        proposals = ProposalLedger(db_path)
+        await store.open()
+        await bus.open()
+        await ledger.open()
+        await proposals.open()
+        try:
+            async with AsyncExitStack() as stack:
+                upstream = await _connect_multiplex(stack, specs)
+                # One breaker shared by the gateway (trip/quarantine) and the org
+                # (Commander.set_mode); one QueueSink to the runner + UIBroker.
+                breaker = CircuitBreaker(max_blocks=config.max_blocks_before_quarantine)
+                queue_sink = QueueSink()
+                broker = UIBroker()
+                gateway = OliveGateway(
+                    config,
+                    store,
+                    build_pipeline(config),
+                    breaker=breaker,
+                    telemetry=MultiSink(queue_sink, broker),
+                )
+                org = build_runtime_org(
+                    breaker=breaker,
+                    bus=bus,
+                    ledger=ledger,
+                    queue=queue_sink.queue,
+                    sentinels=build_sentinels(config),
+                    store=store,
+                    proposal_ledger=proposals,
+                    operator_bridge=True,
+                )
+                # Seed the dashboard from history, then live-subscribe.
+                await _seed_broker(broker, bus)
+                bus.subscribe(broker.on_incident)
+                server = gateway.build_server(upstream, identity_resolver=identity_from_context)
+                ui_state = {"broker": broker, "bus": bus, "corpus": _corpus_stems(corpus_dir)}
+                yield (
+                    session_manager_for(server, json_response=json_response),
+                    gateway,
+                    org,
+                    ui_state,
+                )
+        finally:
+            await proposals.close()
+            await ledger.close()
+            await bus.close()
+            await store.close()
+
+    app = build_http_app(
+        public_key_pem,
+        serving_lifespan_with_org(make_resources),
+        extra_routes=ui_routes(),
+    )
+    if host not in ("127.0.0.1", "localhost"):
+        print(
+            f"[olive] WARNING: binding {host} exposes the UNAUTHENTICATED Command "
+            "Center dashboard + POST /operator to the network (ADR-0020)",
+            file=sys.stderr,
+        )
+    print(
+        f"[olive] serving HTTP + live Command Center on http://{host}:{port}/ | "
+        f"agent {config.agent_id} | MCP at /mcp (token-verified)",
         file=sys.stderr,
     )
     uvicorn.run(app, host=host, port=port)
@@ -521,6 +634,14 @@ def main() -> None:
         help="use SSE streaming responses instead of JSON (default JSON)",
     )
     serve.add_argument(
+        "--ui",
+        "--web",
+        dest="ui",
+        action="store_true",
+        help="run the live Command Center: wire the runtime org in-process and "
+        "co-mount the read-only dashboard at / (ADR-0020). Loopback-only by default",
+    )
+    serve.add_argument(
         "upstream",
         nargs=argparse.REMAINDER,
         help="upstream MCP server command (prefix with --)",
@@ -680,6 +801,7 @@ def main() -> None:
                 args.port,
                 args.db,
                 json_response=not args.sse,
+                ui=args.ui,
             )
         else:
             asyncio.run(run_gateway(args.config, upstream, args.db))

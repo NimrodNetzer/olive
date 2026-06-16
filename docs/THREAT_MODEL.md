@@ -182,6 +182,20 @@ this document, update the document first (via ADR if the change is structural).
   without independent re-verification. The moment a future slice lets a bus object
   directly drive enforcement without re-verification, per-department CA-signed bus
   identities become a hard prerequisite for it.
+- **Co-mounted Command Center (M7, ADR-0020):** running `olive serve --ui` mounts
+  the read-only dashboard on the same Starlette app and event loop as the
+  bearer-protected gateway. The dashboard and `POST /operator` are NOT behind the
+  gateway's bearer auth; their safety rests on the ADR-0017 §5 announce-only closed
+  action set and the UI's import-set exclusion (no `trip`/`set_mode`/Commander
+  reachable), not on authentication. The single sanctioned on-demand action,
+  `run-campaign-request`, runs only a sandbox drill (`run_once()` over
+  `build_pipeline`, never live traffic); `force-mode-request` is announce-only.
+  Default bind is loopback; `--host 0.0.0.0` would expose the unauthenticated
+  dashboard and `POST /operator` to the network and must be explicit (the gateway
+  warns). A UI WebSocket flood cannot apply backpressure to the fast path
+  (drop-on-full on `MultiSink`, the per-client WS sub-queue, and `QueueSink`).
+  Bus/breaker/mode remain in-memory/per-process; a restart loses live containment
+  and posture (same non-guarantee as ADR-0006/0014).
 - **Runtime agent company (M7, ADR-0014):** the Security Commander is
   deterministic code — no LLM decides the operating mode or any enforcement
   action. LLM agents only publish evidence objects to the bus; the deterministic

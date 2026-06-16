@@ -251,6 +251,17 @@ durable/fleet-wide mode + bus.
   build step, loopback-only default. `POST /operator` is the single inbound write
   (announce-only, same closed action set as ADR-0017 §5).
 
+**Eighth slice (built — ADR-0020):** the LIVE Command Center — the runtime org
+wired into `olive serve`.
+- ✅ **`olive serve --ui`**: one process, one event loop, sharing one bus +
+  breaker + UIBroker between the gateway and the co-mounted dashboard, so the UI
+  shows the live incident stream. A `MultiSink` fans telemetry to the
+  SentinelRunner and the UIBroker; the runtime org runs in the ASGI lifespan.
+- ✅ UI routes co-mounted **without** bearer auth (`/mcp` stays protected); the
+  "fire drill" button → `run-campaign-request` → a deterministic `OperatorBridge`
+  → a sandbox `run_once()`. Additive, default-off, no API key required for the
+  full detect → bus → UI → fix-proposal loop. Loopback-only by default.
+
 ## Later — the bets
 
 - Real agent identity: toward "SPIFFE for agents", delegation chains,
