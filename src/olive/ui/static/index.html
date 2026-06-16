@@ -32,26 +32,43 @@ body{
   height:100vh;display:flex;flex-direction:column;overflow:hidden
 }
 
-/* ── Animations ─────────────────────────────────────────── */
-@keyframes spin     {to{transform:rotate(360deg)}}
-@keyframes spinrev  {to{transform:rotate(-360deg)}}
-@keyframes breathe  {0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.04)}}
-@keyframes arm-l    {0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg)}}
-@keyframes arm-r    {0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-12deg)}}
-@keyframes eye-idle {0%,100%{opacity:.45}50%{opacity:.85}}
-@keyframes eye-hot  {0%,100%{opacity:1;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
-@keyframes line-a   {0%,100%{opacity:.25}50%{opacity:.9}}
-@keyframes line-b   {0%,100%{opacity:.15}50%{opacity:.7}}
-@keyframes screen-bg-on {0%,100%{opacity:.8}50%{opacity:1}}
-@keyframes fadein   {from{opacity:0;transform:translateY(4px)}to{opacity:1}}
-@keyframes mode-blink{0%,100%{opacity:1}50%{opacity:.3}}
-@keyframes ring-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes spin      { to{transform:rotate(360deg)} }
+@keyframes spinrev   { to{transform:rotate(-360deg)} }
+@keyframes breathe   { 0%,100%{transform:scaleY(1)}  50%{transform:scaleY(1.04)} }
+@keyframes arm-l     { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(12deg)} }
+@keyframes arm-r     { 0%,100%{transform:rotate(12deg)}  50%{transform:rotate(-12deg)} }
+@keyframes eye-idle  { 0%,100%{opacity:.5} 50%{opacity:.9} }
+@keyframes eye-hot   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:1;transform:scale(1.4)} }
+@keyframes line-a    { 0%,100%{opacity:.2} 50%{opacity:.85} }
+@keyframes line-b    { 0%,100%{opacity:.1} 50%{opacity:.6} }
+@keyframes screen-on { 0%,100%{opacity:.85} 50%{opacity:1} }
+@keyframes fadein    { from{opacity:0;transform:translateY(4px)} to{opacity:1} }
+@keyframes mode-blink{ 0%,100%{opacity:1} 50%{opacity:.25} }
+/* Agent appears (opacity 0→1 when dept activates) */
+@keyframes agent-appear { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+/* Attack bolt travels from right panel to gateway center */
+@keyframes bolt-fly {
+  0%   { opacity:1; transform:translateX(0) scaleX(1); }
+  75%  { opacity:1; transform:translateX(var(--bolt-dist)) scaleX(0.6); }
+  100% { opacity:0; transform:translateX(var(--bolt-dist)) scale(3,.2); }
+}
+/* Gateway impact ring expands and fades */
+@keyframes impact-ring {
+  0%   { transform:scale(1);   opacity:.9; }
+  100% { transform:scale(2.4); opacity:0; }
+}
+/* Block flash on gateway panel */
+@keyframes gw-block-flash {
+  0%,100%{ box-shadow:none }
+  40%    { box-shadow:0 0 60px 20px rgba(248,81,73,.45) }
+}
 
-/* ── Header ─────────────────────────────────────────────── */
+/* ── Header ──────────────────────────────────────────────── */
 header{
   display:flex;align-items:center;gap:10px;
-  padding:6px 14px;
-  background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0
+  padding:6px 14px;background:var(--surf);
+  border-bottom:1px solid var(--border);flex-shrink:0
 }
 header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 .hsub{color:var(--muted);font-size:10px;letter-spacing:.5px}
@@ -72,13 +89,14 @@ header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 /* ── Main grid ───────────────────────────────────────────── */
 main{
   flex:1;display:grid;
-  grid-template-columns:240px 1fr 270px;
-  grid-template-rows:1fr 168px;
+  grid-template-columns:240px 1fr 280px;
+  grid-template-rows:1fr 160px;
   gap:7px;padding:7px;overflow:hidden
 }
 
-/* ── Dept column ──────────────────────────────────────────── */
+/* ── Dept column ─────────────────────────────────────────── */
 #dept-col{grid-column:1;grid-row:1;display:flex;flex-direction:column;gap:7px}
+
 .dc{
   background:var(--surf);border:1px solid var(--border);
   border-radius:8px;flex:1;display:flex;flex-direction:column;
@@ -86,7 +104,7 @@ main{
 }
 .dc::before{
   content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:var(--dc-clr,var(--border));opacity:.35;
+  background:var(--dc-clr,var(--border));opacity:.3;
   transition:opacity .4s;z-index:1
 }
 .dc.active{border-color:var(--dc-clr);box-shadow:0 0 18px color-mix(in srgb,var(--dc-clr) 18%,transparent)}
@@ -95,11 +113,9 @@ main{
 #dc-rem{--dc-clr:var(--rem)}
 #dc-rt {--dc-clr:var(--rt)}
 
-/* SVG scene fills the card */
 .dc-scene{flex:1;min-height:0;display:flex}
 .dc-scene svg{width:100%;height:100%}
 
-/* Info strip */
 .dc-info{
   padding:5px 10px;border-top:1px solid var(--border);
   display:flex;align-items:center;gap:6px;flex-shrink:0;
@@ -111,15 +127,27 @@ main{
 .dc-ev{font-size:10px;color:var(--muted);transition:color .3s}
 .dc.active .dc-ev{color:var(--dc-clr)}
 
-/* ── Agent SVG element animations ─────────────────────────── */
-.ab{transform-box:fill-box;transform-origin:center bottom}
-.dc:not(.active) .ab{animation:breathe 3s ease-in-out infinite}
-.eye{transform-box:fill-box;transform-origin:center center;animation:eye-idle 2.5s ease-in-out infinite}
-.dc.active .eye{animation:eye-hot .45s ease-in-out infinite}
-.al{transform-box:fill-box;transform-origin:100% 50%}
-.ar{transform-box:fill-box;transform-origin:0% 50%}
-.dc.active .al{animation:arm-l .28s ease-in-out infinite}
-.dc.active .ar{animation:arm-r .28s ease-in-out infinite .14s}
+/* ── Agent SVG visibility ──────────────────────────────────
+   Agents are INVISIBLE when idle; fade in when dept activates */
+.ab,.eye,.al,.ar{
+  opacity:0;
+  transition:opacity .5s ease;
+}
+/* When dept is active: agents become visible */
+.dc.active .ab,
+.dc.active .al,
+.dc.active .ar  { opacity:1; }
+.dc.active .eye { opacity:1; }
+
+/* Agent animations (only kick in when active = visible) */
+.ab{ transform-box:fill-box; transform-origin:center bottom; }
+.dc.active .ab  { animation:breathe 2.5s ease-in-out infinite; }
+.eye{ transform-box:fill-box; transform-origin:center; }
+.dc.active .eye { animation:eye-hot .45s ease-in-out infinite; }
+.al { transform-box:fill-box; transform-origin:100% 50%; }
+.dc.active .al  { animation:arm-l .28s ease-in-out infinite; }
+.ar { transform-box:fill-box; transform-origin:0% 50%; }
+.dc.active .ar  { animation:arm-r .28s ease-in-out infinite .14s; }
 
 /* Monitor lines */
 .ml{animation:line-a 2.5s ease-in-out infinite}
@@ -127,16 +155,16 @@ main{
 .ml:nth-child(3){animation:line-b 2.5s ease-in-out infinite .8s}
 .ml:nth-child(4){animation-delay:1.2s}
 .ml:nth-child(5){animation:line-a 2.5s ease-in-out infinite 1.6s}
-.dc.active .ml{animation:line-a .7s ease-in-out infinite}
+.dc.active .ml  {animation:line-a .7s ease-in-out infinite}
 .dc.active .ml:nth-child(2){animation-delay:.12s}
 .dc.active .ml:nth-child(3){animation-delay:.24s}
 .dc.active .ml:nth-child(4){animation-delay:.36s}
 .dc.active .ml:nth-child(5){animation-delay:.48s}
 .msbg{transition:opacity .4s}
-.dc:not(.active) .msbg{opacity:.18}
-.dc.active .msbg{opacity:1;animation:screen-bg-on .8s ease-in-out infinite}
+.dc:not(.active) .msbg{opacity:.15}
+.dc.active .msbg{opacity:1;animation:screen-on .8s ease-in-out infinite}
 
-/* ── Gateway center ───────────────────────────────────────── */
+/* ── Gateway ──────────────────────────────────────────────── */
 #gw{
   grid-column:2;grid-row:1;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
@@ -152,6 +180,16 @@ main{
 #gw.block    {border-color:var(--red);   box-shadow:0 0 28px rgba(248,81,73,.14)}
 #gw.hold     {border-color:var(--yellow);box-shadow:0 0 28px rgba(210,153,34,.14)}
 #gw.quarantine{border-color:var(--purple);box-shadow:0 0 28px rgba(188,140,255,.14)}
+#gw.blocked-flash{animation:gw-block-flash .6s ease-out}
+
+/* Impact ring overlay (injected by JS) */
+#gw-impact-ring{
+  position:absolute;width:80px;height:80px;border-radius:50%;
+  border:2px solid var(--red);pointer-events:none;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  display:none;
+}
+#gw-impact-ring.pop{display:block;animation:impact-ring .6s ease-out forwards}
 
 #gw-rings{
   position:relative;width:148px;height:148px;
@@ -188,59 +226,84 @@ main{
 .sh .sv{color:var(--yellow)}.sq .sv{color:var(--purple)}
 .stat{display:flex;flex-direction:column;align-items:center;gap:2px}
 
-/* ── Attack theater ───────────────────────────────────────── */
+/* ── Attack Theater ──────────────────────────────────────── */
 #atk{
   grid-column:3;grid-row:1;
-  background:var(--surf);border:1px solid var(--orange);
-  border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;overflow:hidden
+  background:var(--surf);border:1px solid var(--border2);
+  border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;overflow:hidden
 }
-.ptitle{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;flex-shrink:0}
+.ptitle{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;flex-shrink:0}
 #atk .ptitle{color:var(--orange)}
-.msrow{display:flex;gap:7px;margin-bottom:10px;flex-shrink:0}
+
+/* mini counters */
+.msrow{display:flex;gap:8px;flex-shrink:0}
 .ms{
   flex:1;background:var(--surf2);border:1px solid var(--border);
-  border-radius:4px;padding:5px 6px;text-align:center
+  border-radius:6px;padding:6px 8px;text-align:center
 }
-.msv{font-size:17px;font-weight:bold;color:var(--orange)}
-.msl{font-size:9px;color:var(--muted)}
-.atk-sub{font-size:9px;letter-spacing:1px;color:var(--muted);margin-bottom:4px;flex-shrink:0}
-#corpus-list{
-  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:8px
+.msv{font-size:18px;font-weight:bold;color:var(--orange)}
+.msl{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-top:1px}
+
+/* Category tiles grid */
+.atk-cats{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:7px;flex:1;min-height:0
 }
-#corpus-list::-webkit-scrollbar{width:3px}
-#corpus-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.ci{
-  padding:3px 7px;border-radius:3px;cursor:pointer;
-  color:#8a95a8;font-size:11px;transition:background .15s,color .15s;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  display:flex;align-items:center;gap:5px
+.atk-cat{
+  background:var(--surf2);border:1px solid var(--border);
+  border-radius:7px;padding:10px 10px 8px;
+  cursor:pointer;transition:border-color .2s,background .2s,box-shadow .2s;
+  display:flex;flex-direction:column;gap:3px
 }
-.ci-tag{
-  font-size:9px;font-weight:bold;letter-spacing:.5px;
-  padding:1px 4px;border-radius:2px;flex-shrink:0;
-  background:rgba(255,255,255,.06);color:var(--muted)
+.atk-cat:hover{border-color:var(--orange);background:rgba(227,179,65,.06)}
+.atk-cat.sel{
+  border-color:var(--orange);background:rgba(227,179,65,.1);
+  box-shadow:0 0 10px rgba(227,179,65,.15)
 }
-.ci-tag.ben{color:var(--green);background:rgba(63,185,80,.12)}
-.ci-tag.inj{color:var(--red);background:rgba(248,81,73,.12)}
-.ci-tag.exf{color:var(--orange);background:rgba(227,179,65,.12)}
-.ci-tag.ctx{color:var(--blue);background:rgba(88,166,255,.12)}
-.ci-tag.esc{color:var(--purple);background:rgba(188,140,255,.12)}
-.ci-tag.chn{color:var(--yellow);background:rgba(210,153,34,.12)}
-.ci-tag.rug{color:var(--cyan);background:rgba(57,211,195,.12)}
-.ci-tag.dsc{color:var(--muted);background:rgba(255,255,255,.06)}
-.ci-name{flex:1;overflow:hidden;text-overflow:ellipsis}
-.ci:hover{background:rgba(88,166,255,.08);color:var(--blue)}
-.ci:hover .ci-tag{color:var(--blue);background:rgba(88,166,255,.15)}
-.ci.sel{background:rgba(210,153,34,.15);color:var(--orange)}
-.ci.sel .ci-tag{color:var(--orange);background:rgba(210,153,34,.2)}
+.atk-cat-icon{font-size:18px;line-height:1;margin-bottom:2px}
+.atk-cat-name{
+  font-size:10px;font-weight:bold;letter-spacing:1px;
+  color:var(--text);text-transform:uppercase
+}
+.atk-cat-desc{font-size:9px;color:var(--muted);line-height:1.4}
+.atk-cat-cnt{
+  margin-top:auto;font-size:13px;font-weight:bold;
+  color:var(--muted);padding-top:4px
+}
+.atk-cat.sel .atk-cat-cnt{color:var(--orange)}
+/* Per-category accent colors */
+.atk-cat[data-cat="inj"]     .atk-cat-name{color:var(--red)}
+.atk-cat[data-cat="inj"].sel {border-color:var(--red);background:rgba(248,81,73,.1);box-shadow:0 0 10px rgba(248,81,73,.15)}
+.atk-cat[data-cat="inj"].sel .atk-cat-cnt{color:var(--red)}
+.atk-cat[data-cat="exf"]     .atk-cat-name{color:var(--orange)}
+.atk-cat[data-cat="esc"]     .atk-cat-name{color:var(--purple)}
+.atk-cat[data-cat="esc"].sel {border-color:var(--purple);background:rgba(188,140,255,.1);box-shadow:0 0 10px rgba(188,140,255,.15)}
+.atk-cat[data-cat="esc"].sel .atk-cat-cnt{color:var(--purple)}
+.atk-cat[data-cat="evd"]     .atk-cat-name{color:var(--cyan)}
+.atk-cat[data-cat="evd"].sel {border-color:var(--cyan);background:rgba(57,211,195,.08);box-shadow:0 0 10px rgba(57,211,195,.12)}
+.atk-cat[data-cat="evd"].sel .atk-cat-cnt{color:var(--cyan)}
+
+/* Launch button */
 #fire-btn{
-  width:100%;padding:7px;background:rgba(210,153,34,.1);
-  border:1px solid var(--yellow);border-radius:4px;color:var(--orange);
-  font-family:inherit;font-size:11px;cursor:pointer;letter-spacing:.5px;
-  transition:background .2s,box-shadow .2s;flex-shrink:0
+  width:100%;padding:10px;flex-shrink:0;
+  background:rgba(248,81,73,.12);
+  border:1px solid var(--red);border-radius:6px;
+  color:var(--red);font-family:inherit;font-size:12px;font-weight:bold;
+  letter-spacing:2px;cursor:pointer;
+  transition:background .2s,box-shadow .2s
 }
-#fire-btn:hover{background:rgba(210,153,34,.22);box-shadow:0 0 8px rgba(210,153,34,.2)}
-#fire-btn:disabled{opacity:.4;cursor:not-allowed}
+#fire-btn:hover:not(:disabled){background:rgba(248,81,73,.22);box-shadow:0 0 16px rgba(248,81,73,.3)}
+#fire-btn:disabled{opacity:.35;cursor:not-allowed}
+#fire-btn.firing{animation:mode-blink .3s ease-in-out infinite}
+
+/* Attack bolt (created by JS, positioned via CSS var) */
+.atk-bolt{
+  position:fixed;height:3px;border-radius:2px;
+  background:linear-gradient(to left,transparent,var(--bolt-clr));
+  box-shadow:0 0 8px var(--bolt-clr),0 0 2px var(--bolt-clr);
+  pointer-events:none;z-index:9999;
+  animation:bolt-fly .7s ease-in forwards
+}
 
 /* ── Feed panel ───────────────────────────────────────────── */
 #feed{
@@ -257,13 +320,13 @@ main{
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   animation:fadein .3s ease;border-left:2px solid transparent
 }
-.fe.da{color:var(--green);  border-left-color:var(--green)}
-.fe.db{color:var(--red);    border-left-color:var(--red)}
-.fe.dh{color:var(--yellow); border-left-color:var(--yellow)}
-.fe.dq{color:var(--purple); border-left-color:var(--purple)}
-.fe.rt{color:var(--orange); border-left-color:var(--orange)}
-.fe.fp{color:var(--cyan);   border-left-color:var(--cyan)}
-.fe.op{color:var(--blue);   border-left-color:var(--blue)}
+.fe.da{color:var(--green);  border-left-color:rgba(63,185,80,.5)}
+.fe.db{color:var(--red);    border-left-color:rgba(248,81,73,.5)}
+.fe.dh{color:var(--yellow); border-left-color:rgba(210,153,34,.5)}
+.fe.dq{color:var(--purple); border-left-color:rgba(188,140,255,.5)}
+.fe.rt{color:var(--orange); border-left-color:rgba(227,179,65,.5)}
+.fe.fp{color:var(--cyan);   border-left-color:rgba(57,211,195,.5)}
+.fe.op{color:var(--blue);   border-left-color:rgba(88,166,255,.5)}
 .fe.mc{color:var(--purple); border-left-color:var(--purple);font-weight:bold}
 .fe.df{color:var(--muted)}
 .fts{color:var(--dim);margin-right:5px}
@@ -288,230 +351,208 @@ main{
 
 <main>
 
-<!-- ── Left: Department Offices ──────────────────────────────── -->
+<!-- ── Department offices ─────────────────────────────────── -->
 <div id="dept-col">
 
-  <!-- DEFENSE OFFICE -->
+  <!-- DEFENSE -->
   <div class="dc" id="dc-def">
     <div class="dc-scene">
       <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-        <!-- Room -->
         <rect width="220" height="115" fill="#060b13"/>
         <rect x="0" y="90" width="220" height="25" fill="#080d15"/>
         <line x1="0" y1="90" x2="220" y2="90" stroke="#1a2235" stroke-width="1"/>
-        <!-- Wall traces -->
         <path d="M10,8 L10,42 L48,42" stroke="#131f30" stroke-width=".6" fill="none"/>
         <path d="M210,8 L210,38 L172,38" stroke="#131f30" stroke-width=".6" fill="none"/>
         <circle cx="10" cy="8" r="1.8" fill="#131f30"/>
         <circle cx="210" cy="8" r="1.8" fill="#131f30"/>
-        <!-- Shield badge on wall -->
-        <path d="M193,5 L204,5 L204,18 L198.5,23 L193,18 Z" fill="none" stroke="#58a6ff" stroke-width="1.2" opacity=".45"/>
-        <line x1="198.5" y1="8" x2="198.5" y2="16" stroke="#58a6ff" stroke-width="1" opacity=".3"/>
+        <!-- Shield on wall -->
+        <path d="M193,5 L204,5 L204,18 L198.5,23 L193,18 Z" fill="none" stroke="#58a6ff" stroke-width="1.2" opacity=".4"/>
+        <line x1="198.5" y1="8" x2="198.5" y2="16" stroke="#58a6ff" stroke-width="1" opacity=".25"/>
         <!-- Desk -->
         <rect x="15" y="80" width="190" height="10" rx="2" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
         <rect x="20" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
         <rect x="193" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
         <!-- Left monitor -->
         <rect x="28" y="46" width="54" height="36" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
-        <rect x="30" y="48" width="50" height="28" rx="1.5" class="msbg" fill="#001830" opacity=".18"/>
-        <rect x="32" y="50" width="32" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".25"/>
-        <rect x="32" y="55" width="22" height="2" rx="1" class="ml" fill="#3fb950" opacity=".2"/>
-        <rect x="32" y="60" width="38" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".25"/>
-        <rect x="32" y="65" width="16" height="2" rx="1" class="ml" fill="#3fb950" opacity=".2"/>
-        <rect x="32" y="70" width="28" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".2"/>
+        <rect x="30" y="48" width="50" height="28" rx="1.5" class="msbg" fill="#001830" opacity=".15"/>
+        <rect x="32" y="50" width="32" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
+        <rect x="32" y="55" width="22" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
+        <rect x="32" y="60" width="38" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
+        <rect x="32" y="65" width="16" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
+        <rect x="32" y="70" width="28" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".18"/>
         <rect x="53" y="82" width="7" height="5" rx="1" fill="#0f1520"/>
         <!-- Right monitor -->
         <rect x="130" y="44" width="66" height="38" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
-        <rect x="132" y="46" width="62" height="30" rx="1.5" class="msbg" fill="#001030" opacity=".18"/>
-        <rect x="134" y="48" width="30" height="2" rx="1" class="ml" fill="#3fb950" opacity=".25"/>
-        <rect x="134" y="53" width="44" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".2"/>
-        <rect x="134" y="58" width="20" height="2" rx="1" class="ml" fill="#f85149" opacity=".18"/>
-        <rect x="134" y="63" width="36" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
-        <rect x="134" y="68" width="26" height="2" rx="1" class="ml" fill="#3fb950" opacity=".2"/>
+        <rect x="132" y="46" width="62" height="30" rx="1.5" class="msbg" fill="#001030" opacity=".15"/>
+        <rect x="134" y="48" width="30" height="2" rx="1" class="ml" fill="#3fb950" opacity=".22"/>
+        <rect x="134" y="53" width="44" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".18"/>
+        <rect x="134" y="58" width="20" height="2" rx="1" class="ml" fill="#f85149" opacity=".15"/>
+        <rect x="134" y="63" width="36" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".2"/>
+        <rect x="134" y="68" width="26" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
         <rect x="159" y="82" width="8" height="5" rx="1" fill="#0f1520"/>
-        <!-- Agent (centered) -->
+        <!-- Agent (invisible when idle via CSS) -->
         <g class="ab">
           <rect x="97" y="56" width="24" height="26" rx="4" fill="#0f1520" stroke="#1a2235" stroke-width=".8"/>
           <rect x="108" y="51" width="4" height="7" fill="#0f1520"/>
           <circle cx="110" cy="44" r="12" fill="#0f1520" stroke="#1a2235" stroke-width="1"/>
-          <line x1="110" y1="32" x2="110" y2="36" stroke="#58a6ff" stroke-width="1.2" opacity=".5"/>
-          <circle cx="110" cy="31" r="2" fill="#58a6ff" opacity=".5"/>
+          <line x1="110" y1="32" x2="110" y2="36" stroke="#58a6ff" stroke-width="1.2" opacity=".6"/>
+          <circle cx="110" cy="31" r="2" fill="#58a6ff" opacity=".6"/>
         </g>
         <circle class="eye" cx="106" cy="44" r="2.8" fill="#58a6ff"/>
         <circle class="eye" cx="114" cy="44" r="2.8" fill="#58a6ff"/>
-        <!-- Arms -->
         <rect class="al" x="80" y="60" width="17" height="6" rx="3" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
         <rect class="ar" x="121" y="60" width="17" height="6" rx="3" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
-        <rect x="98" y="82" width="22" height="4" rx="1" fill="#1a2235" opacity=".5"/>
-        <!-- Room label -->
-        <text x="7" y="88" fill="#58a6ff" font-family="monospace" font-size="6" opacity=".4">DEFENSE</text>
+        <rect x="98" y="82" width="22" height="4" rx="1" fill="#1a2235" opacity=".4"/>
+        <text x="7" y="88" fill="#58a6ff" font-family="monospace" font-size="6" opacity=".35">DEFENSE</text>
       </svg>
     </div>
     <div class="dc-info">
       <div class="dc-dot"></div>
       <div class="dc-name">DEFENSE</div>
-      <div class="dc-ev" id="ev-def">0 events</div>
+      <div class="dc-ev" id="ev-def">idle</div>
     </div>
   </div>
 
-  <!-- REMEDIATION OFFICE -->
+  <!-- REMEDIATION -->
   <div class="dc" id="dc-rem">
     <div class="dc-scene">
       <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
         <rect width="220" height="115" fill="#0c0a04"/>
         <rect x="0" y="90" width="220" height="25" fill="#120e06"/>
         <line x1="0" y1="90" x2="220" y2="90" stroke="#2d2010" stroke-width="1"/>
-        <!-- Wall traces amber -->
         <path d="M12,6 L12,40 L52,40" stroke="#211708" stroke-width=".6" fill="none"/>
         <path d="M208,6 L208,36 L168,36" stroke="#211708" stroke-width=".6" fill="none"/>
-        <!-- Wrench icon -->
-        <g opacity=".45" transform="translate(194,4)">
-          <path d="M4,0 Q8,0 8,4 L8,16 Q8,20 4,20 Q0,20 0,16 L0,4 Q0,0 4,0 Z"
-                fill="none" stroke="#d29922" stroke-width="1.2"/>
+        <g opacity=".4" transform="translate(194,4)">
+          <path d="M4,0 Q8,0 8,4 L8,16 Q8,20 4,20 Q0,20 0,16 L0,4 Q0,0 4,0 Z" fill="none" stroke="#d29922" stroke-width="1.2"/>
           <line x1="4" y1="6" x2="4" y2="14" stroke="#d29922" stroke-width="2"/>
         </g>
-        <!-- Workbench -->
         <rect x="10" y="74" width="200" height="16" rx="2" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
         <rect x="10" y="84" width="200" height="6" rx="1" fill="#201608"/>
         <rect x="15" y="90" width="8" height="14" rx="1" fill="#120e06"/>
         <rect x="197" y="90" width="8" height="14" rx="1" fill="#120e06"/>
-        <!-- Tools scattered on bench -->
-        <rect x="18" y="77" width="3" height="8" rx="1" fill="#d29922" opacity=".4"/>
-        <rect x="24" y="76" width="2" height="9" rx=".5" fill="#d29922" opacity=".35"/>
-        <circle cx="32" cy="79" r="2.5" fill="none" stroke="#d29922" stroke-width="1" opacity=".4"/>
-        <rect x="178" y="77" width="12" height="8" rx="1" fill="none" stroke="#d29922" stroke-width=".8" opacity=".35"/>
-        <rect x="193" y="78" width="9" height="6" rx="1" fill="none" stroke="#d29922" stroke-width=".7" opacity=".28"/>
-        <!-- Terminal on bench -->
+        <rect x="18" y="77" width="3" height="8" rx="1" fill="#d29922" opacity=".35"/>
+        <rect x="24" y="76" width="2" height="9" rx=".5" fill="#d29922" opacity=".3"/>
+        <circle cx="32" cy="79" r="2.5" fill="none" stroke="#d29922" stroke-width="1" opacity=".35"/>
+        <rect x="178" y="77" width="12" height="8" rx="1" fill="none" stroke="#d29922" stroke-width=".8" opacity=".3"/>
         <rect x="95" y="40" width="60" height="36" rx="2" fill="#0a0802" stroke="#2d2010" stroke-width="1"/>
-        <rect x="97" y="42" width="56" height="28" rx="1.5" class="msbg" fill="#1a1000" opacity=".18"/>
-        <rect x="99" y="44" width="36" height="2" rx="1" class="ml" fill="#d29922" opacity=".3"/>
-        <rect x="99" y="49" width="24" height="2" rx="1" class="ml" fill="#3fb950" opacity=".25"/>
-        <rect x="99" y="54" width="42" height="2" rx="1" class="ml" fill="#d29922" opacity=".28"/>
-        <rect x="99" y="59" width="18" height="2" rx="1" class="ml" fill="#3fb950" opacity=".3"/>
-        <rect x="99" y="64" width="30" height="2" rx="1" class="ml" fill="#d29922" opacity=".22"/>
+        <rect x="97" y="42" width="56" height="28" rx="1.5" class="msbg" fill="#1a1000" opacity=".15"/>
+        <rect x="99" y="44" width="36" height="2" rx="1" class="ml" fill="#d29922" opacity=".28"/>
+        <rect x="99" y="49" width="24" height="2" rx="1" class="ml" fill="#3fb950" opacity=".22"/>
+        <rect x="99" y="54" width="42" height="2" rx="1" class="ml" fill="#d29922" opacity=".25"/>
+        <rect x="99" y="59" width="18" height="2" rx="1" class="ml" fill="#3fb950" opacity=".28"/>
+        <rect x="99" y="64" width="30" height="2" rx="1" class="ml" fill="#d29922" opacity=".2"/>
         <rect x="121" y="76" width="8" height="4" rx="1" fill="#1a1206"/>
-        <!-- Agent (left side) -->
         <g class="ab">
           <rect x="42" y="48" width="22" height="28" rx="4" fill="#1a1206" stroke="#2d2010" stroke-width=".8"/>
           <rect x="52" y="43" width="4" height="7" fill="#1a1206"/>
           <circle cx="54" cy="36" r="12" fill="#1a1206" stroke="#2d2010" stroke-width="1"/>
-          <line x1="54" y1="24" x2="54" y2="28" stroke="#d29922" stroke-width="1.2" opacity=".5"/>
-          <circle cx="54" cy="23" r="2" fill="#d29922" opacity=".5"/>
+          <line x1="54" y1="24" x2="54" y2="28" stroke="#d29922" stroke-width="1.2" opacity=".6"/>
+          <circle cx="54" cy="23" r="2" fill="#d29922" opacity=".6"/>
         </g>
         <circle class="eye" cx="50" cy="36" r="2.8" fill="#d29922"/>
         <circle class="eye" cx="58" cy="36" r="2.8" fill="#d29922"/>
-        <!-- Arms -->
         <rect class="al" x="25" y="52" width="17" height="6" rx="3" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
         <rect class="ar" x="64" y="52" width="17" height="6" rx="3" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
-        <text x="7" y="88" fill="#d29922" font-family="monospace" font-size="6" opacity=".4">REMEDIATION</text>
+        <text x="7" y="88" fill="#d29922" font-family="monospace" font-size="6" opacity=".35">REMEDIATION</text>
       </svg>
     </div>
     <div class="dc-info">
       <div class="dc-dot"></div>
       <div class="dc-name">REMEDIATION</div>
-      <div class="dc-ev" id="ev-rem">0 events</div>
+      <div class="dc-ev" id="ev-rem">idle</div>
     </div>
   </div>
 
-  <!-- RED TEAM OFFICE -->
+  <!-- RED TEAM -->
   <div class="dc" id="dc-rt">
     <div class="dc-scene">
       <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
         <rect width="220" height="115" fill="#0e0505"/>
         <rect x="0" y="90" width="220" height="25" fill="#140808"/>
         <line x1="0" y1="90" x2="220" y2="90" stroke="#2d1515" stroke-width="1"/>
-        <!-- Wall traces red -->
         <path d="M12,8 L12,44 L55,44" stroke="#2a1010" stroke-width=".6" fill="none"/>
         <path d="M208,8 L208,40 L165,40" stroke="#2a1010" stroke-width=".6" fill="none"/>
-        <!-- Crosshair on wall -->
-        <circle cx="197" cy="14" r="10" fill="none" stroke="#f85149" stroke-width="1" opacity=".4"/>
-        <circle cx="197" cy="14" r="6"  fill="none" stroke="#f85149" stroke-width=".8" opacity=".3"/>
-        <circle cx="197" cy="14" r="1.5" fill="#f85149" opacity=".35"/>
-        <line x1="191" y1="14" x2="203" y2="14" stroke="#f85149" stroke-width=".6" opacity=".4"/>
-        <line x1="197" y1="8"  x2="197" y2="20"  stroke="#f85149" stroke-width=".6" opacity=".4"/>
-        <!-- Desk -->
+        <!-- Crosshair -->
+        <circle cx="197" cy="14" r="10" fill="none" stroke="#f85149" stroke-width="1" opacity=".35"/>
+        <circle cx="197" cy="14" r="6"  fill="none" stroke="#f85149" stroke-width=".8" opacity=".25"/>
+        <circle cx="197" cy="14" r="1.5" fill="#f85149" opacity=".3"/>
+        <line x1="191" y1="14" x2="203" y2="14" stroke="#f85149" stroke-width=".6" opacity=".35"/>
+        <line x1="197" y1="8"  x2="197" y2="20"  stroke="#f85149" stroke-width=".6" opacity=".35"/>
         <rect x="15" y="80" width="190" height="10" rx="2" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
         <rect x="20" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
         <rect x="193" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
-        <!-- Large hacking terminal -->
+        <!-- Main hacking terminal -->
         <rect x="108" y="38" width="78" height="44" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
-        <rect x="110" y="40" width="74" height="36" rx="1.5" class="msbg" fill="#200000" opacity=".18"/>
-        <!-- Terminal text lines -->
-        <rect x="112" y="42" width="40" height="2" rx=".5" class="ml" fill="#f85149" opacity=".7"/>
-        <rect x="112" y="47" width="30" height="2" rx=".5" class="ml" fill="#f85149" opacity=".5"/>
-        <rect x="112" y="52" width="50" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".5"/>
-        <rect x="112" y="57" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
-        <rect x="112" y="62" width="36" height="2" rx=".5" class="ml" fill="#f85149" opacity=".4"/>
-        <rect x="112" y="67" width="10" height="2" rx=".5" class="ml" fill="#f85149" opacity=".6"/>
+        <rect x="110" y="40" width="74" height="36" rx="1.5" class="msbg" fill="#200000" opacity=".15"/>
+        <rect x="112" y="42" width="40" height="2" rx=".5" class="ml" fill="#f85149" opacity=".65"/>
+        <rect x="112" y="47" width="30" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
+        <rect x="112" y="52" width="50" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".45"/>
+        <rect x="112" y="57" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".4"/>
+        <rect x="112" y="62" width="36" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
+        <rect x="112" y="67" width="10" height="2" rx=".5" class="ml" fill="#f85149" opacity=".55"/>
         <rect x="143" y="82" width="8" height="4" rx="1" fill="#140808"/>
-        <!-- Small secondary screen -->
+        <!-- Small secondary monitor -->
         <rect x="22" y="44" width="50" height="34" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
-        <rect x="24" y="46" width="46" height="26" rx="1.5" class="msbg" fill="#180000" opacity=".18"/>
-        <rect x="26" y="48" width="26" height="2" rx=".5" class="ml" fill="#f85149" opacity=".5"/>
-        <rect x="26" y="53" width="18" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".45"/>
-        <rect x="26" y="58" width="34" height="2" rx=".5" class="ml" fill="#f85149" opacity=".4"/>
-        <rect x="26" y="63" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
+        <rect x="24" y="46" width="46" height="26" rx="1.5" class="msbg" fill="#180000" opacity=".15"/>
+        <rect x="26" y="48" width="26" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
+        <rect x="26" y="53" width="18" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".4"/>
+        <rect x="26" y="58" width="34" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
+        <rect x="26" y="63" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".3"/>
         <rect x="43" y="78" width="7" height="4" rx="1" fill="#140808"/>
         <!-- Agent -->
         <g class="ab">
           <rect x="80" y="50" width="22" height="30" rx="4" fill="#140808" stroke="#2d1515" stroke-width=".8"/>
           <rect x="90" y="45" width="4" height="7" fill="#140808"/>
           <circle cx="92" cy="38" r="12" fill="#140808" stroke="#2d1515" stroke-width="1"/>
-          <line x1="92" y1="26" x2="92" y2="30" stroke="#f85149" stroke-width="1.2" opacity=".5"/>
-          <circle cx="92" cy="25" r="2" fill="#f85149" opacity=".5"/>
+          <line x1="92" y1="26" x2="92" y2="30" stroke="#f85149" stroke-width="1.2" opacity=".6"/>
+          <circle cx="92" cy="25" r="2" fill="#f85149" opacity=".6"/>
         </g>
         <circle class="eye" cx="88" cy="38" r="2.8" fill="#f85149"/>
         <circle class="eye" cx="96" cy="38" r="2.8" fill="#f85149"/>
-        <!-- Arms -->
         <rect class="al" x="63" y="54" width="17" height="6" rx="3" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
         <rect class="ar" x="102" y="54" width="17" height="6" rx="3" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
         <rect x="80" y="82" width="22" height="4" rx="1" fill="#2d1515" opacity=".4"/>
-        <text x="7" y="88" fill="#f85149" font-family="monospace" font-size="6" opacity=".4">RED TEAM</text>
+        <text x="7" y="88" fill="#f85149" font-family="monospace" font-size="6" opacity=".35">RED TEAM</text>
       </svg>
     </div>
     <div class="dc-info">
       <div class="dc-dot"></div>
       <div class="dc-name">RED TEAM</div>
-      <div class="dc-ev" id="ev-rt">0 events</div>
+      <div class="dc-ev" id="ev-rt">idle</div>
     </div>
   </div>
 
 </div><!-- /#dept-col -->
 
-<!-- ── Gateway node ─────────────────────────────────────────── -->
+<!-- ── Gateway ───────────────────────────────────────────────── -->
 <div id="gw">
+  <div id="gw-impact-ring"></div>
   <div id="gw-rings">
     <svg viewBox="0 0 148 148" xmlns="http://www.w3.org/2000/svg">
-      <!-- Corner frame traces -->
       <path d="M8,8 L26,8 L26,26"   stroke="#1a2235" stroke-width=".6" fill="none"/>
       <path d="M140,8 L122,8 L122,26" stroke="#1a2235" stroke-width=".6" fill="none"/>
       <path d="M8,140 L26,140 L26,122" stroke="#1a2235" stroke-width=".6" fill="none"/>
       <path d="M140,140 L122,140 L122,122" stroke="#1a2235" stroke-width=".6" fill="none"/>
-      <!-- Outer dashed ring -->
       <circle cx="74" cy="74" r="68" fill="none" stroke="#1a2235" stroke-width="1"
               stroke-dasharray="5 7" class="ro"/>
-      <!-- Node dots on outer ring -->
       <circle cx="74" cy="6" r="3" fill="#1a2235" class="ro"/>
       <circle cx="142" cy="74" r="3" fill="#1a2235" class="ro"/>
       <circle cx="74" cy="142" r="3" fill="#1a2235" class="ro"/>
       <circle cx="6" cy="74" r="3" fill="#1a2235" class="ro"/>
-      <!-- Mid ring: decision arc lives here -->
       <circle cx="74" cy="74" r="54" fill="none" stroke="#151e2e" stroke-width="1.5"
               stroke-dasharray="65 15 8 12" class="rm"/>
       <circle cx="74" cy="74" r="54" fill="none" stroke="var(--green)" stroke-width="2.5"
               stroke-dasharray="32 108" stroke-dashoffset="0"
-              id="arc" class="rm" opacity=".75"
-              style="transition:stroke .4s"/>
-      <!-- Inner ring -->
+              id="arc" class="rm" opacity=".75" style="transition:stroke .4s"/>
       <circle cx="74" cy="74" r="38" fill="none" stroke="#131c2a" stroke-width="1"
               stroke-dasharray="3 6" class="ri"/>
     </svg>
     <div id="gw-core">🫒</div>
   </div>
   <div id="gw-name">OLIVE GATEWAY</div>
-  <div id="gw-sub">AI FIREWALL · ZERO TRUST MCP</div>
+  <div id="gw-sub">AI FIREWALL &middot; ZERO TRUST MCP</div>
   <div id="gw-dec">—</div>
-  <div id="gw-rule">awaiting events…</div>
+  <div id="gw-rule">awaiting events&hellip;</div>
   <div id="gw-stats">
     <div class="stat sa"><span class="sv" id="st-a">0</span><span class="sl">ALLOW</span></div>
     <div class="stat sb"><span class="sv" id="st-b">0</span><span class="sl">BLOCK</span></div>
@@ -520,21 +561,49 @@ main{
   </div>
 </div>
 
-<!-- ── Attack theater ─────────────────────────────────────────── -->
+<!-- ── Attack Theater ─────────────────────────────────────────── -->
 <div id="atk">
-  <div class="ptitle">🎯 ATTACK THEATER — SANDBOX</div>
+  <div class="ptitle">🎯 ATTACK THEATER &mdash; SANDBOX</div>
+
   <div class="msrow">
     <div class="ms"><div class="msv" id="ms-rt">0</div><div class="msl">RT FINDINGS</div></div>
     <div class="ms"><div class="msv" id="ms-fp">0</div><div class="msl">FIX PROPS</div></div>
   </div>
-  <div class="atk-sub">EVAL CORPUS CASES</div>
-  <div id="corpus-list"></div>
-  <button id="fire-btn" disabled>⚡ Fire Drill (request)</button>
+
+  <!-- Attack category selector -->
+  <div class="atk-cats">
+    <div class="atk-cat sel" data-cat="inj">
+      <div class="atk-cat-icon">💉</div>
+      <div class="atk-cat-name">INJECTION</div>
+      <div class="atk-cat-desc">Prompt overrides, instruction hijack</div>
+      <div class="atk-cat-cnt" id="cnt-inj">—</div>
+    </div>
+    <div class="atk-cat" data-cat="exf">
+      <div class="atk-cat-icon">📤</div>
+      <div class="atk-cat-name">EXFILTRATION</div>
+      <div class="atk-cat-desc">Data leakage via responses</div>
+      <div class="atk-cat-cnt" id="cnt-exf">—</div>
+    </div>
+    <div class="atk-cat" data-cat="esc">
+      <div class="atk-cat-icon">🔐</div>
+      <div class="atk-cat-name">ESCALATION</div>
+      <div class="atk-cat-desc">Privilege &amp; policy bypass</div>
+      <div class="atk-cat-cnt" id="cnt-esc">—</div>
+    </div>
+    <div class="atk-cat" data-cat="evd">
+      <div class="atk-cat-icon">🔀</div>
+      <div class="atk-cat-name">EVASION</div>
+      <div class="atk-cat-desc">Encoded &amp; chained attacks</div>
+      <div class="atk-cat-cnt" id="cnt-evd">—</div>
+    </div>
+  </div>
+
+  <button id="fire-btn" disabled>&#9889; LAUNCH ATTACK</button>
 </div>
 
-<!-- ── Mitigation feed ─────────────────────────────────────────── -->
+<!-- ── Mitigation feed ────────────────────────────────────────── -->
 <div id="feed">
-  <div class="ptitle">⚡ MITIGATION FEED</div>
+  <div class="ptitle">&#9889; MITIGATION FEED</div>
   <div id="feed-log"></div>
 </div>
 
@@ -542,109 +611,101 @@ main{
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-const st = {allow:0, block:0, hold:0, quar:0};
-const dce = {def:0, rem:0, rt:0};
-let selCase=null, findCnt=0, propCnt=0, detCnt=0;
+const st={allow:0,block:0,hold:0,quar:0};
+const dce={def:0,rem:0,rt:0};
+let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0;
 const dtimers={};
 
-const DEPT_CARD = {defense:'dc-def', remediation:'dc-rem', redteam:'dc-rt'};
-const DEPT_EV   = {defense:'ev-def', remediation:'ev-rem', redteam:'ev-rt'};
-const DKEY      = {defense:'def',   remediation:'rem',     redteam:'rt'};
-const KIND_DEPT = {
+const DEPT_CARD={defense:'dc-def',remediation:'dc-rem',redteam:'dc-rt'};
+const DEPT_EV  ={defense:'ev-def',remediation:'ev-rem',redteam:'ev-rt'};
+const DKEY     ={defense:'def',   remediation:'rem',   redteam:'rt'};
+const KIND_DEPT={
   detection:'defense', reproduced:'defense',
   'redteam-finding':'redteam',
   'fix-proposed':'remediation',
 };
+// Which corpus prefixes map to which attack category
+const PREFIX_CAT={
+  inj:'inj', exf:'exf',
+  esc:'esc', ctx:'esc',        // context-policy = escalation family
+  chn:'evd', rug:'evd', desc:'evd',  // chained/rug-pull/desc-poison = evasion
+};
+const CAT_COLOR={inj:'#f85149', exf:'#e3b341', esc:'#bc8cff', evd:'#39d3c3'};
 
 // ── DOM ──────────────────────────────────────────────────────────────────────
-const dot     = document.getElementById('conn-dot');
-const lbl     = document.getElementById('conn-lbl');
-const gw      = document.getElementById('gw');
-const gwDec   = document.getElementById('gw-dec');
-const gwRule  = document.getElementById('gw-rule');
-const arc     = document.getElementById('arc');
-const mode    = document.getElementById('mode-badge');
-const feedLog = document.getElementById('feed-log');
-const fireBtn = document.getElementById('fire-btn');
-const corpEl  = document.getElementById('corpus-list');
+const dot    =document.getElementById('conn-dot');
+const lbl    =document.getElementById('conn-lbl');
+const gw     =document.getElementById('gw');
+const gwDec  =document.getElementById('gw-dec');
+const gwRule =document.getElementById('gw-rule');
+const arc    =document.getElementById('arc');
+const mode   =document.getElementById('mode-badge');
+const feedLog=document.getElementById('feed-log');
+const fireBtn=document.getElementById('fire-btn');
+const impRing=document.getElementById('gw-impact-ring');
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
-let ws, rdelay=1500, _wsOpenedAt=0;
-function connect() {
-  const proto = location.protocol==='https:'?'wss':'ws';
-  try { ws = new WebSocket(`${proto}://${location.host}/ws`); } catch(_){ return; }
-  _wsOpenedAt = Date.now();
-
-  ws.onopen = ()=>{
-    dot.classList.add('live'); lbl.textContent='live'; rdelay=1500;
-  };
-  ws.onmessage = (e)=>{ try{handle(JSON.parse(e.data));}catch(_){} };
-
-  const _retry = ()=>{
+let ws, rdelay=1500, _wsAt=0;
+function connect(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  try{ws=new WebSocket(`${proto}://${location.host}/ws`);}catch(_){return;}
+  _wsAt=Date.now();
+  ws.onopen =()=>{dot.classList.add('live');lbl.textContent='live';rdelay=1500;};
+  ws.onmessage=(e)=>{try{handle(JSON.parse(e.data));}catch(_){}};
+  const retry=()=>{
     dot.classList.remove('live');
-    // If connection died within 800ms the server likely doesn't support WS yet;
-    // back off faster to avoid hammering.
-    const quick = (Date.now()-_wsOpenedAt) < 800;
-    if(quick) rdelay=Math.min(rdelay*2, 30000);
-    else      rdelay=Math.min(rdelay*1.4, 15000);
+    if((Date.now()-_wsAt)<800) rdelay=Math.min(rdelay*2,30000);
+    else rdelay=Math.min(rdelay*1.4,15000);
     lbl.textContent=`reconnect ${Math.round(rdelay/1e3)}s`;
-    setTimeout(connect, rdelay);
+    setTimeout(connect,rdelay);
   };
-  ws.onclose = _retry;
-  ws.onerror = ()=>{}; // onerror always fires before onclose; let onclose handle it
+  ws.onclose=retry;
+  ws.onerror=()=>{};
 }
 
-// ── Event dispatch ───────────────────────────────────────────────────────────
-function handle(ev) {
-  if (ev.kind==='decision') onDecision(ev);
-  else                      onIntel(ev);
+// ── Events ────────────────────────────────────────────────────────────────────
+function handle(ev){
+  if(ev.kind==='decision') onDecision(ev);
+  else                     onIntel(ev);
   addFeed(ev);
 }
 
-function onDecision(ev) {
+function onDecision(ev){
   const d=ev.decision||'';
   gw.className=d; gwDec.className=d;
   gwDec.textContent=d.toUpperCase()||'—';
   gwRule.textContent=ev.rule?`rule: ${ev.rule}`:'';
   const arcClr={allow:'var(--green)',block:'var(--red)',hold:'var(--yellow)',quarantine:'var(--purple)'};
   if(arc) arc.style.stroke=arcClr[d]||'var(--green)';
-
   if(d==='allow'){st.allow++;document.getElementById('st-a').textContent=st.allow;}
   else if(d==='block'){st.block++;document.getElementById('st-b').textContent=st.block;}
   else if(d==='hold'){st.hold++;document.getElementById('st-h').textContent=st.hold;}
   else if(d==='quarantine'){st.quar++;document.getElementById('st-q').textContent=st.quar;}
-
   if(d==='block'||d==='quarantine'){
-    detCnt++;
-    document.getElementById('hc-det').textContent=detCnt;
+    detCnt++;document.getElementById('hc-det').textContent=detCnt;
     flash('defense',5000);
   }
 }
 
-function onIntel(ev) {
-  // Mode change
-  if(ev.kind==='mode-change') {
+function onIntel(ev){
+  if(ev.kind==='mode-change'){
     const e=(ev.evidence||'').toLowerCase();
     const m=e.includes('siege')?'siege':e.includes('suspicious')?'suspicious':'normal';
     mode.textContent=m.toUpperCase(); mode.className=m==='normal'?'':m;
   }
-  // Counters
   if(ev.kind==='redteam-finding'){
-    findCnt++;
-    document.getElementById('hc-rt').textContent=findCnt;
+    findCnt++;document.getElementById('hc-rt').textContent=findCnt;
     document.getElementById('ms-rt').textContent=findCnt;
     flash('redteam',4000);
   }
   if(ev.kind==='fix-proposed'){
-    propCnt++;
-    document.getElementById('hc-fp').textContent=propCnt;
+    propCnt++;document.getElementById('hc-fp').textContent=propCnt;
     document.getElementById('ms-fp').textContent=propCnt;
     flash('remediation',4000);
   }
-  // Department routing
-  const dept = KIND_DEPT[ev.kind] || ev.source_dept;
-  if(dept) flash(dept, 4000);
-  if(dept && DKEY[dept]) {
+  const dept=KIND_DEPT[ev.kind]||ev.source_dept;
+  if(dept) flash(dept,4000);
+  if(dept&&DKEY[dept]){
     const k=DKEY[dept];
     dce[k]=(dce[k]||0)+1;
     const el=document.getElementById(DEPT_EV[dept]);
@@ -652,22 +713,62 @@ function onIntel(ev) {
   }
 }
 
-function flash(dept, dur=4000) {
-  const cid=DEPT_CARD[dept];
-  if(!cid) return;
-  const card=document.getElementById(cid);
-  if(!card) return;
+function flash(dept,dur=4000){
+  const cid=DEPT_CARD[dept]; if(!cid)return;
+  const card=document.getElementById(cid); if(!card)return;
   card.classList.add('active');
   clearTimeout(dtimers[cid]);
-  dtimers[cid]=setTimeout(()=>card.classList.remove('active'), dur);
+  dtimers[cid]=setTimeout(()=>{
+    card.classList.remove('active');
+    const ev=document.getElementById(DEPT_EV[dept]);
+    if(ev) ev.textContent='idle';
+  },dur);
 }
 
-// ── Feed ─────────────────────────────────────────────────────────────────────
-const KIND_CLS = {
+// ── Attack animation ──────────────────────────────────────────────────────────
+function launchAttackAnim(){
+  const atkEl=document.getElementById('atk');
+  const gwEl =document.getElementById('gw');
+  if(!atkEl||!gwEl) return;
+  const ar=atkEl.getBoundingClientRect();
+  const gr=gwEl.getBoundingClientRect();
+
+  const clr=CAT_COLOR[selCat]||'#f85149';
+  const bolt=document.createElement('div');
+  bolt.className='atk-bolt';
+  // Bolt starts at the LEFT edge of the attack panel, vertically centered
+  const startX=ar.left-90;
+  const startY=ar.top+ar.height/2-1;
+  // Distance to gateway center
+  const dist=gr.left+gr.width/2-startX-45;
+  bolt.style.cssText=`left:${startX}px;top:${startY}px;width:90px;--bolt-clr:${clr};--bolt-dist:${dist}px`;
+  document.body.appendChild(bolt);
+
+  // Impact effect after bolt arrives
+  bolt.addEventListener('animationend',()=>{
+    bolt.remove();
+    // Impact ring
+    impRing.style.borderColor=clr;
+    impRing.classList.remove('pop');
+    void impRing.offsetWidth; // reflow to restart animation
+    impRing.classList.add('pop');
+    // Gateway flash
+    gw.classList.add('blocked-flash');
+    setTimeout(()=>gw.classList.remove('blocked-flash'),700);
+    // Wake defense
+    flash('defense',3000);
+  },{ once:true });
+
+  // Red team active while bolt travels
+  flash('redteam',2000);
+}
+
+// ── Feed ──────────────────────────────────────────────────────────────────────
+const KIND_CLS={
   'decision:allow':'da','decision:block':'db','decision:hold':'dh','decision:quarantine':'dq',
   'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'mc',
 };
-function addFeed(ev) {
+function addFeed(ev){
   const el=document.createElement('div');
   let cls='fe df';
   if(ev.kind==='decision') cls=`fe ${KIND_CLS['decision:'+ev.decision]||'df'}`;
@@ -683,51 +784,73 @@ function addFeed(ev) {
   while(feedLog.children.length>200) feedLog.removeChild(feedLog.lastChild);
 }
 
-// ── Corpus ───────────────────────────────────────────────────────────────────
-async function loadCorpus() {
-  try {
+// ── Corpus & category tiles ────────────────────────────────────────────────────
+async function loadCorpus(){
+  try{
     const r=await fetch('/corpus'); if(!r.ok) return;
     const cases=await r.json();
-    corpEl.innerHTML='';
-    // Known category prefixes → CSS class for color badge
-    const TAG_CLS = {ben:'ben',inj:'inj',exf:'exf',ctx:'ctx',esc:'esc',chn:'chn',rug:'rug',desc:'dsc'};
+    // Group by category
     cases.forEach(c=>{
-      const el=document.createElement('div');
-      el.className='ci'; el.dataset.c=c;
-      // Split "cat-NNNN-rest" into tag + display name
-      const parts=c.split('-');
-      const cat=parts[0]||'';
-      const tagCls=TAG_CLS[cat]||'';
-      const display=parts.slice(1).join('-'); // "0001-clean-response"
-      el.innerHTML=`<span class="ci-tag ${tagCls}">${cat}</span><span class="ci-name">${display}</span>`;
-      el.title=c; // full name on hover tooltip
-      el.addEventListener('click',()=>{
-        document.querySelectorAll('.ci').forEach(x=>x.classList.remove('sel'));
-        el.classList.add('sel'); selCase=c; fireBtn.disabled=false;
-      });
-      corpEl.appendChild(el);
+      const prefix=c.split('-')[0]||'';
+      const cat=PREFIX_CAT[prefix];
+      if(cat){
+        if(!corpusByCat[cat]) corpusByCat[cat]=[];
+        corpusByCat[cat].push(c);
+      }
     });
-  } catch(_){}
+    // Update tile counts
+    Object.entries(corpusByCat).forEach(([cat,list])=>{
+      const el=document.getElementById('cnt-'+cat);
+      if(el) el.textContent=`${list.length} cases`;
+    });
+    // Enable fire button if current category has cases
+    updateFireBtn();
+  }catch(_){}
 }
 
-fireBtn.addEventListener('click', async()=>{
-  if(!selCase) return;
+function updateFireBtn(){
+  const cases=corpusByCat[selCat]||[];
+  fireBtn.disabled=cases.length===0;
+}
+
+// Category tile clicks
+document.querySelectorAll('.atk-cat').forEach(tile=>{
+  tile.addEventListener('click',()=>{
+    document.querySelectorAll('.atk-cat').forEach(t=>t.classList.remove('sel'));
+    tile.classList.add('sel');
+    selCat=tile.dataset.cat;
+    updateFireBtn();
+  });
+});
+
+// Launch attack
+fireBtn.addEventListener('click',async()=>{
+  const cases=corpusByCat[selCat]||[];
+  if(!cases.length) return;
+  const chosen=cases[Math.floor(Math.random()*cases.length)];
   fireBtn.disabled=true;
-  try {
+  fireBtn.classList.add('firing');
+
+  // Visual animation first
+  launchAttackAnim();
+
+  try{
     const r=await fetch('/operator',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'run-campaign-request',evidence:`corpus case: ${selCase}`}),
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'run-campaign-request',evidence:`category:${selCat} case:${chosen}`}),
     });
     const d=await r.json();
     addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,
-             evidence:`fire drill: ${selCase}`});
-  } catch(err) {
+             evidence:`attack drill [${selCat}] ${chosen}`});
+  }catch(err){
     addFeed({kind:'operator-request',source_dept:'ui',evidence:`error: ${err}`});
-  } finally {
-    setTimeout(()=>{ fireBtn.disabled=false; }, 2000);
+  }finally{
+    fireBtn.classList.remove('firing');
+    setTimeout(()=>{fireBtn.disabled=false;},2500);
   }
 });
 
+// ── Init ─────────────────────────────────────────────────────────────────────
 connect();
 loadCorpus();
 </script>
