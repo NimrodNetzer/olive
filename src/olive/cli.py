@@ -397,6 +397,39 @@ async def run_redteam_dept(args: argparse.Namespace) -> int:
         await bus.close()
 
 
+async def run_builder_dept(args: argparse.Namespace) -> int:
+    """Trigger the runtime Builder department once (ADR-0018): replay the bus
+    history and publish a `fix-proposed` object for every NOVEL confirmed weakness
+    (red-team findings + reproduced incidents). Propose-only by construction - it
+    records a bounded proposal + publishes awareness, never applies a fix; the
+    human `olive cycle` gate is unchanged. Imported locally (intelligence side)."""
+    import os
+
+    from olive.intelligence.builder_dept import BuilderDepartment, ProposalLedger
+    from olive.intelligence.bus import IncidentBus
+
+    config = load_config(args.config)
+    db_path = args.db or config.db_path
+    bus = IncidentBus(db_path, os.urandom(32))
+    ledger = ProposalLedger(db_path)
+    await bus.open()
+    await ledger.open()
+    try:
+        dept = BuilderDepartment(bus, ledger)
+        published = await dept.run_once()
+        print(
+            f"[olive] builder department: {published} novel fix-proposal(s) "
+            "published to the bus (awaiting human triage via `olive cycle`)",
+            file=sys.stderr,
+        )
+        for proposal in await ledger.list_proposals():
+            print(f"  {proposal.proposal_id}: {proposal.summary}", file=sys.stderr)
+        return 0
+    finally:
+        await ledger.close()
+        await bus.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -500,6 +533,16 @@ def main() -> None:
     rtd_run.add_argument("--db", default=None, help="override audit DB path from the policy file")
     rtd_run.add_argument("--policy", default="default.yaml", help="pipeline policy under policies/")
 
+    builder_dept = sub.add_parser(
+        "builder-dept",
+        help="trigger the runtime Builder department: replay the bus and publish a "
+        "fix-proposal for each novel confirmed weakness (ADR-0018)",
+    )
+    bd = builder_dept.add_subparsers(dest="builder_dept_command", required=True)
+    bd_run = bd.add_parser("run", help="propose fixes now for novel confirmed weaknesses")
+    bd_run.add_argument("--config", required=True, help="policy YAML file (for the audit DB path)")
+    bd_run.add_argument("--db", default=None, help="override audit DB path from the policy file")
+
     args = parser.parse_args()
 
     if args.command == "cycle":
@@ -515,6 +558,13 @@ def main() -> None:
     if args.command == "redteam-dept":
         try:
             sys.exit(asyncio.run(run_redteam_dept(args)))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
+
+    if args.command == "builder-dept":
+        try:
+            sys.exit(asyncio.run(run_builder_dept(args)))
         except ConfigError as exc:
             parser.error(str(exc))
         return

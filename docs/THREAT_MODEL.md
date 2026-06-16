@@ -18,6 +18,11 @@ this document, update the document first (via ADR if the change is structural).
   detection or a verification. Bus objects are therefore signed and verified, and
   the mode is writable only through the breaker's narrow `set_mode` by the
   deterministic Commander.
+- The **builder-proposals ledger** (`builder_proposals`, ADR-0018) — its
+  integrity matters because a proposal must never be *promotable* into a shipped
+  fix without re-passing the eval gate and a human `olive:remediate` approval. A
+  forged or malicious proposal is inert data: it carries no diff and grants no
+  authority until a human drives it through `olive cycle`.
 
 ## Trusted components
 
@@ -160,6 +165,23 @@ this document, update the document first (via ADR if the change is structural).
   floor + single-flight; the scheduler is in-memory/per-process (same
   non-guarantee as mode/bus). Event-triggered campaigns are deferred precisely
   because they reintroduce a feedback-loop risk this slice structurally avoids.
+- **Runtime Builder department (M7, ADR-0018):** adds *autonomy to propose, never
+  reach to enforce*. It reacts to confirmed weaknesses and emits a bounded
+  fix-proposal + a `fix-proposed` bus object; by construction it cannot import or
+  be handed the proxy/upstreams/breaker/`ClientSession`, authors no diff at
+  runtime, and never calls `trip`/`set_mode`/`olive cycle`/baseline update (a test
+  asserts both the import set and that no enforcement method is referenced). A
+  compromised LLM proposer can at worst emit a *bad proposal*, which is inert
+  until a human drives it through the eval gate + `olive:remediate` approval — the
+  same insider class already documented for ADR-0013. Proposal-spam is bounded by
+  novelty dedup (`finding_key` UNIQUE) + single-flight on the replay path; a
+  `fix-proposed` object carries `confidence=0.0` and the Commander reads only
+  `detection`, so it **cannot move the operating mode**. The department signs with
+  the existing per-process HMAC bus key (ADR-0014); this does **not** raise bus
+  privilege because no bus object it introduces crosses an enforcement seam
+  without independent re-verification. The moment a future slice lets a bus object
+  directly drive enforcement without re-verification, per-department CA-signed bus
+  identities become a hard prerequisite for it.
 - **Runtime agent company (M7, ADR-0014):** the Security Commander is
   deterministic code — no LLM decides the operating mode or any enforcement
   action. LLM agents only publish evidence objects to the bus; the deterministic

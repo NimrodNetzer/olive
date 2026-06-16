@@ -286,6 +286,25 @@ but subscribes to nothing). Advisory-only: it never calls `trip`/`set_mode`, onl
 publishes deduped novel findings, which Remediation records as intents awaiting
 human triage. Wired as an optional department in `build_runtime_org` (default off).
 
+### Runtime Builder department — `src/olive/intelligence/builder_dept.py`
+VISION department 3 as a runtime component (ADR-0018): it subscribes to
+**confirmed weaknesses** on the bus (`redteam-finding` + `reproduced`) and turns
+each *novel* one into a bounded, auditable **fix-proposal** — a `builder_proposals`
+row (own aiosqlite, same DB; rule-3: hashes + ≤200-char summary, never a diff body)
+plus a published **`fix-proposed`** object. **Propose-only by construction**: it
+cannot import the proxy/upstreams/breaker/`ClientSession` and never calls
+`trip`/`set_mode`/`olive cycle`/baseline update (a test asserts the import set *and*
+that no enforcement method is called); at runtime it authors **no diff**
+(`patch_hash` is null — the diff stays the build-time `.claude/agents/builder.md`,
+ADR-0013). **No self-trigger** (it subscribes only to the two confirmed-weakness
+kinds, never to its own `fix-proposed`) and a proposal carries `confidence=0.0`, so
+it can never move the mode. Promotion is unchanged: a proposal is inert until a
+human walks the fix through `olive cycle` (the eval gate + `olive:remediate`
+token). Spam is bounded by **novelty dedup** (`finding_key` UNIQUE → one proposal
+per weakness). Wired as an optional department in `build_runtime_org` (off unless an
+opened `ProposalLedger` is supplied); `olive builder-dept run` is the on-demand
+operator/CI trigger (replays the bus, proposes for novel weaknesses).
+
 ### Rate limiter — `src/olive/gateway/ratelimit.py`
 Deterministic per-session sliding-window throttle; the limit value comes from
 the role policy (`max_calls_per_minute`, omit for unlimited). Checked after the
@@ -307,14 +326,17 @@ That seam is the potential open-core boundary.
 
 ## What deliberately does not exist yet
 - The full Command & Coordination hierarchy (Security Commander → department
-  *supervisors* → specialists). The first slice (ADR-0014) ships the deterministic
-  Commander, operating modes, the incident bus, and **two** departments (Defense,
-  Remediation); the supervisor tier is deferred.
+  *supervisors* → specialists). The runtime org now ships the deterministic
+  Commander, operating modes, the incident bus, and **four** departments (Defense,
+  Remediation, Red-Team, Builder); the **supervisor tier** is still deferred (no
+  specialists to supervise yet — ADR-0018).
 - Runtime Red-Team / Builder **autonomy** — a *scheduled* runtime Red-Team
-  department now exists (ADR-0016), but it attacks only the sandboxed
-  `build_pipeline`, **never the live gateway**; event-triggering ("after every
-  incident"), runtime Builder autonomy, and the supervisor tier remain deferred.
-  The build-time `.claude/agents` remain the only LLM-creative attack/fix authors.
+  department (ADR-0016) attacks only the sandboxed `build_pipeline`, **never the
+  live gateway**; a runtime Builder department (ADR-0018) now reacts to confirmed
+  weaknesses but only **proposes** (it authors no diff and never applies one).
+  Event-triggering ("after every incident") and the supervisor tier remain
+  deferred. The build-time `.claude/agents` remain the only LLM-creative
+  attack/fix authors — runtime departments are deterministic orchestration.
 - Auto-apply/auto-deploy of a proposed fix — permanently human-gated by design.
 - Credential/token freezing in Siege; cross-process / fleet mode propagation;
   durable mode/bus across restarts (mode is in-memory/per-process for now).

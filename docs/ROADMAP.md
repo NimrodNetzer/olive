@@ -210,11 +210,29 @@ self-improvement loop.
 - ✅ Advisory-only (never `trip`/`set_mode`/`olive cycle`); Remediation records a
   finding as an intent; humans still gate every promotion (ADR-0013).
 
-**Still deferred (later within/after M7):** the supervisor tier of the Command &
-Coordination hierarchy; **event-triggered** Red-Team ("after every incident") +
-runtime **Builder** autonomy; LLM-creative attack generation in CI (stays the
-human-supervised build-time agent); CI plumbing for deploy/PR triggers;
-credential/token freezing in Siege; durable/fleet-wide mode + bus.
+**Fifth slice (built — ADR-0018):** the runtime Builder **department**.
+- ✅ **`intelligence/builder_dept.py`**: subscribes to confirmed weaknesses
+  (`redteam-finding` + `reproduced`) and turns each novel one into a bounded
+  fix-proposal — a `builder_proposals` row (rule-3: hash + ≤200-char summary,
+  never a diff) + a published `fix-proposed` object. `olive builder-dept run`
+  replays the bus and proposes for novel weaknesses.
+- ✅ **Propose-only by construction**: cannot import the
+  proxy/upstreams/breaker/ClientSession and never calls `trip`/`set_mode`/`olive
+  cycle`/baseline update (a test asserts the import set *and* no enforcement call);
+  authors **no diff** at runtime (`patch_hash` null — the diff stays the build-time
+  `.claude/agents/builder.md`). No self-trigger (never subscribes to its own
+  `fix-proposed`); `confidence=0.0` so it cannot move the mode. Spam-bounded by
+  novelty dedup.
+- ✅ Promotion unchanged: a proposal is inert until a human walks the fix through
+  `olive cycle` (eval gate + `olive:remediate` token).
+
+**Still deferred (later within/after M7):** the **supervisor tier** of the Command
+& Coordination hierarchy (no specialists to supervise yet); **event-triggered**
+Red-Team ("after every incident"); **auto-apply** of a proposed fix (permanently
+human-gated); LLM-creative generation in CI (stays the human-supervised build-time
+agents); CI plumbing for deploy/PR triggers; per-department **CA-signed bus**
+identities (parallel, non-gating); credential/token freezing in Siege;
+durable/fleet-wide mode + bus.
 
 ## Later — the bets
 

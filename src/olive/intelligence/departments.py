@@ -23,6 +23,7 @@ import asyncio
 from dataclasses import dataclass
 
 from olive.gateway.breaker import CircuitBreaker
+from olive.intelligence.builder_dept import BuilderDepartment, ProposalLedger
 from olive.intelligence.bus import IncidentBus, IncidentObject
 from olive.intelligence.commander import SecurityCommander
 from olive.intelligence.redteam_dept import RedTeamDepartment
@@ -107,6 +108,7 @@ class RuntimeOrg:
     remediation: RemediationDepartment
     runner: SentinelRunner
     redteam: RedTeamDepartment
+    builder: BuilderDepartment | None = None  # optional (ADR-0018); off unless wired
 
     def start(self) -> None:
         self.runner.start()
@@ -129,12 +131,16 @@ def build_runtime_org(
     redteam_policy: str = "default.yaml",
     redteam_corpus_dir=None,
     redteam_interval: float | None = None,
+    proposal_ledger: ProposalLedger | None = None,
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
     subscribe to the bus. The red-team department is constructed always but only
     *schedules* autonomous campaigns when `redteam_interval` is set (default off,
-    additive - ADR-0016). The bus must already be open."""
+    additive - ADR-0016). The Builder department is wired only when an opened
+    `proposal_ledger` is supplied (default off, additive - ADR-0018); it then
+    subscribes to confirmed weaknesses and publishes `fix-proposed` objects. The
+    bus (and any supplied ledger) must already be open."""
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
     commander = SecurityCommander(breaker, bus)
@@ -146,6 +152,10 @@ def build_runtime_org(
     redteam = RedTeamDepartment(
         bus, policy=redteam_policy, corpus_dir=redteam_corpus_dir, interval=redteam_interval
     )
+    builder: BuilderDepartment | None = None
+    if proposal_ledger is not None:
+        builder = BuilderDepartment(bus, proposal_ledger)
+        builder.subscribe()
     return RuntimeOrg(
         breaker=breaker,
         bus=bus,
@@ -154,4 +164,5 @@ def build_runtime_org(
         remediation=remediation,
         redteam=redteam,
         runner=runner,
+        builder=builder,
     )
