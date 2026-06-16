@@ -116,6 +116,18 @@ async def test_bridge_subscribes_only_to_operator_request_no_feedback(bus):
     assert triggered == 1  # the findings it just published did not re-trigger it
 
 
+async def test_rapid_drill_requests_are_rate_limited(bus):
+    # POST /operator is unauthenticated; a flood of run-campaign-requests must not
+    # fire back-to-back campaigns on the shared event loop (ADR-0020 review).
+    redteam = RedTeamDepartment(bus, corpus_dir=CORPUS)
+    bridge = OperatorBridge(bus, redteam, cooldown=60.0)
+    bridge.subscribe()
+    for _ in range(5):
+        await bus.publish(make_operator_request(bus, action="run-campaign-request"))
+    assert bridge.campaigns_triggered == 1  # only the first within the cooldown ran
+    assert bridge.campaigns_throttled == 4
+
+
 async def test_build_runtime_org_wires_operator_bridge_end_to_end(bus, tmp_path):
     ledger = RemediationLedger(tmp_path / "led.db")
     await ledger.open()

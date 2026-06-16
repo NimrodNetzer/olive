@@ -20,6 +20,7 @@ the integration tests) that wires breaker + bus + Commander + the two department
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 from olive.gateway.breaker import CircuitBreaker
@@ -35,6 +36,8 @@ from olive.intelligence.sentinels import (
     DataLeakSentinel,
     PromptInjectionSentinel,
 )
+
+_log = logging.getLogger(__name__)
 
 
 def build_sentinels(config) -> list:
@@ -121,17 +124,36 @@ class OperatorBridge:
     `RedTeamDepartment.run_once()` (single-flight guarded); it has NO enforcement
     path: `force-mode-request` stays announce-only (a human with `olive:command`
     must act), and unknown/other actions are ignored (the request object is already
-    on the audit trail)."""
+    on the audit trail).
 
-    def __init__(self, bus: IncidentBus, redteam: RedTeamDepartment) -> None:
+    A per-process COOLDOWN bounds the rate: `POST /operator` is unauthenticated
+    (ADR-0020 §5), so without a floor a client could fire back-to-back campaigns and
+    compete with `/mcp` enforcement on the shared event loop. A request inside the
+    cooldown is counted and dropped, never queued."""
+
+    def __init__(self, bus: IncidentBus, redteam: RedTeamDepartment, *, cooldown: float = 10.0):
         self._bus = bus
         self._redteam = redteam
+        self._cooldown = cooldown
+        self._last_drill = float("-inf")  # loop time of the last accepted drill
         self.campaigns_triggered = 0
+        self.campaigns_throttled = 0
 
     async def handle(self, obj: IncidentObject) -> None:
-        if obj.report.action == "run-campaign-request":
+        if obj.report.action != "run-campaign-request":
+            return
+        now = asyncio.get_running_loop().time()
+        if now - self._last_drill < self._cooldown:
+            self.campaigns_throttled += 1  # observable: rate-limited, not silently lost
+            return
+        self._last_drill = now
+        try:
             await self._redteam.run_once()
             self.campaigns_triggered += 1
+        except Exception:  # noqa: BLE001 - a drill failure must not break bus fan-out
+            # Log it: a swallowed drill failure on the dashboard button would look
+            # like a silent no-op to the operator (CLAUDE.md rule 5).
+            _log.warning("operator-triggered red-team drill failed", exc_info=True)
 
     def subscribe(self) -> None:
         self._bus.subscribe(self.handle, kind="operator-request")
