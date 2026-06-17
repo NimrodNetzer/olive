@@ -12,6 +12,7 @@ stdio mode the gateway is configured per-agent via the policy file.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -60,6 +61,7 @@ class MockCA:
             "aud": _AUDIENCE,
             "iat": now,
             "exp": now + ttl,
+            "jti": uuid.uuid4().hex,  # unique token ID for revocation (M9)
         }
         return jwt.encode(payload, self._private_key, algorithm=_ALGORITHM)
 
@@ -76,3 +78,27 @@ def verify_token(token: str, public_key_pem: bytes) -> dict[str, Any]:
         )
     except jwt.PyJWTError as exc:
         raise IdentityError(f"token verification failed: {type(exc).__name__}") from exc
+
+
+class RevokedTokenCache:
+    """In-memory token revocation list (M9 — Siege Crisis Response).
+
+    Kept in memory for fast synchronous lookup during token verification.
+    Backed by the event store's `revoked_tokens` table for persistence across
+    restarts. The store write is done by the caller (admin endpoint or commander);
+    this cache provides the sync lookup the verifier needs without async I/O.
+    """
+
+    def __init__(self) -> None:
+        self._revoked: set[str] = set()
+
+    def seed(self, jtis: list[str]) -> None:
+        """Populate from the DB on startup."""
+        self._revoked.update(jtis)
+
+    def revoke(self, jti: str) -> None:
+        """Add a jti to the in-memory revocation set."""
+        self._revoked.add(jti)
+
+    def is_revoked(self, jti: str) -> bool:
+        return jti in self._revoked

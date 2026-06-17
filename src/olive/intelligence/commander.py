@@ -119,4 +119,30 @@ class SecurityCommander:
                 incident_id=incident_id,
             )
             await self._bus.publish(obj)
+            # Siege-specific crisis announcement (M9): publish a typed siege-declared
+            # object carrying the quarantined session count so the UI and future fleet
+            # relay can react to the crisis transition specifically.
+            if mode is OperatingMode.SIEGE:
+                frozen = self._breaker.quarantined_count()
+                siege_report = IncidentReport(
+                    session_key="",
+                    agent_id="commander",
+                    organization_id="",
+                    confidence=self._max_confidence,
+                    attack_types=["siege-declared"],
+                    action="siege-declared",
+                    signals=[{
+                        "sentinel": "commander",
+                        "confidence": self._max_confidence,
+                        "evidence": f"SIEGE declared: {frozen} session(s) frozen; {reason}"[:200],
+                    }],
+                    incident_id=incident_id,
+                )
+                siege_obj = self._bus.make_object(
+                    kind="siege-declared",
+                    source_dept="commander",
+                    report=siege_report,
+                    incident_id=incident_id,
+                )
+                await self._bus.publish(siege_obj)
         return changed

@@ -31,26 +31,38 @@ from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
 from olive.identity.claims import IdentityClaims, claims_from_token, session_key
-from olive.identity.tokens import IdentityError
+from olive.identity.tokens import IdentityError, RevokedTokenCache
 
 # Capability a token must carry to use the admin release endpoint.
 RELEASE_SCOPE = "olive:release"
 # Capability a token must carry to approve a held call (ADR-0010).
 APPROVE_SCOPE = "olive:approve"
+# Capability a token must carry to revoke a JWT token (M9).
+REVOKE_SCOPE = "olive:command"
 
 
 class OliveTokenVerifier(TokenVerifier):
     """Verifies CA-signed bearer tokens. Returns None on any failure so the
     SDK's bearer backend rejects the request (fail closed)."""
 
-    def __init__(self, public_key_pem: bytes) -> None:
+    def __init__(
+        self,
+        public_key_pem: bytes,
+        revocation: RevokedTokenCache | None = None,
+    ) -> None:
         self._public_key_pem = public_key_pem
+        self._revocation = revocation
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
             claims = claims_from_token(token, self._public_key_pem)
         except IdentityError:
             return None
+        # Revocation check (M9): a revoked jti is rejected even if the signature
+        # and expiry are valid. Fail closed — revocation must be honoured.
+        if self._revocation is not None and claims.jti:
+            if self._revocation.is_revoked(claims.jti):
+                return None
         # scopes carry capabilities; claims carry the full identity so the
         # request handler can rebuild IdentityClaims without re-verifying.
         return AccessToken(
@@ -140,12 +152,40 @@ async def _approve(request: Request) -> JSONResponse:
     return JSONResponse({"approval_id": approval_id, "approved": approved})
 
 
+async def _revoke(request: Request) -> JSONResponse:
+    """Revoke a JWT token by jti (M9 — Siege Crisis Response). Requires the
+    olive:command capability — the same scope that can force a mode change."""
+    token = get_access_token()
+    if token is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if REVOKE_SCOPE not in (token.scopes or []):
+        return JSONResponse(
+            {"error": f"forbidden: requires '{REVOKE_SCOPE}' capability"}, status_code=403
+        )
+    try:
+        body = await request.json()
+        jti = body["jti"]
+        org = body.get("organization", "")
+        agent = body.get("agent_id", "")
+        reason = str(body.get("reason", ""))[:200]
+    except (KeyError, TypeError, ValueError):
+        return JSONResponse({"error": "body must be {jti, organization?, agent_id?, reason?}"}, status_code=400)
+    revocation: RevokedTokenCache | None = getattr(request.app.state, "revocation", None)
+    store = getattr(request.app.state.gateway, "_store", None)
+    if revocation is not None:
+        revocation.revoke(jti)
+    if store is not None:
+        await store.revoke_token(jti, org, agent, reason or None)
+    return JSONResponse({"jti": jti, "revoked": True})
+
+
 def build_http_app(
     public_key_pem: bytes,
     lifespan,
     *,
     mcp_path: str = "/mcp",
     extra_routes: list | None = None,
+    revocation: RevokedTokenCache | None = None,
 ) -> Starlette:
     """Assemble the Starlette app: bearer auth context on every request, the MCP
     endpoint behind RequireAuthMiddleware, and capability-gated admin endpoints.
@@ -159,7 +199,7 @@ def build_http_app(
     transport module never imports `olive.ui` (the layering rule, ADR-0003). The
     global auth-context middleware still runs but does not reject a request that
     carries no token; only `RequireAuthMiddleware` (on `/mcp`) rejects."""
-    verifier = OliveTokenVerifier(public_key_pem)
+    verifier = OliveTokenVerifier(public_key_pem, revocation=revocation)
     middleware = [
         Middleware(AuthenticationMiddleware, backend=BearerAuthBackend(verifier)),
         Middleware(AuthContextMiddleware),
@@ -168,6 +208,7 @@ def build_http_app(
         Route(mcp_path, endpoint=RequireAuthMiddleware(_McpAsgiApp(), [], None)),
         Route("/admin/release", endpoint=_release, methods=["POST"]),
         Route("/admin/approve", endpoint=_approve, methods=["POST"]),
+        Route("/admin/revoke", endpoint=_revoke, methods=["POST"]),
         *(extra_routes or []),
     ]
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)

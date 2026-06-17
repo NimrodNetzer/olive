@@ -66,6 +66,9 @@ header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 .hcounts{display:flex;gap:12px;margin-left:auto}
 .hc{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
 .hcv{font-weight:bold;color:var(--text)}
+#hc-frozen-wrap{display:none}
+body.siege #hc-frozen-wrap{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--red)}
+#hc-frozen{font-weight:bold;color:var(--red)}
 .hcv.tick{animation:bus-tick .4s ease-out}
 #conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;transition:background .3s}
 #conn-dot.live{background:var(--green);box-shadow:0 0 5px var(--green)}
@@ -360,6 +363,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
     <div class="hc">findings:<span class="hcv" id="hc-rt">0</span></div>
     <div class="hc">proposals:<span class="hcv" id="hc-fp">0</span></div>
     <div class="hc">bus:<span class="hcv" id="hc-bus">0</span></div>
+    <div id="hc-frozen-wrap">&#x1F512;&nbsp;frozen:<span id="hc-frozen">0</span></div>
   </div>
   <div id="conn-dot"></div>
   <span id="conn-lbl">disconnected</span>
@@ -871,6 +875,13 @@ function onIntel(ev){
     modeBadge.className=curMode==='normal'?'':curMode;
     document.body.className=curMode==='normal'?'':curMode;
     updateCmdrStatus();
+  }
+  if(ev.kind==='siege-declared'){
+    // Extract frozen session count from evidence: "SIEGE declared: N session(s) frozen; ..."
+    const m=(ev.evidence||'').match(/(\d+)\s+session/);
+    const frozen=m?parseInt(m[1],10):0;
+    document.getElementById('hc-frozen').textContent=frozen;
+    addLogEntry(ev,'mc');
   }
   if(ev.kind==='redteam-finding'){
     findCnt++; document.getElementById('hc-rt').textContent=findCnt;

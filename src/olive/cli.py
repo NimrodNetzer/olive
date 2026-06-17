@@ -200,7 +200,9 @@ def serve_http_live(
     import uvicorn
 
     from olive.gateway.breaker import CircuitBreaker
+    from olive.gateway.mode import OperatingMode
     from olive.gateway.telemetry import MultiSink, QueueSink
+    from olive.identity.tokens import RevokedTokenCache
     from olive.intelligence.builder_dept import ProposalLedger
     from olive.intelligence.bus import IncidentBus
     from olive.intelligence.departments import build_runtime_org, build_sentinels
@@ -215,6 +217,9 @@ def serve_http_live(
 
     corpus_dir = _ROOT / "evals" / "corpus"
     hmac_key = os.urandom(32)  # one per-process bus key, reused by every department
+    # Token revocation cache (M9): created at function scope so it can be passed
+    # to build_http_app; seeded from DB inside make_resources once the store opens.
+    revocation = RevokedTokenCache()
 
     @contextlib.asynccontextmanager
     async def make_resources():
@@ -239,8 +244,9 @@ def serve_http_live(
                     )
                 saved_mode = await store.load_mode()
                 if saved_mode:
-                    from olive.gateway.mode import OperatingMode
                     breaker.restore_mode(OperatingMode(saved_mode))
+                # Seed the token revocation cache (M9) from DB now that the store is open.
+                revocation.seed(await store.load_revoked_jtis())
                 queue_sink = QueueSink()
                 broker = UIBroker()
                 gateway = OliveGateway(
@@ -264,7 +270,12 @@ def serve_http_live(
                 await _seed_broker(broker, bus)
                 bus.subscribe(broker.on_incident)
                 server = gateway.build_server(upstream, identity_resolver=identity_from_context)
-                ui_state = {"broker": broker, "bus": bus, "corpus": _corpus_stems(corpus_dir)}
+                ui_state = {
+                    "broker": broker,
+                    "bus": bus,
+                    "corpus": _corpus_stems(corpus_dir),
+                    "revocation": revocation,  # M9: /admin/revoke reads this
+                }
                 yield (
                     session_manager_for(server, json_response=json_response),
                     gateway,
@@ -281,6 +292,7 @@ def serve_http_live(
         public_key_pem,
         serving_lifespan_with_org(make_resources),
         extra_routes=ui_routes(),
+        revocation=revocation,
     )
     if host not in ("127.0.0.1", "localhost"):
         print(

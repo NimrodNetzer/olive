@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS runtime_state (
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS revoked_tokens (
+    jti        TEXT PRIMARY KEY,
+    org_id     TEXT NOT NULL,
+    agent_id   TEXT NOT NULL,
+    revoked_at TEXT NOT NULL,
+    reason     TEXT
+);
 """
 
 
@@ -276,6 +283,32 @@ class EventStore:
         )
         row = await cursor.fetchone()
         return row[0] if row else None
+
+    async def revoke_token(
+        self, jti: str, org_id: str, agent_id: str, reason: str | None = None
+    ) -> None:
+        """Add a JWT token ID to the revocation list (M9 — Siege Crisis Response)."""
+        now = SecurityContext.now()
+        await self._conn.execute(
+            "INSERT OR IGNORE INTO revoked_tokens (jti, org_id, agent_id, revoked_at, reason)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (jti, org_id, agent_id, now, reason),
+        )
+        await self._conn.commit()
+
+    async def load_revoked_jtis(self) -> list[str]:
+        """Load all revoked token JTIs for in-memory cache population on startup."""
+        cursor = await self._conn.execute("SELECT jti FROM revoked_tokens")
+        rows = await cursor.fetchall()
+        return [r[0] for r in rows]
+
+    async def quarantined_session_count(self) -> int:
+        """Number of currently persisted quarantined sessions."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE quarantined = 1"
+        )
+        row = await cursor.fetchone()
+        return (row[0] or 0) if row else 0
 
     async def reset_baseline(self, tool_name: str | None = None) -> int:
         """Clear baselines so a legitimate declaration change can be re-accepted

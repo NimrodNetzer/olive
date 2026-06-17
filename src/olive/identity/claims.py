@@ -38,6 +38,8 @@ class IdentityClaims:
     task_resources: tuple[str, ...] = ()
     # True only when these claims came from a cryptographically verified token.
     verified: bool = False
+    # JWT token ID (jti) for revocation checking (M9). Empty for stdio/unverified.
+    jti: str = ""
 
     @property
     def session_key(self) -> str:
@@ -63,6 +65,7 @@ def claims_from_token(token: str, public_key_pem: bytes) -> IdentityClaims:
         capabilities=tuple(payload.get("capabilities", ())),
         task_resources=tuple(payload.get("task_resources", ())),
         verified=True,
+        jti=payload.get("jti", ""),
     )
 
 

@@ -207,6 +207,10 @@ class CircuitBreaker:
         """Number of tracked sessions (for reporting/tests)."""
         return len(self._sessions)
 
+    def quarantined_count(self) -> int:
+        """Number of currently quarantined sessions (for Siege crisis reporting)."""
+        return sum(1 for s in self._sessions.values() if s.quarantined)
+
     def restore(
         self,
         session_key: str,
