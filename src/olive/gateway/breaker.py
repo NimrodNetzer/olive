@@ -206,3 +206,26 @@ class CircuitBreaker:
     def session_count(self) -> int:
         """Number of tracked sessions (for reporting/tests)."""
         return len(self._sessions)
+
+    def restore(
+        self,
+        session_key: str,
+        block_count: int,
+        quarantined: bool,
+        reason: str | None,
+        incident_id: str | None,
+    ) -> None:
+        """Restore a persisted session from the store on gateway startup.
+        Must be called before the event loop begins processing requests."""
+        state = SessionState(session_id=session_key)
+        state.block_count = block_count
+        if quarantined:
+            state.status = SessionStatus.QUARANTINED
+            state.quarantine_reason = reason
+            state.quarantine_incident_id = incident_id
+        self._sessions[session_key] = state
+
+    def restore_mode(self, mode: OperatingMode) -> None:
+        """Restore operating mode from persistent state on startup.
+        Must be called before the event loop begins processing requests."""
+        self._mode = mode

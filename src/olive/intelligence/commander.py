@@ -51,9 +51,10 @@ def target_mode(current: OperatingMode, quarantines: int, max_confidence: float)
 
 
 class SecurityCommander:
-    def __init__(self, breaker: CircuitBreaker, bus: IncidentBus) -> None:
+    def __init__(self, breaker: CircuitBreaker, bus: IncidentBus, store=None) -> None:
         self._breaker = breaker
         self._bus = bus
+        self._store = store  # EventStore | None — optional persistence (ADR-0003 seam)
         self._quarantines = 0
         self._max_confidence = 0.0
 
@@ -95,6 +96,11 @@ class SecurityCommander:
         `breaker.set_mode` call, then an audited `mode-change` object on the bus.
         No raw payloads (rule 3) - the report carries only the bounded reason."""
         changed = await self._breaker.set_mode(mode, reason, incident_id)
+        if changed and self._store is not None:
+            try:
+                await self._store.persist_mode(mode.value)  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001 - persistence must not block the mode change
+                pass
         if changed:
             report = IncidentReport(
                 session_key="",

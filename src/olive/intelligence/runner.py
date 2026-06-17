@@ -74,6 +74,16 @@ class SentinelRunner:
         )
         incident_id = await self._write_incident(event, fired, confidence, attack_types, reason)
         tripped = await self._breaker.trip(event.session_key, reason, incident_id)
+        if tripped and self._store is not None:
+            state = self._breaker.snapshot(event.session_key)
+            if state is not None:
+                try:
+                    await self._store.persist_session(  # type: ignore[attr-defined]
+                        event.session_key, state.block_count, state.quarantined,
+                        state.quarantine_reason, state.quarantine_incident_id,
+                    )
+                except Exception:  # noqa: BLE001 - persistence must not block the trip
+                    pass
         report = build_report(
             session_key=event.session_key,
             agent_id=event.ctx.agent_id,

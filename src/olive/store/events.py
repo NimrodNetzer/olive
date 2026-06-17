@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS tool_baselines (
     first_seen       TEXT NOT NULL,
     last_seen        TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sessions (
+    session_key            TEXT PRIMARY KEY,
+    block_count            INTEGER NOT NULL DEFAULT 0,
+    quarantined            INTEGER NOT NULL DEFAULT 0,
+    quarantine_reason      TEXT,
+    quarantine_incident_id TEXT,
+    persisted_at           TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS runtime_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -201,6 +214,68 @@ class EventStore:
 
         await self._conn.commit()  # baseline left intact on purpose
         return BaselineStatus.CHANGED
+
+    async def persist_session(
+        self,
+        session_key: str,
+        block_count: int,
+        quarantined: bool,
+        reason: str | None,
+        incident_id: str | None,
+    ) -> None:
+        """Upsert the quarantine state of a session so it survives gateway restarts."""
+        now = SecurityContext.now()
+        await self._conn.execute(
+            "INSERT OR REPLACE INTO sessions"
+            " (session_key, block_count, quarantined, quarantine_reason,"
+            "  quarantine_incident_id, persisted_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (session_key, block_count, int(quarantined), reason, incident_id, now),
+        )
+        await self._conn.commit()
+
+    async def load_sessions(self) -> list[dict]:
+        """Load all persisted session states for restoration on startup."""
+        cursor = await self._conn.execute(
+            "SELECT session_key, block_count, quarantined,"
+            " quarantine_reason, quarantine_incident_id FROM sessions"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "session_key": r[0],
+                "block_count": r[1],
+                "quarantined": bool(r[2]),
+                "quarantine_reason": r[3],
+                "quarantine_incident_id": r[4],
+            }
+            for r in rows
+        ]
+
+    async def delete_session(self, session_key: str) -> None:
+        """Remove a session from the persistence table (called on human release)."""
+        await self._conn.execute(
+            "DELETE FROM sessions WHERE session_key = ?", (session_key,)
+        )
+        await self._conn.commit()
+
+    async def persist_mode(self, mode_value: str) -> None:
+        """Persist the current operating mode so it is restored after a restart."""
+        now = SecurityContext.now()
+        await self._conn.execute(
+            "INSERT OR REPLACE INTO runtime_state (key, value, updated_at)"
+            " VALUES ('operating_mode', ?, ?)",
+            (mode_value, now),
+        )
+        await self._conn.commit()
+
+    async def load_mode(self) -> str | None:
+        """Return the last persisted operating mode string, or None if never set."""
+        cursor = await self._conn.execute(
+            "SELECT value FROM runtime_state WHERE key = 'operating_mode'"
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
 
     async def reset_baseline(self, tool_name: str | None = None) -> int:
         """Clear baselines so a legitimate declaration change can be re-accepted

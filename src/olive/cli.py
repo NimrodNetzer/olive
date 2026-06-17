@@ -96,7 +96,19 @@ async def run_gateway(
     store = EventStore(db_path)
     await store.open()
     try:
-        gateway = OliveGateway(config, store, build_pipeline(config))
+        from olive.gateway.breaker import CircuitBreaker
+        from olive.gateway.mode import OperatingMode
+
+        breaker = CircuitBreaker(max_blocks=config.max_blocks_before_quarantine)
+        for s in await store.load_sessions():
+            breaker.restore(
+                s["session_key"], s["block_count"], s["quarantined"],
+                s["quarantine_reason"], s["quarantine_incident_id"],
+            )
+        saved_mode = await store.load_mode()
+        if saved_mode:
+            breaker.restore_mode(OperatingMode(saved_mode))
+        gateway = OliveGateway(config, store, build_pipeline(config), breaker=breaker)
         print(
             f"[olive] session {gateway.session_id} | agent {config.agent_id} "
             f"| role {config.role} | upstreams: {[n or '(bare)' for n, _ in specs]}",
@@ -220,6 +232,15 @@ def serve_http_live(
                 # One breaker shared by the gateway (trip/quarantine) and the org
                 # (Commander.set_mode); one QueueSink to the runner + UIBroker.
                 breaker = CircuitBreaker(max_blocks=config.max_blocks_before_quarantine)
+                for s in await store.load_sessions():
+                    breaker.restore(
+                        s["session_key"], s["block_count"], s["quarantined"],
+                        s["quarantine_reason"], s["quarantine_incident_id"],
+                    )
+                saved_mode = await store.load_mode()
+                if saved_mode:
+                    from olive.gateway.mode import OperatingMode
+                    breaker.restore_mode(OperatingMode(saved_mode))
                 queue_sink = QueueSink()
                 broker = UIBroker()
                 gateway = OliveGateway(

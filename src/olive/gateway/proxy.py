@@ -249,7 +249,11 @@ class OliveGateway:
         """Reversible human release of a quarantined session (ADR-0006). `key`
         is the namespaced session key (see IdentityClaims.session_key); defaults
         to this gateway's own identity for the stdio case."""
-        return await self._breaker.release(key or self._identity.session_key)
+        resolved = key or self._identity.session_key
+        released = await self._breaker.release(resolved)
+        if released:
+            await self._store.delete_session(resolved)
+        return released
 
     @property
     def approvals(self) -> ApprovalRegistry:
@@ -460,7 +464,14 @@ class OliveGateway:
                 return _held_result(out_verdict, approval_id)
         if not out_verdict.allowed:
             incident_id = await self._record(out_ctx, out_verdict, started, "deterministic")
-            await self._breaker.record_block(sid, incident_id)
+            tripped = await self._breaker.record_block(sid, incident_id)
+            if tripped:
+                state = self._breaker.snapshot(sid)
+                if state is not None:
+                    await self._store.persist_session(
+                        sid, state.block_count, state.quarantined,
+                        state.quarantine_reason, state.quarantine_incident_id,
+                    )
             await self._emit(out_ctx, out_verdict, sid, arguments=arguments)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
 
@@ -499,7 +510,14 @@ class OliveGateway:
         in_verdict = await self._pipeline.run(in_ctx, content=inbound_text)
         if not in_verdict.allowed:
             incident_id = await self._record(in_ctx, in_verdict, started, "pattern")
-            await self._breaker.record_block(sid, incident_id)
+            tripped = await self._breaker.record_block(sid, incident_id)
+            if tripped:
+                state = self._breaker.snapshot(sid)
+                if state is not None:
+                    await self._store.persist_session(
+                        sid, state.block_count, state.quarantined,
+                        state.quarantine_reason, state.quarantine_incident_id,
+                    )
             await self._emit(in_ctx, in_verdict, sid, content=inbound_text)
             return _blocked_result("inbound", in_verdict, incident_id or "unrecorded")
         await self._record(in_ctx, in_verdict, started, "pattern")

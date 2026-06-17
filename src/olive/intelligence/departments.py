@@ -209,7 +209,7 @@ def build_runtime_org(
     bus (and any supplied ledger) must already be open."""
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
-    commander = SecurityCommander(breaker, bus)
+    commander = SecurityCommander(breaker, bus, store=store)
     commander.subscribe()
     remediation.subscribe(bus)
     runner = SentinelRunner(
