@@ -74,11 +74,18 @@ async def _ws_endpoint(websocket: WebSocket) -> None:
                 if t is send_task and not t.cancelled():
                     try:
                         await websocket.send_text(_event_json(t.result()))
-                    except WebSocketDisconnect:
+                    except (WebSocketDisconnect, RuntimeError):
                         return
                 elif t is recv_task and not t.cancelled():
+                    # Re-raise if the receive itself failed (disconnect or
+                    # "already disconnected" RuntimeError) so the outer
+                    # except can clean up instead of looping into another
+                    # receive_text() on a closed socket.
+                    exc = t.exception()
+                    if exc is not None:
+                        raise exc
                     _LOG.debug("ws: inbound frame dropped (read-only channel)")
-    except (WebSocketDisconnect, asyncio.CancelledError):
+    except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError):
         pass
     finally:
         drain_task.cancel()

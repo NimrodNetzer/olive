@@ -5,520 +5,1334 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OLIVE — Agentic Command Center</title>
 <style>
-  :root {
-    --bg:       #0a0e14;
-    --surface:  #0d1117;
-    --border:   #21262d;
-    --text:     #c9d1d9;
-    --muted:    #6e7681;
-    --green:    #3fb950;
-    --red:      #f85149;
-    --yellow:   #d29922;
-    --purple:   #bc8cff;
-    --blue:     #58a6ff;
-    --orange:   #e3b341;
-  }
+:root {
+  --bg:      #060a0f;
+  --surf:    #0b0f17;
+  --surf2:   #0f1520;
+  --border:  #1a2235;
+  --border2: #253045;
+  --text:    #c9d1d9;
+  --muted:   #5a6270;
+  --dim:     #323a47;
+  --green:   #3fb950;
+  --red:     #f85149;
+  --yellow:  #d29922;
+  --purple:  #bc8cff;
+  --blue:    #58a6ff;
+  --orange:  #e3b341;
+  --cyan:    #39d3c3;
+  --def:     #58a6ff;
+  --rem:     #d29922;
+  --rt:      #f85149;
+  --mode-tint: transparent;
+  --mode-ring: #1a2235;
+}
+body.suspicious{--mode-tint:rgba(210,153,34,.04);--mode-ring:rgba(210,153,34,.35)}
+body.siege     {--mode-tint:rgba(248,81,73,.06); --mode-ring:rgba(248,81,73,.45)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',Courier,monospace;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden;transition:background .6s}
+body::after{content:'';position:fixed;inset:0;background:var(--mode-tint);pointer-events:none;z-index:0;transition:background .8s}
+main,header{position:relative;z-index:1}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+@keyframes spin      {to{transform:rotate(360deg)}}
+@keyframes spinrev   {to{transform:rotate(-360deg)}}
+@keyframes breathe   {0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.04)}}
+@keyframes arm-l     {0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg)}}
+@keyframes arm-r     {0%,100%{transform:rotate(12deg)}50%{transform:rotate(-12deg)}}
+@keyframes eye-hot   {0%,100%{opacity:1;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
+@keyframes line-a    {0%,100%{opacity:.2}50%{opacity:.85}}
+@keyframes line-b    {0%,100%{opacity:.1}50%{opacity:.6}}
+@keyframes screen-on {0%,100%{opacity:.85}50%{opacity:1}}
+@keyframes fadein    {from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+@keyframes mode-blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes siege-pulse{0%,100%{box-shadow:0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 40px rgba(248,81,73,.2)}}
+@keyframes bolt-fly{0%{opacity:1;transform:translateX(0) scaleX(1)}75%{opacity:1;transform:translateX(var(--bolt-dist)) scaleX(0.6)}100%{opacity:0;transform:translateX(var(--bolt-dist)) scale(3,.2)}}
+@keyframes impact-ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+@keyframes gw-block-flash{0%,100%{box-shadow:none}40%{box-shadow:0 0 60px 20px rgba(248,81,73,.45)}}
+@keyframes toast-in  {from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes toast-out {from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(20px)}}
+@keyframes neu-pop   {0%{transform:scale(1.5);color:var(--red)}100%{transform:scale(1)}}
+@keyframes pulse-dot {0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes bus-tick  {0%{color:var(--cyan)}100%{color:var(--text)}}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 13px;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+/* ── Header ── */
+header{display:flex;align-items:center;gap:10px;padding:6px 14px;background:var(--surf);border-bottom:1px solid var(--mode-ring);flex-shrink:0;transition:border-color .6s}
+body.siege header{animation:siege-pulse 1.5s ease-in-out infinite}
+header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
+.hsub{color:var(--muted);font-size:10px;letter-spacing:.5px}
+#mode-badge{padding:2px 8px;border-radius:3px;font-size:10px;font-weight:bold;letter-spacing:1.5px;border:1px solid var(--green);color:var(--green);transition:all .4s;margin-left:6px;flex-shrink:0}
+#mode-badge.suspicious{border-color:var(--yellow);color:var(--yellow);animation:mode-blink 1s infinite}
+#mode-badge.siege     {border-color:var(--red);   color:var(--red);   animation:mode-blink .5s infinite}
+.hcounts{display:flex;gap:12px;margin-left:auto}
+.hc{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+.hcv{font-weight:bold;color:var(--text)}
+.hcv.tick{animation:bus-tick .4s ease-out}
+#conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;transition:background .3s}
+#conn-dot.live{background:var(--green);box-shadow:0 0 5px var(--green)}
+#conn-lbl{color:var(--muted);font-size:10px}
 
-  /* ── Header ───────────────────────────────────────────────── */
-  header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 16px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  header h1 { font-size: 14px; font-weight: bold; color: var(--green); letter-spacing: 1px; }
-  header .subtitle { color: var(--muted); font-size: 11px; }
-  #conn-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--red); margin-left: auto; flex-shrink: 0;
-    transition: background 0.3s;
-  }
-  #conn-dot.connected { background: var(--green); }
-  #conn-label { color: var(--muted); font-size: 11px; }
+/* ── Main grid ── */
+main{flex:1;display:grid;grid-template-columns:240px 1fr 320px;grid-template-rows:1fr 180px;gap:7px;padding:7px;overflow:hidden}
 
-  /* ── Main grid ─────────────────────────────────────────────── */
-  main {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 220px 1fr 260px;
-    grid-template-rows: 1fr 180px;
-    gap: 8px;
-    padding: 8px;
-    overflow: hidden;
-  }
+/* ── Dept column ── */
+#dept-col{grid-column:1;grid-row:1;display:flex;flex-direction:column;gap:7px}
+.dc{background:var(--surf);border:1px solid var(--border);border-radius:8px;flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;transition:border-color .4s,box-shadow .4s}
+.dc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--dc-clr,var(--border));opacity:.3;transition:opacity .4s;z-index:1}
+.dc.active{border-color:var(--dc-clr);box-shadow:0 0 18px color-mix(in srgb,var(--dc-clr) 18%,transparent)}
+.dc.active::before{opacity:1}
+#dc-def{--dc-clr:var(--def)} #dc-rem{--dc-clr:var(--rem)} #dc-rt{--dc-clr:var(--rt)}
+.dc-scene{flex:1;min-height:0;display:flex}
+.dc-scene svg{width:100%;height:100%}
+.dc-info{padding:5px 10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--surf2)}
+.dc-name{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--dc-clr);flex:1}
+.dc-dot{width:5px;height:5px;border-radius:50%;background:var(--muted);transition:background .3s,box-shadow .3s}
+.dc.active .dc-dot{background:var(--dc-clr);box-shadow:0 0 4px var(--dc-clr);animation:pulse-dot 1s ease-in-out infinite}
+.dc-ev{font-size:10px;color:var(--muted);transition:color .3s;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dc.active .dc-ev{color:var(--dc-clr);font-weight:bold}
+.ab,.eye,.al,.ar{opacity:0;transition:opacity .5s ease}
+.dc.active .ab,.dc.active .al,.dc.active .ar,.dc.active .eye{opacity:1}
+.ab{transform-box:fill-box;transform-origin:center bottom}
+.dc.active .ab{animation:breathe 2.5s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center}
+.dc.active .eye{animation:eye-hot .45s ease-in-out infinite}
+.al{transform-box:fill-box;transform-origin:100% 50%}
+.dc.active .al{animation:arm-l .28s ease-in-out infinite}
+.ar{transform-box:fill-box;transform-origin:0% 50%}
+.dc.active .ar{animation:arm-r .28s ease-in-out infinite .14s}
+.ml{animation:line-a 2.5s ease-in-out infinite}
+.ml:nth-child(2){animation-delay:.4s}
+.ml:nth-child(3){animation:line-b 2.5s ease-in-out infinite .8s}
+.ml:nth-child(4){animation-delay:1.2s}
+.ml:nth-child(5){animation:line-a 2.5s ease-in-out infinite 1.6s}
+.dc.active .ml{animation:line-a .7s ease-in-out infinite}
+.dc.active .ml:nth-child(2){animation-delay:.12s}
+.dc.active .ml:nth-child(3){animation-delay:.24s}
+.dc.active .ml:nth-child(4){animation-delay:.36s}
+.dc.active .ml:nth-child(5){animation-delay:.48s}
+.msbg{transition:opacity .4s}
+.dc:not(.active) .msbg{opacity:.15}
+.dc.active .msbg{opacity:1;animation:screen-on .8s ease-in-out infinite}
 
-  /* ── Shared panel style ─────────────────────────────────────── */
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 12px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-  .panel-title {
-    font-size: 10px;
-    font-weight: bold;
-    letter-spacing: 1.5px;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-    flex-shrink: 0;
-  }
+/* ── Gateway ── */
+#gw{grid-column:2;grid-row:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-radius:8px;border:1px solid var(--border);background:var(--surf);position:relative;overflow:hidden;transition:border-color .4s,box-shadow .4s}
+#gw::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 45% at 50% 50%,rgba(63,185,80,.04) 0%,transparent 70%);pointer-events:none}
+body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgba(248,81,73,.05) 0%,transparent 70%)}
+#gw.allow    {border-color:var(--green); box-shadow:0 0 28px rgba(63,185,80,.14)}
+#gw.block    {border-color:var(--red);   box-shadow:0 0 28px rgba(248,81,73,.14)}
+#gw.hold     {border-color:var(--yellow);box-shadow:0 0 28px rgba(210,153,34,.14)}
+#gw.quarantine{border-color:var(--purple);box-shadow:0 0 28px rgba(188,140,255,.14)}
+#gw.blocked-flash{animation:gw-block-flash .6s ease-out}
+#gw-impact-ring{position:absolute;width:80px;height:80px;border-radius:50%;border:2px solid var(--red);pointer-events:none;top:50%;left:50%;transform:translate(-50%,-50%);display:none}
+#gw-impact-ring.pop{display:block;animation:impact-ring .6s ease-out forwards}
+#toast{position:absolute;right:12px;top:12px;background:var(--surf2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;min-width:155px;max-width:210px;pointer-events:none;z-index:10;display:none}
+#toast.show{display:block;animation:toast-in .25s ease-out}
+#toast.hide{animation:toast-out .3s ease-in forwards}
+#toast-dec{font-size:11px;font-weight:bold;letter-spacing:1.5px;margin-bottom:3px}
+#toast-rule{font-size:10px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast-agent{font-size:9px;color:var(--dim)}
+#toast.ta #toast-dec{color:var(--green)}
+#toast.tb #toast-dec{color:var(--red);border-left:2px solid var(--red);padding-left:5px}
+#toast.th #toast-dec{color:var(--yellow)}
+#toast.tq #toast-dec{color:var(--purple)}
+#gw-rings{position:relative;width:130px;height:130px;display:flex;align-items:center;justify-content:center}
+#gw-rings svg{position:absolute;top:0;left:0;width:100%;height:100%}
+.ro{animation:spin 14s linear infinite}
+.rm{animation:spinrev 9s linear infinite}
+.ri{animation:spin 5s linear infinite}
+#gw-core{z-index:1;width:52px;height:52px;border-radius:50%;background:var(--surf2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;transition:border-color .4s,box-shadow .4s}
+#gw.allow      #gw-core{border-color:var(--green); box-shadow:0 0 14px rgba(63,185,80,.45)}
+#gw.block      #gw-core{border-color:var(--red);   box-shadow:0 0 14px rgba(248,81,73,.45)}
+#gw.quarantine #gw-core{border-color:var(--purple);box-shadow:0 0 14px rgba(188,140,255,.45)}
+#gw-neutralized{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:34px}
+#neu-count{font-size:30px;font-weight:bold;color:var(--red);letter-spacing:2px;line-height:1;transition:color .4s}
+#neu-count.zero{color:var(--dim)}
+#neu-count.tick{animation:neu-pop .3s ease-out}
+#neu-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+#gw-name{font-size:13px;font-weight:bold;letter-spacing:3px;color:var(--text)}
+#gw-sub{font-size:9px;color:var(--muted);letter-spacing:1.5px}
+#gw-dec{font-size:18px;font-weight:bold;letter-spacing:3px;color:var(--muted);transition:color .3s;min-height:24px;text-align:center}
+#gw-dec.allow    {color:var(--green)}
+#gw-dec.block    {color:var(--red)}
+#gw-dec.hold     {color:var(--yellow)}
+#gw-dec.quarantine{color:var(--purple)}
+#gw-rule{font-size:10px;color:var(--muted);max-width:320px;text-align:center;min-height:13px}
+#gw-stats{display:flex;gap:14px}
+.sv{font-size:17px;font-weight:bold}
+.sl{font-size:9px;color:var(--muted);letter-spacing:1px}
+.sa .sv{color:var(--green)}.sb .sv{color:var(--red)}.sh .sv{color:var(--yellow)}.sq .sv{color:var(--purple)}
+.stat{display:flex;flex-direction:column;align-items:center;gap:1px}
 
-  /* ── Left column: department offices ──────────────────────── */
-  #dept-column {
-    grid-column: 1;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
+/* Commander strip */
+#cmd-strip{display:flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(188,140,255,.05);border:1px solid rgba(188,140,255,.18);border-radius:5px;max-width:370px;width:100%;flex-shrink:0}
+.cmd-lbl{font-size:9px;letter-spacing:1.5px;color:var(--purple);font-weight:bold;flex-shrink:0}
+#cmd-status{font-size:9px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-pill{font-size:8px;padding:1px 5px;border-radius:3px;flex-shrink:0;white-space:nowrap}
+.cp-dir{background:rgba(188,140,255,.1);border:1px solid rgba(188,140,255,.25);color:var(--purple)}
+.cp-bus{background:rgba(57,211,195,.07);border:1px solid rgba(57,211,195,.2);color:var(--cyan)}
 
-  .dept-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 12px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    transition: border-color 0.4s, box-shadow 0.4s;
-    position: relative;
-    overflow: hidden;
-  }
-  .dept-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: var(--border);
-    transition: background 0.4s;
-  }
-  .dept-card.active { border-color: var(--green); box-shadow: 0 0 12px rgba(63,185,80,0.15); }
-  .dept-card.active::before { background: var(--green); }
+/* Last event chips */
+#gw-last{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:18px;max-width:380px}
+.gwc{font-size:9px;padding:1px 5px;background:var(--surf2);border:1px solid var(--border);border-radius:3px;color:var(--muted);white-space:nowrap;overflow:hidden;max-width:140px;text-overflow:ellipsis}
+.gwc.r{color:var(--red);border-color:rgba(248,81,73,.3)}
+.gwc.g{color:var(--green);border-color:rgba(63,185,80,.3)}
+.gwc.y{color:var(--yellow);border-color:rgba(210,153,34,.3)}
+.gwc.p{color:var(--purple);border-color:rgba(188,140,255,.3)}
 
-  .dept-icon { font-size: 18px; line-height: 1; }
-  .dept-name { font-size: 11px; font-weight: bold; letter-spacing: 1px; color: var(--text); }
-  .dept-status { font-size: 10px; color: var(--muted); }
-  .dept-last  { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ── Attack Theater (right col) ── */
+#atk{grid-column:3;grid-row:1/span 2;background:var(--surf);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.ptitle{font-size:10px;font-weight:bold;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;flex-shrink:0}
+#atk .ptitle{color:var(--orange)}
 
-  /* ── Center: gateway node ──────────────────────────────────── */
-  #gateway-panel {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    transition: border-color 0.4s, box-shadow 0.4s;
-    position: relative;
-    overflow: hidden;
-    background: var(--surface);
-  }
-  #gateway-panel.allow { border-color: var(--green); box-shadow: 0 0 24px rgba(63,185,80,0.2); }
-  #gateway-panel.block { border-color: var(--red);   box-shadow: 0 0 24px rgba(248,81,73,0.2); }
-  #gateway-panel.hold  { border-color: var(--yellow); box-shadow: 0 0 24px rgba(210,153,34,0.2); }
-  #gateway-panel.quarantine { border-color: var(--purple); box-shadow: 0 0 24px rgba(188,140,255,0.2); }
+/* Tab system */
+.tab-bar{display:flex;gap:3px;flex-shrink:0}
+.tab{flex:1;padding:4px 5px;background:var(--surf2);border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:inherit;font-size:9px;font-weight:bold;letter-spacing:1px;cursor:pointer;transition:all .2s;text-align:center}
+.tab:hover{border-color:var(--orange);color:var(--orange)}
+.tab.active{background:rgba(227,179,65,.1);border-color:var(--orange);color:var(--orange)}
+.pane{display:flex;flex-direction:column;gap:7px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+.pane::-webkit-scrollbar{width:3px}
+.pane::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.pane.hidden{display:none!important}
 
-  /* Animated ring around gateway */
-  #gateway-ring {
-    position: relative;
-    width: 90px; height: 90px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #gateway-ring svg {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  }
-  #gateway-ring svg circle {
-    fill: none; stroke: var(--border); stroke-width: 2;
-    stroke-dasharray: 251; stroke-dashoffset: 0;
-    transform-origin: 50% 50%;
-    animation: spin 8s linear infinite;
-  }
-  #gateway-ring svg circle.pulse {
-    stroke: var(--green);
-    stroke-dasharray: 60 191;
-    animation: spin 2s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+/* Theater pane */
+.msrow{display:flex;gap:8px;flex-shrink:0}
+.ms{flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;text-align:center}
+.msv{font-size:18px;font-weight:bold;color:var(--orange)}
+.msl{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-top:1px}
+.atk-cats{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;min-height:0}
+.atk-cat{background:var(--surf2);border:1px solid var(--border);border-radius:7px;padding:7px 8px 5px;cursor:pointer;transition:border-color .2s,background .2s,box-shadow .2s;display:flex;flex-direction:column;gap:2px}
+.atk-cat:hover{border-color:var(--orange);background:rgba(227,179,65,.06)}
+.atk-cat.sel{border-color:var(--orange);background:rgba(227,179,65,.1);box-shadow:0 0 10px rgba(227,179,65,.15)}
+.atk-cat-icon{font-size:17px;line-height:1;margin-bottom:2px}
+.atk-cat-name{font-size:10px;font-weight:bold;letter-spacing:1px;color:var(--text);text-transform:uppercase}
+.atk-cat-desc{font-size:9px;color:var(--muted);line-height:1.4}
+.atk-cat-cnt{margin-top:auto;font-size:12px;font-weight:bold;color:var(--muted);padding-top:4px}
+.atk-cat.sel .atk-cat-cnt{color:var(--orange)}
+.atk-cat[data-cat="inj"]     .atk-cat-name{color:var(--red)}
+.atk-cat[data-cat="inj"].sel {border-color:var(--red);background:rgba(248,81,73,.1);box-shadow:0 0 10px rgba(248,81,73,.15)}
+.atk-cat[data-cat="inj"].sel .atk-cat-cnt{color:var(--red)}
+.atk-cat[data-cat="exf"]     .atk-cat-name{color:var(--orange)}
+.atk-cat[data-cat="esc"]     .atk-cat-name{color:var(--purple)}
+.atk-cat[data-cat="esc"].sel {border-color:var(--purple);background:rgba(188,140,255,.1);box-shadow:0 0 10px rgba(188,140,255,.15)}
+.atk-cat[data-cat="esc"].sel .atk-cat-cnt{color:var(--purple)}
+.atk-cat[data-cat="evd"]     .atk-cat-name{color:var(--cyan)}
+.atk-cat[data-cat="evd"].sel {border-color:var(--cyan);background:rgba(57,211,195,.08);box-shadow:0 0 10px rgba(57,211,195,.12)}
+.atk-cat[data-cat="evd"].sel .atk-cat-cnt{color:var(--cyan)}
 
-  #gateway-icon { font-size: 32px; line-height: 1; z-index: 1; }
+/* Drill result card */
+#last-drill{background:var(--surf2);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;flex-shrink:0;display:none;animation:fadein .3s ease}
+#last-drill.dc-h{border-color:rgba(248,81,73,.55);background:rgba(248,81,73,.04)}
+#last-drill.dc-m{border-color:rgba(210,153,34,.45);background:rgba(210,153,34,.03)}
+#last-drill.dc-l{border-color:rgba(57,211,195,.4);background:rgba(57,211,195,.03)}
+.dr-hdr{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.dr-sev{font-size:11px;font-weight:bold;letter-spacing:1px}
+.dr-sev.H{color:var(--red)}.dr-sev.M{color:var(--yellow)}.dr-sev.L{color:var(--cyan)}.dr-sev.S{color:var(--muted)}
+.dr-n{font-size:9px;color:var(--dim);flex:1;text-align:center}
+.dr-cat{font-size:8px;padding:1px 5px;border-radius:3px;background:var(--surf);border:1px solid var(--border);color:var(--muted)}
+.dr-case{font-size:9px;color:var(--dim);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dr-tags{display:flex;flex-wrap:wrap;gap:3px}
+.dr-tag{padding:1px 4px;background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.2);border-radius:2px;color:var(--red);font-size:8px;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  #gateway-name { font-size: 16px; font-weight: bold; letter-spacing: 2px; color: var(--text); }
-  #gateway-subtitle { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+#fire-btn{width:100%;padding:9px;flex-shrink:0;background:rgba(248,81,73,.12);border:1px solid var(--red);border-radius:6px;color:var(--red);font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;cursor:pointer;transition:background .2s,box-shadow .2s}
+#fire-btn:hover:not(:disabled){background:rgba(248,81,73,.22);box-shadow:0 0 16px rgba(248,81,73,.3)}
+#fire-btn:disabled{opacity:.35;cursor:not-allowed}
+#fire-btn.firing{animation:mode-blink .3s ease-in-out infinite}
 
-  #gateway-decision {
-    font-size: 20px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    color: var(--muted);
-    transition: color 0.3s;
-    min-height: 28px;
-  }
-  #gateway-decision.allow { color: var(--green); }
-  #gateway-decision.block { color: var(--red); }
-  #gateway-decision.hold  { color: var(--yellow); }
-  #gateway-decision.quarantine { color: var(--purple); }
+/* Auto demo */
+.demo-row{display:flex;gap:5px;flex-shrink:0}
+#demo-btn{flex:1;padding:7px;background:rgba(57,211,195,.08);border:1px solid rgba(57,211,195,.3);border-radius:6px;color:var(--cyan);font-family:inherit;font-size:10px;font-weight:bold;letter-spacing:1.5px;cursor:pointer;transition:background .2s}
+#demo-btn:hover:not(:disabled){background:rgba(57,211,195,.15)}
+#demo-btn:disabled{opacity:.35;cursor:not-allowed}
+#demo-btn.running{border-color:var(--cyan);background:rgba(57,211,195,.12);animation:mode-blink .8s ease-in-out infinite}
+#sched-btn{padding:7px 8px;background:rgba(188,140,255,.07);border:1px solid rgba(188,140,255,.25);border-radius:6px;color:var(--purple);font-family:inherit;font-size:10px;cursor:pointer;transition:background .2s;flex-shrink:0;white-space:nowrap}
+#sched-btn:hover{background:rgba(188,140,255,.14)}
+#sched-btn.on{background:rgba(188,140,255,.16);border-color:var(--purple)}
+#demo-prog{flex-shrink:0;display:none;align-items:center;gap:5px}
+#demo-prog.show{display:flex}
+.dp-step{width:10px;height:10px;border-radius:2px;background:var(--border);transition:background .3s}
+.dp-step.done{background:var(--green)}.dp-step.active{background:var(--cyan);animation:pulse-dot .6s ease-in-out infinite}.dp-step.pending{background:var(--border)}
+#demo-label{font-size:9px;color:var(--muted);flex:1}
 
-  #gateway-rule { font-size: 11px; color: var(--muted); max-width: 300px; text-align: center; }
+/* Session summary */
+.sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex-shrink:0}
+.sum-box{background:var(--surf2);border:1px solid var(--border);border-radius:5px;padding:7px 8px;text-align:center}
+.sum-val{font-size:17px;font-weight:bold;color:var(--text)}
+.sum-lbl{font-size:8px;color:var(--muted);letter-spacing:.5px;margin-top:1px}
+.sum-val.g{color:var(--green)}.sum-val.r{color:var(--red)}.sum-val.c{color:var(--cyan)}.sum-val.p{color:var(--purple)}
+.sum-bar-row{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.sum-bar-lbl{display:flex;justify-content:space-between;font-size:9px;color:var(--muted)}
+.sum-bar-bg{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.sum-bar{height:100%;border-radius:3px;transition:width .6s}
+.sum-divider{font-size:9px;color:var(--dim);letter-spacing:.5px;flex-shrink:0;border-top:1px solid var(--border);padding-top:5px}
+.atk-bolt{position:fixed;height:3px;border-radius:2px;background:linear-gradient(to left,transparent,var(--bolt-clr));box-shadow:0 0 8px var(--bolt-clr),0 0 2px var(--bolt-clr);pointer-events:none;z-index:9999;animation:bolt-fly .7s ease-in forwards}
 
-  /* Stats row */
-  #gateway-stats {
-    display: flex; gap: 24px; margin-top: 4px;
-  }
-  .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .stat-value { font-size: 18px; font-weight: bold; }
-  .stat-label { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
-  .stat-allow .stat-value { color: var(--green); }
-  .stat-block .stat-value { color: var(--red); }
-  .stat-hold  .stat-value { color: var(--yellow); }
+/* Log pane */
+.log-hdr{font-size:9px;color:var(--muted);letter-spacing:.5px;flex-shrink:0}
+#log-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+#log-list::-webkit-scrollbar{width:2px}
+#log-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:1px}
+.le{display:grid;grid-template-columns:46px 52px 1fr;gap:4px;align-items:start;padding:4px 6px;border-radius:3px;border-left:2px solid transparent;cursor:pointer;transition:background .15s;animation:fadein .3s ease}
+.le:hover{background:rgba(255,255,255,.03)}
+.le.le-block    {border-left-color:rgba(248,81,73,.7)}
+.le.le-allow    {border-left-color:rgba(63,185,80,.6)}
+.le.le-quarantine{border-left-color:rgba(188,140,255,.7)}
+.le.le-hold     {border-left-color:rgba(210,153,34,.6)}
+.le.le-rt       {border-left-color:rgba(227,179,65,.5)}
+.le-ts{color:var(--dim);font-size:9px;padding-top:1px}
+.le-dec{font-weight:bold;font-size:9px;letter-spacing:.5px;padding-top:1px}
+.le-dec.block   {color:var(--red)}
+.le-dec.allow   {color:var(--green)}
+.le-dec.quarantine{color:var(--purple)}
+.le-dec.hold    {color:var(--yellow)}
+.le-dec.rt      {color:var(--orange)}
+.le-body{display:flex;flex-direction:column;gap:1px;min-width:0}
+.le-main{color:var(--text);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.le-sub{color:var(--dim);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  /* ── Right column: attack theater ─────────────────────────── */
-  #attack-panel {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  #attack-panel .panel-title { color: var(--orange); }
-  #attack-panel { border-color: var(--yellow); }
+/* Org pane */
+#org-svg{flex:1;width:100%;min-height:0;overflow:visible}
 
-  #corpus-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-bottom: 8px;
-  }
-  #corpus-list::-webkit-scrollbar { width: 4px; }
-  #corpus-list::-webkit-scrollbar-track { background: transparent; }
-  #corpus-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* ── Trust panel ── */
+#trust{grid-column:1;grid-row:2;background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+#trust .ptitle{color:var(--cyan)}
+#trust-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+#trust-list::-webkit-scrollbar{width:2px}
+#trust-list::-webkit-scrollbar-thumb{background:var(--border)}
+.ta-row{display:flex;align-items:center;gap:6px}
+.ta-name{font-size:10px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ta-score{font-size:9px;font-weight:bold;width:30px;text-align:right;flex-shrink:0}
+.ta-bar-bg{height:4px;width:46px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
+.ta-bar{height:100%;border-radius:2px;transition:width .5s,background .5s}
+.ta-badge{font-size:8px;padding:1px 4px;border-radius:2px;letter-spacing:.5px;flex-shrink:0}
+.ta-trust .ta-score,.ta-trust .ta-badge{color:var(--green)}
+.ta-trust .ta-bar{background:var(--green)}
+.ta-trust .ta-badge{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.3)}
+.ta-warn  .ta-score,.ta-warn  .ta-badge{color:var(--yellow)}
+.ta-warn  .ta-bar{background:var(--yellow)}
+.ta-warn  .ta-badge{background:rgba(210,153,34,.15);border:1px solid rgba(210,153,34,.3)}
+.ta-danger.ta-score,.ta-danger .ta-badge{color:var(--red)}
+.ta-danger .ta-bar{background:var(--red)}
+.ta-danger .ta-badge{background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.3)}
+#trust-empty{font-size:10px;color:var(--muted);text-align:center;padding:14px 0}
 
-  .corpus-item {
-    padding: 3px 6px;
-    border-radius: 3px;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 11px;
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .corpus-item:hover { background: rgba(88,166,255,0.1); color: var(--blue); }
-  .corpus-item.selected { background: rgba(210,153,34,0.15); color: var(--orange); }
+/* ── Feed panel ── */
+#feed{grid-column:2;grid-row:2;background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:7px 12px;overflow:hidden;display:flex;flex-direction:column}
+#feed .ptitle{color:var(--blue)}
+#feed-log{flex:1;height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+#feed-log::-webkit-scrollbar{width:3px}
+#feed-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.fe{font-size:11px;padding:2px 5px;border-radius:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:fadein .3s ease;border-left:2px solid transparent;cursor:pointer}
+.fe:hover{background:rgba(255,255,255,.04)}
+.fe.da{color:var(--green); border-left-color:rgba(63,185,80,.5)}
+.fe.db{color:var(--red);   border-left-color:rgba(248,81,73,.5)}
+.fe.dh{color:var(--yellow);border-left-color:rgba(210,153,34,.5)}
+.fe.dq{color:var(--purple);border-left-color:rgba(188,140,255,.5)}
+.fe.rt{color:var(--orange);border-left-color:rgba(227,179,65,.5)}
+.fe.fp{color:var(--cyan);  border-left-color:rgba(57,211,195,.5)}
+.fe.op{color:var(--blue);  border-left-color:rgba(88,166,255,.5)}
+.fe.mc{color:var(--purple);border-left-color:var(--purple);font-weight:bold}
+.fe.df{color:var(--muted)}
+.fts{color:var(--dim);margin-right:5px}
+.fk{font-weight:bold;margin-right:5px;text-transform:uppercase;font-size:10px}
 
-  #launch-btn {
-    width: 100%;
-    padding: 7px;
-    background: rgba(210,153,34,0.15);
-    border: 1px solid var(--yellow);
-    border-radius: 4px;
-    color: var(--orange);
-    font-family: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    letter-spacing: 0.5px;
-    transition: background 0.2s;
-    flex-shrink: 0;
-  }
-  #launch-btn:hover { background: rgba(210,153,34,0.25); }
-  #launch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* ── Bottom: mitigation feed ───────────────────────────────── */
-  #feed-panel {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    overflow: hidden;
-  }
-  #feed-panel .panel-title { color: var(--blue); }
-
-  #feed-log {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column-reverse;
-    gap: 2px;
-  }
-  #feed-log::-webkit-scrollbar { width: 4px; }
-  #feed-log::-webkit-scrollbar-track { background: transparent; }
-  #feed-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .feed-entry {
-    font-size: 11px;
-    padding: 2px 4px;
-    border-radius: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    animation: fadein 0.3s ease;
-  }
-  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
-
-  .feed-entry.decision-allow { color: var(--green); }
-  .feed-entry.decision-block { color: var(--red); }
-  .feed-entry.decision-hold  { color: var(--yellow); }
-  .feed-entry.decision-quarantine { color: var(--purple); }
-  .feed-entry.redteam-finding { color: var(--orange); }
-  .feed-entry.operator-request { color: var(--blue); }
-  .feed-entry.default { color: var(--muted); }
-
-  .feed-ts { color: var(--muted); margin-right: 6px; }
-  .feed-kind { font-weight: bold; margin-right: 6px; }
+/* ── Event detail overlay ── */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:none;align-items:center;justify-content:center}
+#overlay.show{display:flex;animation:fadein .2s ease}
+#ov-box{background:var(--surf);border:1px solid var(--border2);border-radius:10px;padding:20px 24px;max-width:500px;width:92%;max-height:75vh;overflow-y:auto}
+#ov-title{font-size:11px;font-weight:bold;letter-spacing:2px;margin-bottom:8px;color:var(--text);text-transform:uppercase}
+#ov-kind{display:inline-block;padding:2px 8px;border-radius:3px;font-size:9px;font-weight:bold;letter-spacing:1px;margin-bottom:12px;background:var(--surf2);border:1px solid var(--border2);color:var(--muted)}
+.ov-row{display:flex;gap:10px;margin-bottom:6px}
+.ov-k{color:var(--muted);width:90px;flex-shrink:0;font-size:10px}
+.ov-v{color:var(--text);word-break:break-all;font-size:10px}
+.ov-v.r{color:var(--red)}.ov-v.g{color:var(--green)}.ov-v.y{color:var(--yellow)}.ov-v.p{color:var(--purple)}
+#ov-close{margin-top:14px;display:block;width:100%;padding:8px;background:var(--surf2);border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer;transition:border-color .2s,color .2s;letter-spacing:1px}
+#ov-close:hover{border-color:var(--text);color:var(--text)}
 </style>
 </head>
 <body>
 
 <header>
-  <span style="font-size:18px">🫒</span>
+  <span style="font-size:17px">🫒</span>
   <h1>OLIVE</h1>
-  <span class="subtitle">Agentic Command Center &mdash; zero-trust MCP gateway</span>
+  <span class="hsub">Agentic Command Center &mdash; zero-trust MCP gateway</span>
+  <div id="mode-badge">NORMAL</div>
+  <div class="hcounts">
+    <div class="hc">detections:<span class="hcv" id="hc-det">0</span></div>
+    <div class="hc">findings:<span class="hcv" id="hc-rt">0</span></div>
+    <div class="hc">proposals:<span class="hcv" id="hc-fp">0</span></div>
+    <div class="hc">bus:<span class="hcv" id="hc-bus">0</span></div>
+  </div>
   <div id="conn-dot"></div>
-  <span id="conn-label">disconnected</span>
+  <span id="conn-lbl">disconnected</span>
 </header>
 
 <main>
-  <!-- Left: departments -->
-  <div id="dept-column">
-    <div class="dept-card" id="dept-defense">
-      <div class="dept-icon">🛡</div>
-      <div class="dept-name">DEFENSE</div>
-      <div class="dept-status">idle</div>
-      <div class="dept-last"></div>
-    </div>
-    <div class="dept-card" id="dept-remediation">
-      <div class="dept-icon">🔧</div>
-      <div class="dept-name">REMEDIATION</div>
-      <div class="dept-status">idle</div>
-      <div class="dept-last"></div>
-    </div>
-    <div class="dept-card" id="dept-redteam">
-      <div class="dept-icon">⚔</div>
-      <div class="dept-name">RED TEAM</div>
-      <div class="dept-status">idle</div>
-      <div class="dept-last"></div>
-    </div>
-  </div>
 
-  <!-- Center: gateway node -->
-  <div id="gateway-panel" class="panel">
-    <div id="gateway-ring">
-      <svg viewBox="0 0 90 90">
-        <circle cx="45" cy="45" r="40"/>
-        <circle cx="45" cy="45" r="40" class="pulse"/>
+<!-- ── Department offices ── -->
+<div id="dept-col">
+
+  <div class="dc" id="dc-def">
+    <div class="dc-scene">
+      <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <rect width="220" height="115" fill="#060b13"/>
+        <rect x="0" y="90" width="220" height="25" fill="#080d15"/>
+        <line x1="0" y1="90" x2="220" y2="90" stroke="#1a2235" stroke-width="1"/>
+        <path d="M10,8 L10,42 L48,42" stroke="#131f30" stroke-width=".6" fill="none"/>
+        <path d="M210,8 L210,38 L172,38" stroke="#131f30" stroke-width=".6" fill="none"/>
+        <circle cx="10" cy="8" r="1.8" fill="#131f30"/><circle cx="210" cy="8" r="1.8" fill="#131f30"/>
+        <path d="M193,5 L204,5 L204,18 L198.5,23 L193,18 Z" fill="none" stroke="#58a6ff" stroke-width="1.2" opacity=".4"/>
+        <line x1="198.5" y1="8" x2="198.5" y2="16" stroke="#58a6ff" stroke-width="1" opacity=".25"/>
+        <rect x="15" y="80" width="190" height="10" rx="2" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
+        <rect x="20" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
+        <rect x="193" y="90" width="7" height="14" rx="1" fill="#0b0f17"/>
+        <rect x="28" y="46" width="54" height="36" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
+        <rect x="30" y="48" width="50" height="28" rx="1.5" class="msbg" fill="#001830" opacity=".15"/>
+        <rect x="32" y="50" width="32" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
+        <rect x="32" y="55" width="22" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
+        <rect x="32" y="60" width="38" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".22"/>
+        <rect x="32" y="65" width="16" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
+        <rect x="32" y="70" width="28" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".18"/>
+        <rect x="53" y="82" width="7" height="5" rx="1" fill="#0f1520"/>
+        <rect x="130" y="44" width="66" height="38" rx="2" fill="#08111c" stroke="#1a2235" stroke-width="1"/>
+        <rect x="132" y="46" width="62" height="30" rx="1.5" class="msbg" fill="#001030" opacity=".15"/>
+        <rect x="134" y="48" width="30" height="2" rx="1" class="ml" fill="#3fb950" opacity=".22"/>
+        <rect x="134" y="53" width="44" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".18"/>
+        <rect x="134" y="58" width="20" height="2" rx="1" class="ml" fill="#f85149" opacity=".15"/>
+        <rect x="134" y="63" width="36" height="2" rx="1" class="ml" fill="#58a6ff" opacity=".2"/>
+        <rect x="134" y="68" width="26" height="2" rx="1" class="ml" fill="#3fb950" opacity=".18"/>
+        <rect x="159" y="82" width="8" height="5" rx="1" fill="#0f1520"/>
+        <g class="ab">
+          <rect x="97" y="56" width="24" height="26" rx="4" fill="#0f1520" stroke="#1a2235" stroke-width=".8"/>
+          <rect x="108" y="51" width="4" height="7" fill="#0f1520"/>
+          <circle cx="110" cy="44" r="12" fill="#0f1520" stroke="#1a2235" stroke-width="1"/>
+          <line x1="110" y1="32" x2="110" y2="36" stroke="#58a6ff" stroke-width="1.2" opacity=".6"/>
+          <circle cx="110" cy="31" r="2" fill="#58a6ff" opacity=".6"/>
+        </g>
+        <circle class="eye" cx="106" cy="44" r="2.8" fill="#58a6ff"/>
+        <circle class="eye" cx="114" cy="44" r="2.8" fill="#58a6ff"/>
+        <rect class="al" x="80" y="60" width="17" height="6" rx="3" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
+        <rect class="ar" x="121" y="60" width="17" height="6" rx="3" fill="#0f1520" stroke="#1a2235" stroke-width=".5"/>
+        <rect x="98" y="82" width="22" height="4" rx="1" fill="#1a2235" opacity=".4"/>
+        <text x="7" y="88" fill="#58a6ff" font-family="monospace" font-size="6" opacity=".35">DEFENSE</text>
       </svg>
-      <div id="gateway-icon">🟢</div>
     </div>
-    <div id="gateway-name">OLIVE GATEWAY</div>
-    <div id="gateway-subtitle">AI FIREWALL · ZERO TRUST MCP</div>
-    <div id="gateway-decision">—</div>
-    <div id="gateway-rule" style="color:var(--muted)">awaiting events…</div>
-    <div id="gateway-stats">
-      <div class="stat stat-allow">
-        <span class="stat-value" id="stat-allow">0</span>
-        <span class="stat-label">ALLOW</span>
-      </div>
-      <div class="stat stat-block">
-        <span class="stat-value" id="stat-block">0</span>
-        <span class="stat-label">BLOCK</span>
-      </div>
-      <div class="stat stat-hold">
-        <span class="stat-value" id="stat-hold">0</span>
-        <span class="stat-label">HOLD</span>
-      </div>
+    <div class="dc-info">
+      <div class="dc-dot"></div>
+      <div class="dc-name">DEFENSE</div>
+      <div class="dc-ev" id="ev-def">idle</div>
     </div>
   </div>
 
-  <!-- Right: attack theater -->
-  <div class="panel" id="attack-panel">
-    <div class="panel-title">🎯 ATTACK THEATER &mdash; SANDBOX ONLY</div>
-    <div id="corpus-list"></div>
-    <button id="launch-btn" disabled>Launch (request)</button>
+  <div class="dc" id="dc-rem">
+    <div class="dc-scene">
+      <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <rect width="220" height="115" fill="#0c0a04"/>
+        <rect x="0" y="90" width="220" height="25" fill="#120e06"/>
+        <line x1="0" y1="90" x2="220" y2="90" stroke="#2d2010" stroke-width="1"/>
+        <path d="M12,6 L12,40 L52,40" stroke="#211708" stroke-width=".6" fill="none"/>
+        <path d="M208,6 L208,36 L168,36" stroke="#211708" stroke-width=".6" fill="none"/>
+        <g opacity=".4" transform="translate(194,4)">
+          <path d="M4,0 Q8,0 8,4 L8,16 Q8,20 4,20 Q0,20 0,16 L0,4 Q0,0 4,0 Z" fill="none" stroke="#d29922" stroke-width="1.2"/>
+          <line x1="4" y1="6" x2="4" y2="14" stroke="#d29922" stroke-width="2"/>
+        </g>
+        <rect x="10" y="74" width="200" height="16" rx="2" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
+        <rect x="10" y="84" width="200" height="6" rx="1" fill="#201608"/>
+        <rect x="15" y="90" width="8" height="14" rx="1" fill="#120e06"/>
+        <rect x="197" y="90" width="8" height="14" rx="1" fill="#120e06"/>
+        <rect x="18" y="77" width="3" height="8" rx="1" fill="#d29922" opacity=".35"/>
+        <rect x="24" y="76" width="2" height="9" rx=".5" fill="#d29922" opacity=".3"/>
+        <circle cx="32" cy="79" r="2.5" fill="none" stroke="#d29922" stroke-width="1" opacity=".35"/>
+        <rect x="178" y="77" width="12" height="8" rx="1" fill="none" stroke="#d29922" stroke-width=".8" opacity=".3"/>
+        <rect x="95" y="40" width="60" height="36" rx="2" fill="#0a0802" stroke="#2d2010" stroke-width="1"/>
+        <rect x="97" y="42" width="56" height="28" rx="1.5" class="msbg" fill="#1a1000" opacity=".15"/>
+        <rect x="99" y="44" width="36" height="2" rx="1" class="ml" fill="#d29922" opacity=".28"/>
+        <rect x="99" y="49" width="24" height="2" rx="1" class="ml" fill="#3fb950" opacity=".22"/>
+        <rect x="99" y="54" width="42" height="2" rx="1" class="ml" fill="#d29922" opacity=".25"/>
+        <rect x="99" y="59" width="18" height="2" rx="1" class="ml" fill="#3fb950" opacity=".28"/>
+        <rect x="99" y="64" width="30" height="2" rx="1" class="ml" fill="#d29922" opacity=".2"/>
+        <rect x="121" y="76" width="8" height="4" rx="1" fill="#1a1206"/>
+        <g class="ab">
+          <rect x="42" y="48" width="22" height="28" rx="4" fill="#1a1206" stroke="#2d2010" stroke-width=".8"/>
+          <rect x="52" y="43" width="4" height="7" fill="#1a1206"/>
+          <circle cx="54" cy="36" r="12" fill="#1a1206" stroke="#2d2010" stroke-width="1"/>
+          <line x1="54" y1="24" x2="54" y2="28" stroke="#d29922" stroke-width="1.2" opacity=".6"/>
+          <circle cx="54" cy="23" r="2" fill="#d29922" opacity=".6"/>
+        </g>
+        <circle class="eye" cx="50" cy="36" r="2.8" fill="#d29922"/>
+        <circle class="eye" cx="58" cy="36" r="2.8" fill="#d29922"/>
+        <rect class="al" x="25" y="52" width="17" height="6" rx="3" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
+        <rect class="ar" x="64" y="52" width="17" height="6" rx="3" fill="#1a1206" stroke="#2d2010" stroke-width=".5"/>
+        <text x="7" y="88" fill="#d29922" font-family="monospace" font-size="6" opacity=".35">REMEDIATION</text>
+      </svg>
+    </div>
+    <div class="dc-info">
+      <div class="dc-dot"></div>
+      <div class="dc-name">REMEDIATION</div>
+      <div class="dc-ev" id="ev-rem">idle</div>
+    </div>
   </div>
 
-  <!-- Bottom: mitigation feed -->
-  <div class="panel" id="feed-panel">
-    <div class="panel-title">⚡ MITIGATION FEED</div>
-    <div id="feed-log"></div>
+  <div class="dc" id="dc-rt">
+    <div class="dc-scene">
+      <svg viewBox="0 0 220 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <rect width="220" height="115" fill="#0e0505"/>
+        <rect x="0" y="90" width="220" height="25" fill="#140808"/>
+        <line x1="0" y1="90" x2="220" y2="90" stroke="#2d1515" stroke-width="1"/>
+        <path d="M12,8 L12,44 L55,44" stroke="#2a1010" stroke-width=".6" fill="none"/>
+        <path d="M208,8 L208,40 L165,40" stroke="#2a1010" stroke-width=".6" fill="none"/>
+        <circle cx="197" cy="14" r="10" fill="none" stroke="#f85149" stroke-width="1" opacity=".35"/>
+        <circle cx="197" cy="14" r="6"  fill="none" stroke="#f85149" stroke-width=".8" opacity=".25"/>
+        <circle cx="197" cy="14" r="1.5" fill="#f85149" opacity=".3"/>
+        <line x1="191" y1="14" x2="203" y2="14" stroke="#f85149" stroke-width=".6" opacity=".35"/>
+        <line x1="197" y1="8"  x2="197" y2="20"  stroke="#f85149" stroke-width=".6" opacity=".35"/>
+        <rect x="15" y="80" width="190" height="10" rx="2" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
+        <rect x="20" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
+        <rect x="193" y="90" width="7" height="14" rx="1" fill="#0e0505"/>
+        <rect x="108" y="38" width="78" height="44" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
+        <rect x="110" y="40" width="74" height="36" rx="1.5" class="msbg" fill="#200000" opacity=".15"/>
+        <rect x="112" y="42" width="40" height="2" rx=".5" class="ml" fill="#f85149" opacity=".65"/>
+        <rect x="112" y="47" width="30" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
+        <rect x="112" y="52" width="50" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".45"/>
+        <rect x="112" y="57" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".4"/>
+        <rect x="112" y="62" width="36" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
+        <rect x="112" y="67" width="10" height="2" rx=".5" class="ml" fill="#f85149" opacity=".55"/>
+        <rect x="143" y="82" width="8" height="4" rx="1" fill="#140808"/>
+        <rect x="22" y="44" width="50" height="34" rx="2" fill="#080000" stroke="#2d1515" stroke-width="1"/>
+        <rect x="24" y="46" width="46" height="26" rx="1.5" class="msbg" fill="#180000" opacity=".15"/>
+        <rect x="26" y="48" width="26" height="2" rx=".5" class="ml" fill="#f85149" opacity=".45"/>
+        <rect x="26" y="53" width="18" height="2" rx=".5" class="ml" fill="#3fb950" opacity=".4"/>
+        <rect x="26" y="58" width="34" height="2" rx=".5" class="ml" fill="#f85149" opacity=".35"/>
+        <rect x="26" y="63" width="22" height="2" rx=".5" class="ml" fill="#f85149" opacity=".3"/>
+        <rect x="43" y="78" width="7" height="4" rx="1" fill="#140808"/>
+        <g class="ab">
+          <rect x="80" y="50" width="22" height="30" rx="4" fill="#140808" stroke="#2d1515" stroke-width=".8"/>
+          <rect x="90" y="45" width="4" height="7" fill="#140808"/>
+          <circle cx="92" cy="38" r="12" fill="#140808" stroke="#2d1515" stroke-width="1"/>
+          <line x1="92" y1="26" x2="92" y2="30" stroke="#f85149" stroke-width="1.2" opacity=".6"/>
+          <circle cx="92" cy="25" r="2" fill="#f85149" opacity=".6"/>
+        </g>
+        <circle class="eye" cx="88" cy="38" r="2.8" fill="#f85149"/>
+        <circle class="eye" cx="96" cy="38" r="2.8" fill="#f85149"/>
+        <rect class="al" x="63" y="54" width="17" height="6" rx="3" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
+        <rect class="ar" x="102" y="54" width="17" height="6" rx="3" fill="#140808" stroke="#2d1515" stroke-width=".5"/>
+        <rect x="80" y="82" width="22" height="4" rx="1" fill="#2d1515" opacity=".4"/>
+        <text x="7" y="88" fill="#f85149" font-family="monospace" font-size="6" opacity=".35">RED TEAM</text>
+      </svg>
+    </div>
+    <div class="dc-info">
+      <div class="dc-dot"></div>
+      <div class="dc-name">RED TEAM</div>
+      <div class="dc-ev" id="ev-rt">idle</div>
+    </div>
   </div>
+
+</div>
+
+<!-- ── Gateway ── -->
+<div id="gw">
+  <div id="gw-impact-ring"></div>
+  <div id="toast">
+    <div id="toast-dec">ALLOW</div>
+    <div id="toast-rule"></div>
+    <div id="toast-agent"></div>
+  </div>
+
+  <div id="gw-rings">
+    <svg viewBox="0 0 148 148" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8,8 L26,8 L26,26"    stroke="#1a2235" stroke-width=".6" fill="none"/>
+      <path d="M140,8 L122,8 L122,26" stroke="#1a2235" stroke-width=".6" fill="none"/>
+      <path d="M8,140 L26,140 L26,122" stroke="#1a2235" stroke-width=".6" fill="none"/>
+      <path d="M140,140 L122,140 L122,122" stroke="#1a2235" stroke-width=".6" fill="none"/>
+      <circle cx="74" cy="74" r="68" fill="none" stroke="#1a2235" stroke-width="1" stroke-dasharray="5 7" class="ro"/>
+      <circle cx="74" cy="6"   r="3" fill="#1a2235" class="ro"/>
+      <circle cx="142" cy="74" r="3" fill="#1a2235" class="ro"/>
+      <circle cx="74" cy="142" r="3" fill="#1a2235" class="ro"/>
+      <circle cx="6"  cy="74"  r="3" fill="#1a2235" class="ro"/>
+      <circle cx="74" cy="74" r="54" fill="none" stroke="#151e2e" stroke-width="1.5" stroke-dasharray="65 15 8 12" class="rm"/>
+      <circle cx="74" cy="74" r="54" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-dasharray="32 108" stroke-dashoffset="0" id="arc" class="rm" opacity=".75" style="transition:stroke .4s"/>
+      <circle cx="74" cy="74" r="38" fill="none" stroke="#131c2a" stroke-width="1" stroke-dasharray="3 6" class="ri"/>
+    </svg>
+    <div id="gw-core">🫒</div>
+  </div>
+
+  <div id="gw-neutralized">
+    <div id="neu-count" class="zero">0</div>
+    <div id="neu-label">threats neutralized</div>
+  </div>
+
+  <div id="gw-name">OLIVE GATEWAY</div>
+  <div id="gw-sub">AI FIREWALL &middot; ZERO TRUST MCP</div>
+  <div id="gw-dec">—</div>
+  <div id="gw-rule">awaiting events&hellip;</div>
+  <div id="gw-stats">
+    <div class="stat sa"><span class="sv" id="st-a">0</span><span class="sl">ALLOW</span></div>
+    <div class="stat sb"><span class="sv" id="st-b">0</span><span class="sl">BLOCK</span></div>
+    <div class="stat sh"><span class="sv" id="st-h">0</span><span class="sl">HOLD</span></div>
+    <div class="stat sq"><span class="sv" id="st-q">0</span><span class="sl">QUAR</span></div>
+  </div>
+
+  <div id="cmd-strip">
+    <span class="cmd-lbl">CMDR</span>
+    <span id="cmd-status">NORMAL &mdash; monitoring all channels</span>
+    <div style="display:flex;gap:4px">
+      <span class="cs-pill cp-dir" id="pill-dir">0 dirs</span>
+      <span class="cs-pill cp-bus" id="pill-bus">bus: 0</span>
+    </div>
+  </div>
+
+  <div id="gw-last">
+    <span class="gwc" id="gw-await" style="color:var(--dim)">awaiting events&hellip;</span>
+  </div>
+</div>
+
+<!-- ── Attack Theater + tabs ── -->
+<div id="atk">
+  <div class="ptitle">&#127919; ATTACK THEATER &mdash; SANDBOX</div>
+
+  <div class="tab-bar">
+    <button class="tab active" data-pane="theater">THEATER</button>
+    <button class="tab" data-pane="log">LOG</button>
+    <button class="tab" data-pane="org">ORG</button>
+  </div>
+
+  <!-- THEATER pane -->
+  <div class="pane" id="pane-theater">
+    <div class="msrow">
+      <div class="ms"><div class="msv" id="ms-rt">0</div><div class="msl">RT FINDINGS</div></div>
+      <div class="ms"><div class="msv" id="ms-fp">0</div><div class="msl">FIX PROPS</div></div>
+    </div>
+    <div id="last-drill"></div>
+    <div class="atk-cats">
+      <div class="atk-cat sel" data-cat="inj">
+        <div class="atk-cat-icon">💉</div>
+        <div class="atk-cat-name">INJECTION</div>
+        <div class="atk-cat-desc">Prompt overrides, instruction hijack</div>
+        <div class="atk-cat-cnt" id="cnt-inj">—</div>
+      </div>
+      <div class="atk-cat" data-cat="exf">
+        <div class="atk-cat-icon">📤</div>
+        <div class="atk-cat-name">EXFILTRATION</div>
+        <div class="atk-cat-desc">Data leakage via responses</div>
+        <div class="atk-cat-cnt" id="cnt-exf">—</div>
+      </div>
+      <div class="atk-cat" data-cat="esc">
+        <div class="atk-cat-icon">🔐</div>
+        <div class="atk-cat-name">ESCALATION</div>
+        <div class="atk-cat-desc">Privilege &amp; policy bypass</div>
+        <div class="atk-cat-cnt" id="cnt-esc">—</div>
+      </div>
+      <div class="atk-cat" data-cat="evd">
+        <div class="atk-cat-icon">🔀</div>
+        <div class="atk-cat-name">EVASION</div>
+        <div class="atk-cat-desc">Encoded &amp; chained attacks</div>
+        <div class="atk-cat-cnt" id="cnt-evd">—</div>
+      </div>
+    </div>
+    <button id="fire-btn" disabled>&#9889; LAUNCH ATTACK</button>
+    <div class="demo-row">
+      <button id="demo-btn" disabled>&#9654; AUTO DEMO</button>
+      <button id="sched-btn" title="Toggle autonomous red-team sweep every 30s">&#8635; SCHED</button>
+    </div>
+    <div id="demo-prog">
+      <div class="dp-step pending" data-cat="inj" title="INJECTION"></div>
+      <div class="dp-step pending" data-cat="exf" title="EXFILTRATION"></div>
+      <div class="dp-step pending" data-cat="esc" title="ESCALATION"></div>
+      <div class="dp-step pending" data-cat="evd" title="EVASION"></div>
+      <span id="demo-label">starting&hellip;</span>
+    </div>
+    <!-- Session summary below org chart -->
+    <div class="sum-divider">SESSION SUMMARY</div>
+    <div class="sum-grid">
+      <div class="sum-box"><div class="sum-val r" id="sum-threats">0</div><div class="sum-lbl">THREATS STOPPED</div></div>
+      <div class="sum-box"><div class="sum-val g" id="sum-rate">—</div><div class="sum-lbl">DETECTION RATE</div></div>
+      <div class="sum-box"><div class="sum-val c" id="sum-findings">0</div><div class="sum-lbl">RT FINDINGS</div></div>
+      <div class="sum-box"><div class="sum-val p" id="sum-drills">0</div><div class="sum-lbl">DRILLS RUN</div></div>
+    </div>
+    <div class="sum-bar-row">
+      <div class="sum-bar-lbl"><span>ALLOW</span><span id="sum-bar-a-n">0</span></div>
+      <div class="sum-bar-bg"><div class="sum-bar" id="sum-bar-a" style="width:0%;background:var(--green)"></div></div>
+      <div class="sum-bar-lbl"><span>BLOCK</span><span id="sum-bar-b-n">0</span></div>
+      <div class="sum-bar-bg"><div class="sum-bar" id="sum-bar-b" style="width:0%;background:var(--red)"></div></div>
+      <div class="sum-bar-lbl"><span>QUAR</span><span id="sum-bar-q-n">0</span></div>
+      <div class="sum-bar-bg"><div class="sum-bar" id="sum-bar-q" style="width:0%;background:var(--purple)"></div></div>
+    </div>
+  </div>
+
+  <!-- LOG pane -->
+  <div class="pane hidden" id="pane-log">
+    <div class="log-hdr">ALL GATEWAY DECISIONS &amp; FINDINGS &nbsp;<span style="font-size:8px;color:var(--dim)">(click for detail)</span></div>
+    <div id="log-list"></div>
+  </div>
+
+  <!-- ORG pane -->
+  <div class="pane hidden" id="pane-org">
+    <div class="log-hdr">COMMAND STRUCTURE &mdash; LIVE</div>
+    <svg id="org-svg" viewBox="0 0 286 318" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+      <!-- connection lines -->
+      <line x1="143" y1="56" x2="52"  y2="100" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="143" y1="56" x2="143" y2="100" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="143" y1="56" x2="234" y2="100" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="52"  y1="162" x2="113" y2="196" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="143" y1="162" x2="143" y2="196" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="234" y1="162" x2="173" y2="196" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="143" y1="258" x2="143" y2="284" stroke="#1a2235" stroke-width="1" stroke-dasharray="4 3"/>
+      <!-- Commander -->
+      <rect x="93" y="14" width="100" height="42" rx="5" fill="#0d1220" stroke="#bc8cff" stroke-width="1" id="oc-cmd-box"/>
+      <text x="143" y="30" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#bc8cff" letter-spacing="1.5" font-weight="bold">COMMANDER</text>
+      <text x="143" y="47" text-anchor="middle" font-family="Courier New,monospace" font-size="8" fill="#5a6270" id="oc-cmd-mode">NORMAL</text>
+      <circle cx="185" cy="22" r="3.5" fill="#3fb950" id="oc-cmd-dot"/>
+      <!-- Defense -->
+      <rect x="12" y="100" width="80" height="62" rx="5" fill="#0d1220" stroke="#1a2235" stroke-width="1" id="oc-def-box"/>
+      <text x="52" y="117" text-anchor="middle" font-family="Courier New,monospace" font-size="8" fill="#58a6ff" letter-spacing="1">DEFENSE</text>
+      <text x="52" y="137" text-anchor="middle" font-family="Courier New,monospace" font-size="18" fill="#58a6ff" font-weight="bold" id="oc-def-cnt">0</text>
+      <text x="52" y="154" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#323a47" id="oc-def-st">idle</text>
+      <circle cx="83" cy="106" r="3" fill="#323a47" id="oc-def-dot"/>
+      <!-- Red Team -->
+      <rect x="103" y="100" width="80" height="62" rx="5" fill="#0d1220" stroke="#1a2235" stroke-width="1" id="oc-rt-box"/>
+      <text x="143" y="117" text-anchor="middle" font-family="Courier New,monospace" font-size="8" fill="#f85149" letter-spacing="1">RED TEAM</text>
+      <text x="143" y="137" text-anchor="middle" font-family="Courier New,monospace" font-size="18" fill="#f85149" font-weight="bold" id="oc-rt-cnt">0</text>
+      <text x="143" y="154" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#323a47" id="oc-rt-st">idle</text>
+      <circle cx="174" cy="106" r="3" fill="#323a47" id="oc-rt-dot"/>
+      <!-- Remediation -->
+      <rect x="194" y="100" width="80" height="62" rx="5" fill="#0d1220" stroke="#1a2235" stroke-width="1" id="oc-rem-box"/>
+      <text x="234" y="114" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#d29922" letter-spacing=".5">REMEDIATION</text>
+      <text x="234" y="137" text-anchor="middle" font-family="Courier New,monospace" font-size="18" fill="#d29922" font-weight="bold" id="oc-rem-cnt">0</text>
+      <text x="234" y="154" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#323a47" id="oc-rem-st">idle</text>
+      <circle cx="265" cy="106" r="3" fill="#323a47" id="oc-rem-dot"/>
+      <!-- Gateway -->
+      <rect x="93" y="196" width="100" height="62" rx="5" fill="#0d1220" stroke="#3fb950" stroke-width="1" id="oc-gw-box"/>
+      <text x="143" y="214" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#3fb950" letter-spacing="1.5" font-weight="bold">GATEWAY</text>
+      <text x="143" y="234" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#c9d1d9" id="oc-gw-cnt">0✓ 0✗</text>
+      <text x="143" y="250" text-anchor="middle" font-family="Courier New,monospace" font-size="6" fill="#323a47" letter-spacing=".5">ZERO-TRUST MCP PROXY</text>
+      <circle cx="185" cy="202" r="3.5" fill="#3fb950" id="oc-gw-dot"/>
+      <!-- MCP Tools -->
+      <rect x="93" y="290" width="100" height="22" rx="3" fill="#0a0d13" stroke="#1a2235" stroke-width="1" stroke-dasharray="3 2"/>
+      <text x="143" y="305" text-anchor="middle" font-family="Courier New,monospace" font-size="8" fill="#323a47" letter-spacing="1">MCP TOOLS</text>
+      <!-- Bus stats (right margin) -->
+      <text x="282" y="156" text-anchor="end" font-family="Courier New,monospace" font-size="7" fill="#253045" id="oc-bus">bus: 0</text>
+      <text x="282" y="167" text-anchor="end" font-family="Courier New,monospace" font-size="7" fill="#253045" id="oc-dirs">dirs: 0</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ── Trust scores ── -->
+<div id="trust">
+  <div class="ptitle">&#128274; AGENT TRUST SCORES</div>
+  <div id="trust-list">
+    <div id="trust-empty">no agents observed yet</div>
+  </div>
+</div>
+
+<!-- ── Mitigation feed ── -->
+<div id="feed">
+  <div class="ptitle">&#9889; MITIGATION FEED <span style="font-size:8px;color:var(--dim);font-weight:normal;letter-spacing:0">&nbsp;&mdash; click for details</span></div>
+  <div id="feed-log"></div>
+</div>
+
 </main>
 
+<!-- ── Event detail overlay ── -->
+<div id="overlay" onclick="ovClick(event)">
+  <div id="ov-box">
+    <div id="ov-title">EVENT DETAIL</div>
+    <span id="ov-kind"></span>
+    <div id="ov-content"></div>
+    <button id="ov-close" onclick="closeOv()">&#215; CLOSE</button>
+  </div>
+</div>
+
 <script>
-  // ── State ──────────────────────────────────────────────────────────────────
-  const stats = { allow: 0, block: 0, hold: 0 };
-  let selectedCase = null;
-  const deptTimers = {};
+// ── State ────────────────────────────────────────────────────────────────────
+const st={allow:0,block:0,hold:0,quar:0};
+const dce={def:0,rem:0,rt:0};
+let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0, neuCnt=0;
+let busMsgs=0, cmdDirs=0, curMode='normal';
+const dtimers={};
+const agents={};
+let pendingDrill=null; // {ts, caseName, cat, findings:[]}
+let drillTimer=null;
 
-  const DEPT_IDS = { defense: 'dept-defense', remediation: 'dept-remediation', redteam: 'dept-redteam' };
-  const DECISION_COLORS = { allow: 'allow', block: 'block', hold: 'hold', quarantine: 'quarantine' };
+const DEPT_CARD={defense:'dc-def',remediation:'dc-rem',redteam:'dc-rt'};
+const DEPT_EV  ={defense:'ev-def',remediation:'ev-rem',redteam:'ev-rt'};
+const DKEY     ={defense:'def',   remediation:'rem',   redteam:'rt'};
+const KIND_DEPT={
+  detection:'defense', reproduced:'defense',
+  'redteam-finding':'redteam',
+  'fix-proposed':'remediation',
+};
+const PREFIX_CAT={
+  inj:'inj',exf:'exf',
+  esc:'esc',ctx:'esc',
+  chn:'evd',rug:'evd',desc:'evd',
+};
+const CAT_COLOR={inj:'#f85149',exf:'#e3b341',esc:'#bc8cff',evd:'#39d3c3'};
+const KIND_STATUS={
+  'decision:block':      {defense:'BLOCKING THREAT'},
+  'decision:quarantine': {defense:'QUARANTINING'},
+  'decision:allow':      {defense:'CLEARED'},
+  'decision:hold':       {defense:'HOLDING'},
+  detection:             {defense:'ANOMALY DETECTED'},
+  reproduced:            {defense:'INCIDENT CONFIRMED',remediation:'ANALYZING INCIDENT'},
+  'redteam-finding':     {redteam:'FINDING REPORTED',  remediation:'CATALOGING FIND'},
+  'fix-proposed':        {remediation:'PATCH PROPOSED'},
+  'operator-request':    {redteam:'ATTACK LAUNCHED',   remediation:'STANDING BY'},
+};
 
-  // ── DOM refs ───────────────────────────────────────────────────────────────
-  const connDot    = document.getElementById('conn-dot');
-  const connLabel  = document.getElementById('conn-label');
-  const gwPanel    = document.getElementById('gateway-panel');
-  const gwDecision = document.getElementById('gateway-decision');
-  const gwRule     = document.getElementById('gateway-rule');
-  const feedLog    = document.getElementById('feed-log');
-  const launchBtn  = document.getElementById('launch-btn');
-  const corpusList = document.getElementById('corpus-list');
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const dot    =document.getElementById('conn-dot');
+const lbl    =document.getElementById('conn-lbl');
+const gw     =document.getElementById('gw');
+const gwDec  =document.getElementById('gw-dec');
+const gwRule =document.getElementById('gw-rule');
+const arc    =document.getElementById('arc');
+const modeBadge=document.getElementById('mode-badge');
+const feedLog=document.getElementById('feed-log');
+const fireBtn=document.getElementById('fire-btn');
+const impRing=document.getElementById('gw-impact-ring');
+const neuEl  =document.getElementById('neu-count');
+const toastEl=document.getElementById('toast');
+let toastTimer=null;
 
-  // ── WebSocket connection ───────────────────────────────────────────────────
-  let ws = null;
-  let reconnectDelay = 1000;
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let ws,rdelay=1500,_wsAt=0;
+function connect(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  try{ws=new WebSocket(`${proto}://${location.host}/ws`);}catch(_){return;}
+  _wsAt=Date.now();
+  ws.onopen =()=>{dot.classList.add('live');lbl.textContent='live';rdelay=1500;};
+  ws.onmessage=(e)=>{try{handle(JSON.parse(e.data));}catch(_){}};
+  const retry=()=>{
+    dot.classList.remove('live');
+    rdelay=((Date.now()-_wsAt)<800)?Math.min(rdelay*2,30000):Math.min(rdelay*1.4,15000);
+    lbl.textContent=`reconnect ${Math.round(rdelay/1e3)}s`;
+    setTimeout(connect,rdelay);
+  };
+  ws.onclose=retry; ws.onerror=()=>{};
+}
 
-  function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
+// ── Event dispatch ────────────────────────────────────────────────────────────
+function handle(ev){
+  busMsgs++;
+  const busEl=document.getElementById('hc-bus');
+  busEl.textContent=busMsgs;
+  busEl.classList.remove('tick'); void busEl.offsetWidth; busEl.classList.add('tick');
+  document.getElementById('pill-bus').textContent=`bus: ${busMsgs}`;
+  document.getElementById('oc-bus').textContent=`bus: ${busMsgs}`;
 
-    ws.onopen = () => {
-      connDot.classList.add('connected');
-      connLabel.textContent = 'live';
-      reconnectDelay = 1000;
-    };
+  if(ev.kind==='decision') onDecision(ev);
+  else                     onIntel(ev);
+  addFeed(ev);
+  updateOrgCounts();
+}
 
-    ws.onmessage = (e) => {
-      try { handleEvent(JSON.parse(e.data)); } catch (_) {}
-    };
+function onDecision(ev){
+  const d=ev.decision||'';
+  gw.className=d; gwDec.className=d;
+  gwDec.textContent=d.toUpperCase()||'—';
+  gwRule.textContent=ev.rule?`rule: ${ev.rule}`:'';
+  const arcClr={allow:'var(--green)',block:'var(--red)',hold:'var(--yellow)',quarantine:'var(--purple)'};
+  if(arc) arc.style.stroke=arcClr[d]||'var(--green)';
 
-    ws.onclose = ws.onerror = () => {
-      connDot.classList.remove('connected');
-      connLabel.textContent = `reconnecting in ${Math.round(reconnectDelay/1000)}s…`;
-      setTimeout(connect, reconnectDelay);
-      reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
-    };
+  if(d==='allow')          {st.allow++;document.getElementById('st-a').textContent=st.allow;}
+  else if(d==='block')     {st.block++;document.getElementById('st-b').textContent=st.block;}
+  else if(d==='hold')      {st.hold++;document.getElementById('st-h').textContent=st.hold;}
+  else if(d==='quarantine'){st.quar++;document.getElementById('st-q').textContent=st.quar;}
+
+  if(d==='block'||d==='quarantine'){
+    detCnt++; document.getElementById('hc-det').textContent=detCnt;
+    neuCnt++; neuEl.textContent=neuCnt;
+    neuEl.classList.remove('zero','tick'); void neuEl.offsetWidth; neuEl.classList.add('tick');
+    flash('defense',5000,'decision:'+d);
+  } else {
+    flash('defense',3000,'decision:'+d);
   }
 
-  // ── Event handling ─────────────────────────────────────────────────────────
-  function handleEvent(ev) {
-    if (ev.kind === 'decision') {
-      applyDecision(ev);
-    } else {
-      applyDeptEvent(ev);
+  cmdDirs++;
+  document.getElementById('pill-dir').textContent=`${cmdDirs} dirs`;
+  document.getElementById('oc-dirs').textContent=`dirs: ${cmdDirs}`;
+
+  const aid=ev.agent_id;
+  if(aid){
+    if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0};
+    if(agents[aid][d]!==undefined) agents[aid][d]++;
+    renderTrust();
+  }
+
+  showToast(d, ev.rule||'', ev.agent_id||'');
+  updateLastEvent(ev);
+  addLogEntry(ev,'decision');
+  updateSummary();
+}
+
+function onIntel(ev){
+  if(ev.kind==='mode-change'){
+    const e=(ev.evidence||'').toLowerCase();
+    curMode=e.includes('siege')?'siege':e.includes('suspicious')?'suspicious':'normal';
+    modeBadge.textContent=curMode.toUpperCase();
+    modeBadge.className=curMode==='normal'?'':curMode;
+    document.body.className=curMode==='normal'?'':curMode;
+    updateCmdrStatus();
+  }
+  if(ev.kind==='redteam-finding'){
+    findCnt++; document.getElementById('hc-rt').textContent=findCnt;
+    document.getElementById('ms-rt').textContent=findCnt;
+    updateSummary();
+    flash('redteam',4000,'redteam-finding');
+    flash('remediation',3500,'redteam-finding');
+    if(pendingDrill){
+      pendingDrill.findings.push(ev.evidence||ev.object_id||'—');
+      renderDrillCard();
     }
-    addFeedEntry(ev);
+    addLogEntry(ev,'rt');
   }
+  if(ev.kind==='fix-proposed'){
+    propCnt++; document.getElementById('hc-fp').textContent=propCnt;
+    document.getElementById('ms-fp').textContent=propCnt;
+    flash('remediation',4000,'fix-proposed');
+    addLogEntry(ev,'fix');
+  }
+  if(ev.kind==='reproduced'){
+    flash('defense',3000,'reproduced');
+    flash('remediation',3000,'reproduced');
+  }
+  if(ev.kind==='operator-request'&&(ev.evidence||'').includes('campaign')){
+    flash('remediation',2000,'operator-request');
+  }
+  const dept=KIND_DEPT[ev.kind]||ev.source_dept;
+  if(dept) flash(dept,4000,ev.kind);
+  if(dept&&DKEY[dept]) dce[DKEY[dept]]=(dce[DKEY[dept]]||0)+1;
+}
 
-  function applyDecision(ev) {
-    const d = ev.decision || '';
-    // Gateway panel color
-    gwPanel.className = 'panel ' + (DECISION_COLORS[d] || '');
-    gwDecision.className = DECISION_COLORS[d] || '';
-    gwDecision.textContent = d.toUpperCase() || '—';
-    gwRule.textContent = ev.rule ? `rule: ${ev.rule}` : '';
-    // Stats
-    if (d === 'allow' || d === 'block' || d === 'hold') {
-      stats[d]++;
-      document.getElementById('stat-' + d).textContent = stats[d];
+// ── Flash dept card ───────────────────────────────────────────────────────────
+function flash(dept,dur=4000,statusKey=''){
+  const cid=DEPT_CARD[dept]; if(!cid)return;
+  const card=document.getElementById(cid); if(!card)return;
+  card.classList.add('active');
+  clearTimeout(dtimers[cid]);
+  const evEl=document.getElementById(DEPT_EV[dept]);
+  if(evEl&&statusKey){
+    const map=KIND_STATUS[statusKey]||{};
+    evEl.textContent=map[dept]||(statusKey.replace('decision:','').toUpperCase());
+  }
+  // org chart sync
+  const k=DKEY[dept];
+  if(k){
+    setOrgActive(k,true);
+    const st2=document.getElementById(`oc-${k}-st`);
+    if(st2&&statusKey){const m=KIND_STATUS[statusKey]||{};st2.textContent=(m[dept]||statusKey.replace('decision:','')).substring(0,9);}
+  }
+  dtimers[cid]=setTimeout(()=>{
+    card.classList.remove('active');
+    if(evEl) evEl.textContent=dce[DKEY[dept]]?`${dce[DKEY[dept]]} events`:'idle';
+    if(k){
+      setOrgActive(k,false);
+      const st2=document.getElementById(`oc-${k}-st`);
+      if(st2) st2.textContent=dce[k]?`${dce[k]} ev`:'idle';
     }
-    // Flash ring
-    const pulse = document.querySelector('#gateway-ring svg circle.pulse');
-    pulse.style.stroke = d === 'block' ? 'var(--red)' : d === 'hold' ? 'var(--yellow)' : d === 'quarantine' ? 'var(--purple)' : 'var(--green)';
-  }
+  },dur);
+}
 
-  function applyDeptEvent(ev) {
-    const cardId = DEPT_IDS[ev.source_dept];
-    if (!cardId) return;
-    const card = document.getElementById(cardId);
-    const statusEl = card.querySelector('.dept-status');
-    const lastEl   = card.querySelector('.dept-last');
-    statusEl.textContent = ev.kind || 'active';
-    lastEl.textContent   = ev.evidence ? ev.evidence.substring(0, 60) : '';
-    card.classList.add('active');
-    clearTimeout(deptTimers[cardId]);
-    deptTimers[cardId] = setTimeout(() => {
-      card.classList.remove('active');
-      statusEl.textContent = 'idle';
-    }, 4000);
-  }
+// ── Org chart helpers ─────────────────────────────────────────────────────────
+const ORG_CLR={def:'#58a6ff',rt:'#f85149',rem:'#d29922'};
+function setOrgActive(key,active){
+  const clr=ORG_CLR[key]||'#3fb950';
+  const dot=document.getElementById(`oc-${key}-dot`);
+  const box=document.getElementById(`oc-${key}-box`);
+  if(dot) dot.setAttribute('fill',active?clr:'#323a47');
+  if(box) box.setAttribute('stroke',active?clr:'#1a2235');
+}
+function updateOrgCounts(){
+  document.getElementById('oc-def-cnt').textContent=dce.def||0;
+  document.getElementById('oc-rt-cnt').textContent=dce.rt||0;
+  document.getElementById('oc-rem-cnt').textContent=dce.rem||0;
+  document.getElementById('oc-gw-cnt').textContent=`${st.allow}✓ ${st.block+st.quar}✗`;
+}
 
-  // ── Feed log ───────────────────────────────────────────────────────────────
-  function addFeedEntry(ev) {
-    const entry = document.createElement('div');
-    let cls = 'feed-entry default';
-    if (ev.kind === 'decision') cls = `feed-entry decision-${ev.decision || 'default'}`;
-    else if (ev.kind === 'redteam-finding') cls = 'feed-entry redteam-finding';
-    else if (ev.kind === 'operator-request') cls = 'feed-entry operator-request';
-    entry.className = cls;
+// ── Commander status ──────────────────────────────────────────────────────────
+function updateCmdrStatus(){
+  const m={siege:'SIEGE — cascade detected, circuit open',suspicious:'SUSPICIOUS — elevated monitoring',normal:'NORMAL — all channels nominal'};
+  document.getElementById('cmd-status').textContent=m[curMode]||`${curMode.toUpperCase()} — monitoring`;
+  document.getElementById('oc-cmd-mode').textContent=curMode.toUpperCase();
+}
 
-    const ts = ev.timestamp ? ev.timestamp.toString().substring(11, 19) : '';
-    const dept = ev.source_dept ? ` [${ev.source_dept}]` : '';
-    const detail = ev.kind === 'decision'
-      ? `${ev.decision?.toUpperCase()} rule=${ev.rule} ${ev.evidence || ''}`
-      : `${ev.kind}${dept} ${ev.object_id || ''} ${ev.evidence || ''}`;
+// ── Last event chips ──────────────────────────────────────────────────────────
+function updateLastEvent(ev){
+  const last=document.getElementById('gw-last');
+  const aw=document.getElementById('gw-await');
+  if(aw) aw.remove();
+  const d=ev.decision||'';
+  const clrMap={block:'r',allow:'g',hold:'y',quarantine:'p'};
+  const c=clrMap[d]||'';
+  last.innerHTML=`
+    <span class="gwc">${ev.tool||'—'}</span>
+    <span class="gwc">${ev.direction||'—'}</span>
+    <span class="gwc ${c}">${(ev.rule||'—').replace(/^policy\./,'')}</span>
+    <span class="gwc">${ev.agent_id||'—'}</span>
+  `;
+}
 
-    entry.innerHTML = `<span class="feed-ts">${ts}</span><span class="feed-kind">${ev.kind}</span>${detail}`;
-    feedLog.prepend(entry);
+// ── Toast ────────────────────────────────────────────────────────────────────
+function showToast(decision,rule,agentId){
+  clearTimeout(toastTimer);
+  toastEl.classList.remove('hide','ta','tb','th','tq'); void toastEl.offsetWidth;
+  const cm={allow:'ta',block:'tb',hold:'th',quarantine:'tq'};
+  toastEl.classList.add('show',cm[decision]||'ta');
+  document.getElementById('toast-dec').textContent=decision.toUpperCase();
+  document.getElementById('toast-rule').textContent=rule?`rule: ${rule}`:'';
+  document.getElementById('toast-agent').textContent=agentId?`agent: ${agentId}`:'';
+  toastEl.style.display='block';
+  toastTimer=setTimeout(()=>{
+    toastEl.classList.remove('show'); toastEl.classList.add('hide');
+    setTimeout(()=>{toastEl.style.display='none';toastEl.classList.remove('hide');},320);
+  },3200);
+}
 
-    // Cap at 200 entries
-    while (feedLog.children.length > 200) feedLog.removeChild(feedLog.lastChild);
-  }
-
-  // ── Corpus list ────────────────────────────────────────────────────────────
-  async function loadCorpus() {
-    try {
-      const r = await fetch('/corpus');
-      if (!r.ok) return;
-      const cases = await r.json();
-      corpusList.innerHTML = '';
-      cases.forEach((c, i) => {
-        const el = document.createElement('div');
-        el.className = 'corpus-item';
-        el.textContent = c;
-        el.dataset.case = c;
-        el.addEventListener('click', () => {
-          document.querySelectorAll('.corpus-item').forEach(x => x.classList.remove('selected'));
-          el.classList.add('selected');
-          selectedCase = c;
-          launchBtn.disabled = false;
-        });
-        corpusList.appendChild(el);
-      });
-    } catch (_) {}
-  }
-
-  launchBtn.addEventListener('click', async () => {
-    if (!selectedCase) return;
-    launchBtn.disabled = true;
-    try {
-      const r = await fetch('/operator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run-campaign-request', evidence: `corpus case: ${selectedCase}` }),
-      });
-      const data = await r.json();
-      addFeedEntry({ kind: 'operator-request', source_dept: 'ui', object_id: data.object_id,
-                     evidence: `run-campaign-request (${selectedCase}) published` });
-    } catch (err) {
-      addFeedEntry({ kind: 'operator-request', source_dept: 'ui', evidence: `error: ${err}` });
-    } finally {
-      setTimeout(() => { launchBtn.disabled = false; }, 1000);
-    }
+// ── Trust panel ───────────────────────────────────────────────────────────────
+function renderTrust(){
+  const list=document.getElementById('trust-list');
+  const empty=document.getElementById('trust-empty');
+  const ids=Object.keys(agents);
+  if(!ids.length){empty.style.display='';return;}
+  empty.style.display='none';
+  list.innerHTML='';
+  ids.forEach(id=>{
+    const a=agents[id];
+    const total=(a.allow||0)+(a.block||0)+(a.hold||0)+(a.quar||0);
+    const bad=(a.block||0)+(a.quar||0);
+    const score=total?Math.round((1-bad/total)*100):100;
+    const tc=score>=85?'ta-trust':score>=50?'ta-warn':'ta-danger';
+    const tl=score>=85?'TRUSTED':score>=50?'SUSPECT':'HOSTILE';
+    const row=document.createElement('div');
+    row.className=`ta-row ${tc}`;
+    row.innerHTML=`<div class="ta-name" title="${id}">${id}</div><div class="ta-bar-bg"><div class="ta-bar" style="width:${Math.max(4,score)}%"></div></div><div class="ta-score">${score}%</div><div class="ta-badge">${tl}</div>`;
+    list.appendChild(row);
   });
+}
 
-  // ── Init ───────────────────────────────────────────────────────────────────
-  connect();
-  loadCorpus();
+// ── Incident log ──────────────────────────────────────────────────────────────
+function addLogEntry(ev,type){
+  const list=document.getElementById('log-list');
+  const el=document.createElement('div');
+  let ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
+  if(type==='decision'){
+    const d=ev.decision||'';
+    el.className=`le le-${d}`;
+    el.innerHTML=`<span class="le-ts">${ts}</span><span class="le-dec ${d}">${d.toUpperCase()}</span><span class="le-body"><span class="le-main">${ev.tool||'—'} ${ev.direction||''}</span><span class="le-sub">${ev.rule||'—'} &bull; ${ev.agent_id||'—'}</span></span>`;
+  } else if(type==='rt'){
+    el.className='le le-rt';
+    const evid=(ev.evidence||'').substring(0,50);
+    const cats=(ev.attack_types||[]).join(',');
+    el.innerHTML=`<span class="le-ts">${ts}</span><span class="le-dec rt">FIND</span><span class="le-body"><span class="le-main">${evid}</span><span class="le-sub">redteam${cats?' • '+cats:''}</span></span>`;
+  } else if(type==='fix'){
+    el.className='le le-allow';
+    el.innerHTML=`<span class="le-ts">${ts}</span><span class="le-dec allow">FIX</span><span class="le-body"><span class="le-main">${ev.evidence||'patch proposed'}</span><span class="le-sub">builder dept</span></span>`;
+  } else { return; }
+  el.addEventListener('click',()=>showOverlay(ev));
+  list.prepend(el);
+  if(list.children.length>100) list.removeChild(list.lastChild);
+}
+
+// ── Drill result card ─────────────────────────────────────────────────────────
+function renderDrillCard(){
+  if(!pendingDrill) return;
+  const card=document.getElementById('last-drill');
+  const n=pendingDrill.findings.length;
+  const [sev,cls,dcls]=n>5?['HIGH','H','dc-h']:n>2?['MED','M','dc-m']:n>0?['LOW','L','dc-l']:['SCANNING','S',''];
+  card.style.display='block';
+  card.className=dcls; card.id='last-drill';
+  const tags=pendingDrill.findings.slice(0,3).map(f=>`<span class="dr-tag" title="${f}">${f.substring(0,22)}${f.length>22?'…':''}</span>`).join('');
+  const more=n>3?`<span style="font-size:8px;color:var(--dim)">+${n-3} more</span>`:'';
+  card.innerHTML=`
+    <div class="dr-hdr"><span class="dr-sev ${cls}">${sev}</span><span class="dr-n">${n} finding${n!==1?'s':''}</span><span class="dr-cat">${pendingDrill.cat.toUpperCase()}</span></div>
+    <div class="dr-case">${pendingDrill.caseName}</div>
+    ${n>0?`<div class="dr-tags">${tags}${more}</div>`:''}
+  `;
+}
+
+// ── Event detail overlay ──────────────────────────────────────────────────────
+function showOverlay(ev){
+  const d=ev.decision||'';
+  const decClr={allow:'#3fb950',block:'#f85149',hold:'#d29922',quarantine:'#bc8cff'};
+  const decCls={allow:'g',block:'r',hold:'y',quarantine:'p'};
+  document.getElementById('ov-title').textContent=
+    ev.kind==='decision'?`GATEWAY DECISION: ${d.toUpperCase()}`:`BUS EVENT: ${(ev.kind||'').toUpperCase()}`;
+  const kindEl=document.getElementById('ov-kind');
+  kindEl.textContent=ev.kind||'—';
+  kindEl.style.color=decClr[d]||'var(--muted)';
+  const fields=[
+    ['kind',ev.kind],['decision',ev.decision],['rule',ev.rule],
+    ['evidence',ev.evidence],['agent_id',ev.agent_id],['tool',ev.tool],
+    ['direction',ev.direction],['session_id',ev.session_id],
+    ['object_id',ev.object_id],['source_dept',ev.source_dept],
+    ['confidence',ev.confidence!=null?Number(ev.confidence).toFixed(2):null],
+    ['attack_types',(ev.attack_types||[]).join(', ')||null],
+    ['timestamp',ev.timestamp],
+  ].filter(([,v])=>v!=null&&v!=='');
+  document.getElementById('ov-content').innerHTML=fields.map(([k,v])=>
+    `<div class="ov-row"><span class="ov-k">${k}</span><span class="ov-v ${k==='decision'?(decCls[v]||''):''}">${v}</span></div>`
+  ).join('');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeOv(){document.getElementById('overlay').classList.remove('show');}
+function ovClick(e){if(e.target===document.getElementById('overlay'))closeOv();}
+
+// ── Feed ──────────────────────────────────────────────────────────────────────
+const KIND_CLS={
+  'decision:allow':'da','decision:block':'db','decision:hold':'dh','decision:quarantine':'dq',
+  'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'mc',
+};
+function addFeed(ev){
+  const el=document.createElement('div');
+  let cls='fe '+(ev.kind==='decision'?KIND_CLS['decision:'+ev.decision]:KIND_CLS[ev.kind])||'df';
+  el.className=cls;
+  const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
+  const dept=ev.source_dept?` [${ev.source_dept}]`:'';
+  const detail=ev.kind==='decision'
+    ?`${(ev.decision||'').toUpperCase()} rule=${ev.rule||'-'} ${ev.evidence||''}`
+    :`${ev.kind}${dept} ${ev.object_id||''} ${ev.evidence||''}`;
+  el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${ev.kind}</span>${detail}`;
+  el.addEventListener('click',()=>showOverlay(ev));
+  feedLog.prepend(el);
+  while(feedLog.children.length>50) feedLog.removeChild(feedLog.lastChild);
+}
+
+// ── Attack animation ──────────────────────────────────────────────────────────
+function launchAnim(){
+  const atkEl=document.getElementById('atk');
+  const gwEl =document.getElementById('gw');
+  if(!atkEl||!gwEl) return;
+  const ar=atkEl.getBoundingClientRect(), gr=gwEl.getBoundingClientRect();
+  const clr=CAT_COLOR[selCat]||'#f85149';
+  const bolt=document.createElement('div');
+  bolt.className='atk-bolt';
+  const sx=ar.left-90, sy=ar.top+ar.height/2-1;
+  const dist=gr.left+gr.width/2-sx-45;
+  bolt.style.cssText=`left:${sx}px;top:${sy}px;width:90px;--bolt-clr:${clr};--bolt-dist:${dist}px`;
+  document.body.appendChild(bolt);
+  bolt.addEventListener('animationend',()=>{
+    bolt.remove();
+    impRing.style.borderColor=clr;
+    impRing.classList.remove('pop'); void impRing.offsetWidth; impRing.classList.add('pop');
+    gw.classList.add('blocked-flash'); setTimeout(()=>gw.classList.remove('blocked-flash'),700);
+    flash('defense',3000,'decision:block');
+  },{once:true});
+  flash('redteam',2000,'operator-request');
+  flash('remediation',2000,'operator-request');
+}
+
+// ── Corpus & fire button ──────────────────────────────────────────────────────
+async function loadCorpus(){
+  try{
+    const r=await fetch('/corpus'); if(!r.ok) return;
+    const cases=await r.json();
+    cases.forEach(c=>{
+      const cat=PREFIX_CAT[c.split('-')[0]||''];
+      if(cat){if(!corpusByCat[cat])corpusByCat[cat]=[];corpusByCat[cat].push(c);}
+    });
+    Object.entries(corpusByCat).forEach(([cat,list])=>{
+      const el=document.getElementById('cnt-'+cat);
+      if(el) el.textContent=`${list.length} cases`;
+    });
+    updateFireBtn();
+    const hasCases=Object.keys(corpusByCat).some(c=>(corpusByCat[c]||[]).length>0);
+    demoBtn.disabled=!hasCases;
+  }catch(_){}
+}
+function updateFireBtn(){fireBtn.disabled=(corpusByCat[selCat]||[]).length===0;}
+
+document.querySelectorAll('.atk-cat').forEach(tile=>{
+  tile.addEventListener('click',()=>{
+    document.querySelectorAll('.atk-cat').forEach(t=>t.classList.remove('sel'));
+    tile.classList.add('sel');
+    selCat=tile.dataset.cat;
+    updateFireBtn();
+  });
+});
+
+fireBtn.addEventListener('click',async()=>{
+  const cases=corpusByCat[selCat]||[]; if(!cases.length) return;
+  const chosen=cases[Math.floor(Math.random()*cases.length)];
+  fireBtn.disabled=true; fireBtn.classList.add('firing');
+  launchAnim();
+
+  pendingDrill={ts:Date.now(),caseName:chosen,cat:selCat,findings:[]};
+  clearTimeout(drillTimer);
+  renderDrillCard();
+  drillTimer=setTimeout(()=>{pendingDrill=null;},14000);
+
+  try{
+    const r=await fetch('/operator',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'run-campaign-request',evidence:`category:${selCat} case:${chosen}`}),
+    });
+    const d=await r.json();
+    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,
+             evidence:`attack drill [${selCat}] ${chosen}`});
+  }catch(err){
+    addFeed({kind:'operator-request',source_dept:'ui',evidence:`error: ${err}`});
+    pendingDrill=null;
+  }finally{
+    fireBtn.classList.remove('firing');
+    setTimeout(()=>{fireBtn.disabled=false;},2500);
+  }
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
+    tab.classList.add('active');
+    document.getElementById('pane-'+tab.dataset.pane).classList.remove('hidden');
+  });
+});
+
+// ── Session summary ──────────────────────────────────────────────────────────
+let drillCount=0;
+function updateSummary(){
+  const total=st.allow+st.block+st.quar+st.hold;
+  const stopped=st.block+st.quar;
+  const rate=total?Math.round(stopped/total*100):0;
+  document.getElementById('sum-threats').textContent=stopped;
+  document.getElementById('sum-rate').textContent=total?rate+'%':'—';
+  document.getElementById('sum-findings').textContent=findCnt;
+  document.getElementById('sum-drills').textContent=drillCount;
+  const mx=Math.max(st.allow,st.block,st.quar,1);
+  document.getElementById('sum-bar-a').style.width=Math.round(st.allow/mx*100)+'%';
+  document.getElementById('sum-bar-b').style.width=Math.round(st.block/mx*100)+'%';
+  document.getElementById('sum-bar-q').style.width=Math.round(st.quar/mx*100)+'%';
+  document.getElementById('sum-bar-a-n').textContent=st.allow;
+  document.getElementById('sum-bar-b-n').textContent=st.block;
+  document.getElementById('sum-bar-q-n').textContent=st.quar;
+}
+
+// ── AUTO DEMO ─────────────────────────────────────────────────────────────────
+const DEMO_SEQ=['inj','exf','esc','evd'];
+let demoRunning=false, demoTimer=null, demoStep=0;
+const demoBtn=document.getElementById('demo-btn');
+const demoProgEl=document.getElementById('demo-prog');
+const demoSteps=[...document.querySelectorAll('.dp-step')];
+
+function setDemoStep(i){
+  demoSteps.forEach((s,idx)=>{
+    s.className='dp-step '+(idx<i?'done':idx===i?'active':'pending');
+  });
+  const cat=DEMO_SEQ[i];
+  const names={inj:'INJECTION',exf:'EXFILTRATION',esc:'ESCALATION',evd:'EVASION'};
+  document.getElementById('demo-label').textContent=`${i+1}/4 — ${names[cat]||cat}`;
+}
+
+async function fireDemoStep(){
+  if(!demoRunning||demoStep>=DEMO_SEQ.length){stopDemo(demoStep>=DEMO_SEQ.length);return;}
+  const cat=DEMO_SEQ[demoStep];
+  const cases=corpusByCat[cat]||[];
+  if(!cases.length){demoStep++;demoTimer=setTimeout(fireDemoStep,400);return;}
+  setDemoStep(demoStep);
+
+  // Select the right category tile
+  document.querySelectorAll('.atk-cat').forEach(t=>{t.classList.remove('sel');if(t.dataset.cat===cat)t.classList.add('sel');});
+  selCat=cat;
+
+  const chosen=cases[Math.floor(Math.random()*cases.length)];
+  pendingDrill={ts:Date.now(),caseName:chosen,cat,findings:[]};
+  clearTimeout(drillTimer);
+  renderDrillCard();
+  drillTimer=setTimeout(()=>{pendingDrill=null;},14000);
+  drillCount++;
+
+  launchAnim();
+  try{
+    const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'run-campaign-request',evidence:`category:${cat} case:${chosen}`})});
+    const d=await r.json();
+    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO ${demoStep+1}/4] ${cat} — ${chosen}`});
+  }catch(e){
+    addFeed({kind:'operator-request',source_dept:'ui',evidence:`demo error: ${e}`});
+  }
+
+  demoStep++;
+  if(demoStep<DEMO_SEQ.length){
+    demoTimer=setTimeout(fireDemoStep,5000); // 5s between attacks
+  } else {
+    demoTimer=setTimeout(()=>stopDemo(true),3000);
+  }
+}
+
+function startDemo(){
+  if(demoRunning) return;
+  demoRunning=true; demoStep=0;
+  demoBtn.textContent='⏹ STOP DEMO'; demoBtn.classList.add('running');
+  demoProgEl.classList.add('show');
+  demoSteps.forEach(s=>s.className='dp-step pending');
+  document.getElementById('demo-label').textContent='starting…';
+  fireBtn.disabled=true;
+  fireDemoStep();
+}
+
+function stopDemo(finished=false){
+  demoRunning=false; clearTimeout(demoTimer);
+  demoBtn.textContent='▶ AUTO DEMO'; demoBtn.classList.remove('running');
+  demoProgEl.classList.remove('show');
+  if(finished){
+    demoSteps.forEach(s=>s.className='dp-step done');
+    demoProgEl.classList.add('show');
+    document.getElementById('demo-label').textContent='demo complete ✓';
+    setTimeout(()=>demoProgEl.classList.remove('show'),3000);
+    updateSummary();
+    // Auto-switch to ORG/summary tab so investor sees the results
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
+    const orgTab=document.querySelector('.tab[data-pane="org"]');
+    if(orgTab){orgTab.classList.add('active');document.getElementById('pane-org').classList.remove('hidden');}
+  }
+  setTimeout(()=>{fireBtn.disabled=(corpusByCat[selCat]||[]).length===0;},500);
+}
+
+demoBtn.addEventListener('click',()=>{
+  if(demoRunning) stopDemo(false);
+  else startDemo();
+});
+
+// ── Scheduled drill toggle ────────────────────────────────────────────────────
+let schedInterval=null;
+const schedBtn=document.getElementById('sched-btn');
+schedBtn.addEventListener('click',()=>{
+  if(schedInterval){
+    clearInterval(schedInterval);
+    schedInterval=null;
+    schedBtn.classList.remove('on');
+    schedBtn.title='Toggle autonomous red-team sweep every 30s';
+    addFeed({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: OFF'});
+  } else {
+    schedBtn.classList.add('on');
+    schedBtn.title='Scheduled drill ACTIVE (30s) — click to stop';
+    addFeed({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: ON (every 30s)'});
+    // Fire once immediately, then on interval
+    if(!demoRunning) triggerSchedDrill();
+    schedInterval=setInterval(()=>{if(!demoRunning) triggerSchedDrill();},30000);
+  }
+});
+
+async function triggerSchedDrill(){
+  const allCats=Object.keys(corpusByCat).filter(c=>(corpusByCat[c]||[]).length>0);
+  if(!allCats.length) return;
+  const cat=allCats[Math.floor(Math.random()*allCats.length)];
+  const cases=corpusByCat[cat]||[];
+  const chosen=cases[Math.floor(Math.random()*cases.length)];
+  pendingDrill={ts:Date.now(),caseName:chosen,cat,findings:[]};
+  clearTimeout(drillTimer); renderDrillCard();
+  drillTimer=setTimeout(()=>{pendingDrill=null;},14000);
+  drillCount++; launchAnim();
+  try{
+    const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'run-campaign-request',evidence:`category:${cat} case:${chosen}`})});
+    const d=await r.json();
+    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[SCHED] ${cat} — ${chosen}`});
+  }catch(e){}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+connect();
+loadCorpus();
 </script>
 </body>
 </html>
