@@ -40,16 +40,24 @@ from olive.intelligence.sentinels import (
 _log = logging.getLogger(__name__)
 
 
-def build_sentinels(config) -> list:
+def build_sentinels(config, store=None) -> list:
     """The three advisory sentinels, constructed from policy (ADR-0012). All three
     are deterministic-capable: PromptInjection is deterministic-first (re-runs the
     trigger matcher before any LLM call), DataLeak/Behavior are pure regex/sequence.
     So `olive serve --ui` produces real detections with NO `ANTHROPIC_API_KEY`; the
-    semantic path simply adds nothing without a key (ADR-0020 §7)."""
+    semantic path simply adds nothing without a key (ADR-0020 §7).
+
+    When `store` is provided (M10), BehaviorSentinel receives a cross-session
+    lookup so it can detect multi-day slow-burn sequences across sessions."""
+    cross_session_fn = None
+    if store is not None:
+        async def cross_session_fn(agent_id: str, org_id: str) -> list[str]:
+            return await store.recent_agent_tools(agent_id, org_id)  # type: ignore[attr-defined]
+
     return [
         PromptInjectionSentinel(config.injection_patterns),
         DataLeakSentinel(),
-        BehaviorSentinel(),
+        BehaviorSentinel(cross_session_fn=cross_session_fn),
     ]
 
 

@@ -485,6 +485,9 @@ class OliveGateway:
 
         await self._record(out_ctx, out_verdict, started, "deterministic")
         await self._breaker.record_allowed_call(sid, name)
+        # Cross-session behavioral baseline (M10): persist this allowed call so
+        # BehaviorSentinel can detect multi-session slow-burn sequences.
+        await self._store.log_allowed_call(identity.agent_id, identity.organization, sid, name)
         # Outbound arguments to the parallel path (Data-Leak / Behavior sentinels).
         await self._emit(out_ctx, out_verdict, sid, arguments=arguments)
         history = (*history, name)

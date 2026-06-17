@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS revoked_tokens (
     revoked_at TEXT NOT NULL,
     reason     TEXT
 );
+CREATE TABLE IF NOT EXISTS agent_tool_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id   TEXT NOT NULL,
+    org_id     TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    tool       TEXT NOT NULL,
+    call_ts    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ath_agent ON agent_tool_history (agent_id, org_id, call_ts DESC);
 """
 
 
@@ -299,6 +308,33 @@ class EventStore:
     async def load_revoked_jtis(self) -> list[str]:
         """Load all revoked token JTIs for in-memory cache population on startup."""
         cursor = await self._conn.execute("SELECT jti FROM revoked_tokens")
+        rows = await cursor.fetchall()
+        return [r[0] for r in rows]
+
+    async def log_allowed_call(
+        self, agent_id: str, org_id: str, session_key: str, tool: str
+    ) -> None:
+        """Append a completed allowed tool call to the cross-session behavioral baseline
+        (M10). Used by BehaviorSentinel for multi-session drift detection."""
+        now = SecurityContext.now()
+        await self._conn.execute(
+            "INSERT INTO agent_tool_history (agent_id, org_id, session_key, tool, call_ts)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (agent_id, org_id, session_key, tool, now),
+        )
+        await self._conn.commit()
+
+    async def recent_agent_tools(
+        self, agent_id: str, org_id: str, n: int = 50
+    ) -> list[str]:
+        """Return the N most recent tools used by this agent across ALL sessions.
+        Used by BehaviorSentinel to detect multi-session slow-burn sequences."""
+        cursor = await self._conn.execute(
+            "SELECT tool FROM agent_tool_history"
+            " WHERE agent_id = ? AND org_id = ?"
+            " ORDER BY call_ts DESC LIMIT ?",
+            (agent_id, org_id, n),
+        )
         rows = await cursor.fetchall()
         return [r[0] for r in rows]
 

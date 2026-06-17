@@ -261,7 +261,7 @@ def serve_http_live(
                     bus=bus,
                     ledger=ledger,
                     queue=queue_sink.queue,
-                    sentinels=build_sentinels(config),
+                    sentinels=build_sentinels(config, store=store),
                     store=store,
                     proposal_ledger=proposals,
                     operator_bridge=True,

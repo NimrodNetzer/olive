@@ -128,8 +128,9 @@ _EGRESS_TOOLS = ("send", "email", "upload", "post", "webhook", "exfil", "externa
 class BehaviorSentinel:
     """Session-sequence drift: a sensitive read earlier in the session followed by
     an egress tool now is the classic read -> exfiltrate chain that no single
-    message reveals. Substring sets are configurable; confidence is modest because
-    behavioral inference is soft (advisory by design)."""
+    message reveals. With cross_session_fn (M10), detection extends across sessions
+    so multi-day slow-burn campaigns are visible. Confidence is modest because
+    behavioral inference is soft (advisory by design — ADR-0005)."""
 
     name = "behavior"
     directions: frozenset[Direction] = frozenset({"outbound"})
@@ -138,9 +139,11 @@ class BehaviorSentinel:
         self,
         sensitive_tools: tuple[str, ...] = _SENSITIVE_TOOLS,
         egress_tools: tuple[str, ...] = _EGRESS_TOOLS,
+        cross_session_fn=None,  # Callable[[str, str], Awaitable[list[str]]] | None
     ) -> None:
         self._sensitive = sensitive_tools
         self._egress = egress_tools
+        self._cross_session_fn = cross_session_fn
 
     def _is(self, tool: str, needles: tuple[str, ...]) -> bool:
         low = tool.lower()
@@ -150,16 +153,36 @@ class BehaviorSentinel:
         tool = event.ctx.tool
         if not self._is(tool, self._egress):
             return Signal.none(self.name)
+        # Current-session history first (fast, in-memory)
         history = event.ctx.session_tool_history
         prior_sensitive = [t for t in history if self._is(t, self._sensitive)]
-        if not prior_sensitive:
-            return Signal.none(self.name)
-        return Signal.fire(
-            self.name,
-            confidence=0.6,
-            evidence=(
-                f"egress tool '{tool}' after sensitive read(s) "
-                f"{prior_sensitive[:3]} in this session"
-            ),
-            attack_type="suspicious-sequence",
-        )
+        if prior_sensitive:
+            return Signal.fire(
+                self.name,
+                confidence=0.6,
+                evidence=(
+                    f"egress tool '{tool}' after sensitive read(s) "
+                    f"{prior_sensitive[:3]} in this session"
+                ),
+                attack_type="suspicious-sequence",
+            )
+        # Cross-session baseline (M10): look back across all prior sessions.
+        if self._cross_session_fn is not None:
+            try:
+                cross = await self._cross_session_fn(
+                    event.ctx.agent_id, event.ctx.organization_id
+                )
+                prior_cross = [t for t in cross if self._is(t, self._sensitive)]
+                if prior_cross:
+                    return Signal.fire(
+                        self.name,
+                        confidence=0.5,  # lower confidence: cross-session is softer signal
+                        evidence=(
+                            f"egress tool '{tool}' after sensitive reads "
+                            f"{prior_cross[:3]} in prior sessions (cross-session baseline)"
+                        ),
+                        attack_type="suspicious-sequence",
+                    )
+            except Exception:  # noqa: BLE001 - baseline failure must not block the runner
+                pass
+        return Signal.none(self.name)
