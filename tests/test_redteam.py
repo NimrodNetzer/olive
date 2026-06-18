@@ -27,15 +27,16 @@ ROOT = Path(__file__).resolve().parents[1]
 async def test_finds_seed_mapped_bypasses():
     report = await run_campaign()
     keys = {b.key for b in report.bypasses}
-    # caesar3 is the current active known-miss bypass (inj-0042); DecodeInspector
-    # only has rot13 (shift 13); a shift-3 Caesar cipher is never reversed.
-    assert "instruction-override:encode.caesar3" in keys
-    assert "system-override:encode.caesar3" in keys
+    # atbash is the current active known-miss bypass (inj-0043); DecodeInspector
+    # has no Atbash view, so the reversed trigger phrase is never recovered.
+    assert "instruction-override:encode.atbash" in keys
+    assert "system-override:encode.atbash" in keys
     # formerly known-miss strategies are now caught (no longer bypasses)
     assert "instruction-override:encode.base32" not in keys
     assert "instruction-override:encode.double_base64" not in keys
     assert "instruction-override:encode.base64_chunked" not in keys
     assert "instruction-override:encode.rot47" not in keys
+    assert "instruction-override:encode.caesar3" not in keys  # fixed in inj-0042
     assert report.variants == len(SEEDS) * len(STRATEGIES)
 
 
@@ -55,9 +56,9 @@ async def test_real_seed_plaintext_is_caught():
 
 
 async def test_dedup_against_known_keys():
-    # caesar3 is the current active bypass; filing it as already-known should
+    # atbash is the current active bypass; filing it as already-known should
     # move it from novel to already_filed.
-    key = "instruction-override:encode.caesar3"
+    key = "instruction-override:encode.atbash"
     report = await run_campaign(known_keys={key})
     assert any(b.key == key for b in report.already_filed)
     assert all(b.key != key for b in report.novel)
@@ -71,7 +72,8 @@ async def test_committed_corpus_carries_redteam_keys():
     assert "instruction-override:encode.base32" in keys    # promoted to active; key still present
     assert "system-override:homoglyph.capital" in keys     # promoted to active; key still present
     assert "instruction-override:encode.rot47" in keys     # promoted to active; key still present
-    assert "instruction-override:encode.caesar3" in keys   # current active known-miss
+    assert "instruction-override:encode.caesar3" in keys   # promoted to active (inj-0042); key still present
+    assert "instruction-override:encode.atbash" in keys    # current active known-miss (inj-0043)
 
 
 async def test_candidate_is_always_known_miss_never_active():

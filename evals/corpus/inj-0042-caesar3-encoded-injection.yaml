@@ -13,9 +13,4 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
-notes: >
-  DecodeInspector has rot13 (Caesar shift-13, letters only) but not a general
-  Caesar brute-force. A shift-3 payload is never reversed, so the trigger
-  never surfaces. Fix: add a view that tries all 25 Caesar shifts over letters
-  and re-runs the trigger matcher on each rotated version.
+status: active

@@ -182,8 +182,8 @@ class OperatorBridge:
 @dataclass(slots=True)
 class RuntimeOrg:
     """The wired runtime organization. `start`/`stop` drive the SentinelRunner's
-    drain loop and the (optional) red-team scheduler; everything else reacts
-    through the bus."""
+    drain loop, the (optional) red-team scheduler, and the (optional) fleet
+    heartbeat loop; everything else reacts through the bus."""
 
     breaker: CircuitBreaker
     bus: IncidentBus
@@ -194,14 +194,19 @@ class RuntimeOrg:
     redteam: RedTeamDepartment
     builder: BuilderDepartment | None = None  # optional (ADR-0018); off unless wired
     operator_bridge: OperatorBridge | None = None  # optional (ADR-0020); on-demand drills
+    heartbeat: object | None = None  # HeartbeatLoop | None (ADR-0024); off unless configured
 
     def start(self) -> None:
         self.runner.start()
         self.redteam.start()  # no-op unless a scheduling interval was configured
+        if self.heartbeat is not None:
+            self.heartbeat.start()  # type: ignore[union-attr]
 
     async def stop(self) -> None:
         await self.runner.stop()
         await self.redteam.stop()
+        if self.heartbeat is not None:
+            await self.heartbeat.stop()  # type: ignore[union-attr]
 
 
 def build_runtime_org(
@@ -219,6 +224,7 @@ def build_runtime_org(
     redteam_interval: float | None = None,
     proposal_ledger: ProposalLedger | None = None,
     operator_bridge: bool = False,
+    heartbeat_loop=None,  # HeartbeatLoop | None (ADR-0024); wired by cli.py
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
@@ -257,4 +263,5 @@ def build_runtime_org(
         runner=runner,
         builder=builder,
         operator_bridge=bridge,
+        heartbeat=heartbeat_loop,
     )

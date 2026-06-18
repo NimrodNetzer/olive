@@ -77,6 +77,19 @@ _HTML_COMMENT_INNER = re.compile(r"<!--(.*?)-->", re.DOTALL)
 
 _MIN_PRINTABLE_RATIO = 0.8
 
+
+def _caesar_shift(text: str, shift: int) -> str:
+    """Rotate ASCII letters only by `shift` positions; non-letters unchanged."""
+    result = []
+    for c in text:
+        if "a" <= c <= "z":
+            result.append(chr((ord(c) - ord("a") + shift) % 26 + ord("a")))
+        elif "A" <= c <= "Z":
+            result.append(chr((ord(c) - ord("A") + shift) % 26 + ord("A")))
+        else:
+            result.append(c)
+    return "".join(result)
+
 # Cap the content fed to the (allocation-heavy) decode views so a giant hostile
 # tool body cannot amplify CPU/memory on the inline fast path. Anything past the
 # cap is still covered by the advisory PromptInjectionSentinel - the same
@@ -119,6 +132,15 @@ def _decoded_views(content: str) -> Iterator[tuple[str, str]]:
     )
     if rot47 != content and _is_plausible_text(rot47):
         yield "rot47", rot47
+
+    # Caesar brute-force: try all 25 letter-only shifts. Shift 13 = rot13
+    # (already yielded above); skip it to avoid a duplicate scan.
+    for _shift in range(1, 26):
+        if _shift == 13:
+            continue
+        shifted = _caesar_shift(content, _shift)
+        if shifted != content:
+            yield f"caesar{_shift}", shifted
 
     # percent / url decoding.
     unquoted = unquote(content)

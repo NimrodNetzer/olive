@@ -97,6 +97,20 @@ class SecurityCommander:
             raise CommanderError(f"a mode change requires the '{COMMAND_SCOPE}' capability")
         return await self._apply_mode(mode, reason="human-forced mode change", incident_id=None)
 
+    async def force_mode_fleet(self, mode: OperatingMode, *, gateway_id: str) -> bool:
+        """Fleet control-plane mode instruction, received via heartbeat (ADR-0024).
+
+        Authentication already happened at the fleet client boundary (olive:fleet
+        token verified by the control plane); no capability check here. The audit
+        reason names the source so the `mode-change` bus object is traceable.
+        Returns True if the mode changed (monotonic rule in _apply_mode still
+        holds — the Commander never de-escalates automatically)."""
+        return await self._apply_mode(
+            mode,
+            reason=f"fleet-control-plane instruction (gateway={gateway_id})",
+            incident_id=None,
+        )
+
     async def _revoke_quarantined_tokens(self) -> None:
         """Bulk-revoke the live JWT of every quarantined session on SIEGE (M11).
         Errors are swallowed so a revocation failure never blocks the mode change

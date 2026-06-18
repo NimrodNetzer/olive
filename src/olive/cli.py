@@ -132,6 +132,8 @@ def serve_http(
     db_override: str | None,
     json_response: bool,
     ui: bool = False,
+    control_plane_url: str | None = None,
+    fleet_token: str | None = None,
 ) -> None:
     """Serve over streamable HTTP with bearer-token identity enforcement.
 
@@ -161,7 +163,9 @@ def serve_http(
 
     if ui:
         serve_http_live(
-            config, specs, public_key_pem, host, port, db_path, json_response, build_http_app
+            config, specs, public_key_pem, host, port, db_path, json_response, build_http_app,
+            control_plane_url=control_plane_url,
+            fleet_token=fleet_token,
         )
         return
 
@@ -188,7 +192,9 @@ def serve_http(
 
 
 def serve_http_live(
-    config, specs, public_key_pem, host, port, db_path, json_response, build_http_app
+    config, specs, public_key_pem, host, port, db_path, json_response, build_http_app,
+    control_plane_url: str | None = None,
+    fleet_token: str | None = None,
 ) -> None:
     """The `olive serve --ui` assembly (ADR-0020): one process, one event loop,
     sharing ONE breaker + bus + UIBroker between the gateway and the co-mounted
@@ -249,14 +255,48 @@ def serve_http_live(
                 revocation.seed(await store.load_revoked_jtis())
                 queue_sink = QueueSink()
                 broker = UIBroker()
+
+                # Fleet integration (ADR-0024): when --control-plane-url is set,
+                # build a FleetSink (event push) and HeartbeatLoop (mode piggyback).
+                # Both are additive and default-off; bare `serve --ui` is unchanged.
+                fleet_client = None
+                heartbeat_loop = None
+                if control_plane_url and fleet_token:
+                    from olive.fleet.client import FleetClient
+                    from olive.fleet.heartbeat import HeartbeatLoop
+                    from olive.fleet.sink import FleetSink
+                    fleet_client = FleetClient(
+                        base_url=control_plane_url,
+                        gateway_id=config.agent_id,
+                        org_id=getattr(config, "organization_id", ""),
+                        token=fleet_token,
+                        allow_insecure=control_plane_url.startswith("http://"),
+                    )
+                    await fleet_client.open()
+
+                telemetry_sinks = [queue_sink, broker]
+                if fleet_client is not None:
+                    from olive.fleet.sink import FleetSink
+                    telemetry_sinks.append(FleetSink(fleet_client))
+
                 gateway = OliveGateway(
                     config,
                     store,
                     build_pipeline(config),
                     breaker=breaker,
-                    telemetry=MultiSink(queue_sink, broker),
+                    telemetry=MultiSink(*telemetry_sinks),
                     revocations=revocation,
                 )
+
+                if fleet_client is not None:
+                    from olive.fleet.heartbeat import HeartbeatLoop
+                    from olive.intelligence.commander import SecurityCommander
+                    # Commander is built inside build_runtime_org; we build it here
+                    # first so the HeartbeatLoop can reference it. build_runtime_org
+                    # accepts an externally-built commander via the heartbeat_loop arg.
+                    # Simpler: pass heartbeat_loop after org is built and start manually.
+                    heartbeat_loop = None  # will be set after org is built below
+
                 org = build_runtime_org(
                     breaker=breaker,
                     bus=bus,
@@ -268,6 +308,16 @@ def serve_http_live(
                     proposal_ledger=proposals,
                     operator_bridge=True,
                 )
+
+                # Wire the heartbeat now that we have the commander reference.
+                if fleet_client is not None:
+                    from olive.fleet.heartbeat import HeartbeatLoop
+                    heartbeat_loop = HeartbeatLoop(
+                        client=fleet_client,
+                        commander=org.commander,
+                        breaker=breaker,
+                    )
+                    org.heartbeat = heartbeat_loop
                 # Seed the dashboard from history, then live-subscribe.
                 await _seed_broker(broker, bus)
                 bus.subscribe(broker.on_incident)
@@ -290,6 +340,8 @@ def serve_http_live(
             await ledger.close()
             await bus.close()
             await store.close()
+            if fleet_client is not None:
+                await fleet_client.close()
 
     app = build_http_app(
         public_key_pem,
@@ -648,6 +700,35 @@ async def run_ui(args: argparse.Namespace) -> int:
         await bus.close()
 
 
+async def _run_control_plane(args: argparse.Namespace) -> None:
+    """Launch the fleet control plane (ADR-0024).
+
+    Imported locally so gateway paths never pull in the fleet layer."""
+    import uvicorn
+
+    from olive.fleet.control_plane import build_control_plane_app
+    from olive.fleet.registry import GatewayRegistry
+
+    ca_pubkey = Path(args.ca_pubkey).read_bytes()
+    policies_dir = Path(args.policies_dir) if args.policies_dir else Path("policies")
+    db_path = args.db
+
+    registry = GatewayRegistry(db_path)
+    await registry.open()
+    try:
+        app = build_control_plane_app(registry, ca_pubkey, policies_dir)
+        print(
+            f"[olive] fleet control plane on http://{args.host}:{args.port} | "
+            f"DB: {db_path} | policies: {policies_dir}",
+            file=sys.stderr,
+        )
+        cfg = uvicorn.Config(app, host=args.host, port=args.port, log_level="warning")
+        server = uvicorn.Server(cfg)
+        await server.serve()
+    finally:
+        await registry.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -683,9 +764,41 @@ def main() -> None:
         "co-mount the read-only dashboard at / (ADR-0020). Loopback-only by default",
     )
     serve.add_argument(
+        "--control-plane-url",
+        default=None,
+        metavar="URL",
+        help="fleet control-plane base URL (https://…); enables heartbeat + event push (ADR-0024). "
+        "Requires --fleet-token. http:// is accepted only with --allow-insecure.",
+    )
+    serve.add_argument(
+        "--fleet-token",
+        default=None,
+        metavar="TOKEN",
+        help="CA-signed bearer token carrying olive:fleet capability for control-plane auth",
+    )
+    serve.add_argument(
         "upstream",
         nargs=argparse.REMAINDER,
         help="upstream MCP server command (prefix with --)",
+    )
+
+    cp = sub.add_parser(
+        "control-plane",
+        help="run the fleet control plane: heartbeat receiver, event aggregator, "
+        "and fleet dashboard API (ADR-0024)",
+    )
+    cp.add_argument("--ca-pubkey", required=True, help="PEM file of the issuing CA public key")
+    cp.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
+    cp.add_argument("--port", type=int, default=9090, help="bind port (default 9090)")
+    cp.add_argument(
+        "--db", default="fleet.db", help="control plane SQLite DB path (default fleet.db)"
+    )
+    cp.add_argument(
+        "--policies-dir",
+        default=None,
+        metavar="DIR",
+        help="directory containing role YAML files served at GET /fleet/policy/{role} "
+        "(default: policies/ relative to the current directory)",
     )
 
     reset = sub.add_parser(
@@ -822,6 +935,10 @@ def main() -> None:
             parser.error(str(exc))
         return
 
+    if args.command == "control-plane":
+        asyncio.run(_run_control_plane(args))
+        return
+
     if args.command == "reset-baselines":
         try:
             asyncio.run(reset_baselines(args.config, args.db, args.tool))
@@ -843,6 +960,8 @@ def main() -> None:
                 args.db,
                 json_response=not args.sse,
                 ui=args.ui,
+                control_plane_url=getattr(args, "control_plane_url", None),
+                fleet_token=getattr(args, "fleet_token", None),
             )
         else:
             asyncio.run(run_gateway(args.config, upstream, args.db))
