@@ -13,6 +13,7 @@ dependencies = [
     "rich>=13.7",          # demo/eval terminal output
     "starlette>=0.40",     # HTTP transport app + bearer auth middleware (ADR-0007)
     "uvicorn[standard]>=0.30",  # ASGI server for `olive serve` (standard = websockets)
+    "httpx>=0.27",         # async HTTP client for WebhookSink (fire-and-forget event push)
 ]
 
 [project.optional-dependencies]

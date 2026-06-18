@@ -19,8 +19,12 @@ telemetry event degrades detection; blocking a tool call would be worse.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
+
+_LOG = logging.getLogger(__name__)
 
 from olive.gateway.context import SecurityContext
 from olive.gateway.pipeline import Verdict
@@ -96,3 +100,73 @@ class MultiSink:
                 await sink.publish(event)
             except Exception:  # noqa: BLE001 - one broken sink must not stop the others or the fast path
                 self.errors += 1
+
+
+class WebhookSink:
+    """Fire-and-forget HTTP POST of a bounded event summary to an operator-supplied URL.
+
+    Rule 3 compliance: only hashes and metadata are sent — raw arguments, content,
+    and evidence are never included in the outbound payload. Failures are logged and
+    counted; the enforcement path is never blocked (ADR-0003 open-core seam)."""
+
+    def __init__(self, url: str, token: str | None = None) -> None:
+        self._url = url
+        self._headers = {"Content-Type": "application/json"}
+        if token:
+            self._headers["Authorization"] = f"Bearer {token}"
+        self._client: "httpx.AsyncClient | None" = None
+        self.errors = 0
+
+    def _get_client(self) -> "httpx.AsyncClient":
+        if self._client is None:
+            import httpx
+            self._client = httpx.AsyncClient(timeout=5.0)
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    async def publish(self, event: TelemetryEvent) -> None:
+        # Extract only the scalar fields _post needs before handing off to the
+        # task — this unbinds content/arguments (raw payloads, in-process only)
+        # from the task closure so they can be GC'd immediately (rule 3 intent).
+        tool = event.ctx.tool
+        decision = event.verdict.decision
+        rule = event.verdict.rule
+        evidence = event.verdict.evidence or ""
+        # Hash session_key (org:agent:session) before leaving the process — the
+        # raw triple may contain identity data (agent_id, org name) which must
+        # not be sent to an operator-controlled external endpoint verbatim.
+        session_hash = hashlib.sha256(event.session_key.encode()).hexdigest()
+        asyncio.create_task(self._post(tool, decision, rule, evidence, session_hash))
+
+    async def _post(
+        self,
+        tool: str,
+        decision: str,
+        rule: str,
+        evidence: str,
+        session_hash: str,
+    ) -> None:
+        import json
+        from datetime import datetime, timezone
+
+        payload = {
+            "tool": tool,
+            "decision": decision,
+            "rule": rule,
+            "evidence_hash": hashlib.sha256(evidence.encode()).hexdigest(),
+            "session_hash": session_hash,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            client = self._get_client()
+            resp = await client.post(self._url, content=json.dumps(payload).encode(), headers=self._headers)
+            if resp.status_code >= 400:
+                _LOG.warning("webhook POST returned %d", resp.status_code)
+                self.errors += 1
+        except Exception as exc:  # noqa: BLE001
+            _LOG.debug("webhook POST failed: %s", exc)
+            self.errors += 1

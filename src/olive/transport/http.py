@@ -28,7 +28,9 @@ from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+import hmac
 
 from olive.identity.claims import IdentityClaims, claims_from_token, session_key
 from olive.identity.tokens import IdentityError, RevokedTokenCache
@@ -39,6 +41,50 @@ RELEASE_SCOPE = "olive:release"
 APPROVE_SCOPE = "olive:approve"
 # Capability a token must carry to revoke a JWT token (M9).
 REVOKE_SCOPE = "olive:command"
+
+
+_DASHBOARD_SKIP_PATHS = frozenset({"/mcp", "/admin/release", "/admin/approve", "/admin/revoke"})
+
+
+class DashboardAuthMiddleware:
+    """Gate the dashboard surface behind a static shared secret.
+
+    Skipped paths are the MCP endpoint and the three exact admin routes — each of
+    those has its own CA-token or capability check. Using an exact set (not a prefix)
+    avoids a forward-looking hole where a new /admin/* route added without its own
+    auth would become reachable without the dashboard token.
+
+    Token comparison uses hmac.compare_digest (constant-time) to prevent a timing
+    oracle on the secret."""
+
+    def __init__(self, app: ASGIApp, token: str) -> None:
+        self._app = app
+        self._expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            path: str = scope.get("path", "")
+            is_skipped = path in _DASHBOARD_SKIP_PATHS or path.startswith("/mcp/")
+            if not is_skipped:
+                headers = dict(scope.get("headers", []))
+                auth = headers.get(b"authorization", b"")
+                if not hmac.compare_digest(auth, self._expected):
+                    if scope["type"] == "http":
+                        body = b'{"error":"unauthorized"}'
+                        await send({
+                            "type": "http.response.start",
+                            "status": 401,
+                            "headers": [
+                                (b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode()),
+                            ],
+                        })
+                        await send({"type": "http.response.body", "body": body, "more_body": False})
+                        return
+                    else:
+                        await send({"type": "websocket.close", "code": 1008})
+                        return
+        await self._app(scope, receive, send)
 
 
 class OliveTokenVerifier(TokenVerifier):
@@ -186,6 +232,7 @@ def build_http_app(
     mcp_path: str = "/mcp",
     extra_routes: list | None = None,
     revocation: RevokedTokenCache | None = None,
+    dashboard_token: str | None = None,
 ) -> Starlette:
     """Assemble the Starlette app: bearer auth context on every request, the MCP
     endpoint behind RequireAuthMiddleware, and capability-gated admin endpoints.
@@ -198,12 +245,19 @@ def build_http_app(
     without a bearer token. They are passed in by the composition root so this
     transport module never imports `olive.ui` (the layering rule, ADR-0003). The
     global auth-context middleware still runs but does not reject a request that
-    carries no token; only `RequireAuthMiddleware` (on `/mcp`) rejects."""
+    carries no token; only `RequireAuthMiddleware` (on `/mcp`) rejects.
+
+    `dashboard_token` (optional) gates the entire dashboard surface (everything
+    except `/mcp` and `/admin/*`) behind a static shared secret via
+    `DashboardAuthMiddleware`. No-op when None (preserves the current
+    localhost-only dev UX)."""
     verifier = OliveTokenVerifier(public_key_pem, revocation=revocation)
     middleware = [
         Middleware(AuthenticationMiddleware, backend=BearerAuthBackend(verifier)),
         Middleware(AuthContextMiddleware),
     ]
+    if dashboard_token:
+        middleware.append(Middleware(DashboardAuthMiddleware, token=dashboard_token))
     routes = [
         Route(mcp_path, endpoint=RequireAuthMiddleware(_McpAsgiApp(), [], None)),
         Route("/admin/release", endpoint=_release, methods=["POST"]),
