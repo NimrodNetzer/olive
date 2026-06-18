@@ -1,6 +1,6 @@
 {
-  "detected": 42,
-  "malicious_total": 42,
+  "detected": 56,
+  "malicious_total": 56,
   "false_positives": 0,
   "benign_total": 24,
   "per_category": {
@@ -9,14 +9,18 @@
       "total": 3
     },
     "context.resource_scope": {
-      "detected": 5,
-      "total": 5
+      "detected": 7,
+      "total": 7
     },
     "description.first-sight-poisoning": {
       "detected": 1,
       "total": 1
     },
     "description.poisoning": {
+      "detected": 2,
+      "total": 2
+    },
+    "escalation": {
       "detected": 2,
       "total": 2
     },
@@ -41,16 +45,16 @@
       "total": 1
     },
     "injection": {
-      "detected": 2,
-      "total": 2
-    },
-    "injection.encoded": {
-      "detected": 7,
-      "total": 7
-    },
-    "injection.obfuscated": {
       "detected": 3,
       "total": 3
+    },
+    "injection.encoded": {
+      "detected": 15,
+      "total": 15
+    },
+    "injection.obfuscated": {
+      "detected": 4,
+      "total": 4
     },
     "injection.semantic": {
       "detected": 2,

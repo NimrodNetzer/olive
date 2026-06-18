@@ -27,10 +27,15 @@ ROOT = Path(__file__).resolve().parents[1]
 async def test_finds_seed_mapped_bypasses():
     report = await run_campaign()
     keys = {b.key for b in report.bypasses}
-    # the deterministic decode layer misses these today (committed known-miss)
-    assert "instruction-override:encode.base32" in keys
-    assert "instruction-override:encode.double_base64" in keys
-    assert "instruction-override:encode.base64_chunked" in keys
+    # caesar3 is the current active known-miss bypass (inj-0042); DecodeInspector
+    # only has rot13 (shift 13); a shift-3 Caesar cipher is never reversed.
+    assert "instruction-override:encode.caesar3" in keys
+    assert "system-override:encode.caesar3" in keys
+    # formerly known-miss strategies are now caught (no longer bypasses)
+    assert "instruction-override:encode.base32" not in keys
+    assert "instruction-override:encode.double_base64" not in keys
+    assert "instruction-override:encode.base64_chunked" not in keys
+    assert "instruction-override:encode.rot47" not in keys
     assert report.variants == len(SEEDS) * len(STRATEGIES)
 
 
@@ -50,18 +55,23 @@ async def test_real_seed_plaintext_is_caught():
 
 
 async def test_dedup_against_known_keys():
-    key = "instruction-override:encode.base32"
+    # caesar3 is the current active bypass; filing it as already-known should
+    # move it from novel to already_filed.
+    key = "instruction-override:encode.caesar3"
     report = await run_campaign(known_keys={key})
     assert any(b.key == key for b in report.already_filed)
     assert all(b.key != key for b in report.novel)
 
 
 async def test_committed_corpus_carries_redteam_keys():
-    # The four seed-mapped known-miss cases were backfilled with redteam_key, so a
-    # re-run correctly reports them as already-filed, not novel.
+    # Corpus cases with redteam_key are loaded for dedup regardless of their
+    # status (active or known-miss).  Previously-known-miss cases that are now
+    # active still carry their key so the engine reports them as already-filed.
     keys = load_known_keys(ROOT / "evals" / "corpus")
-    assert "instruction-override:encode.base32" in keys
-    assert "system-override:homoglyph.capital" in keys
+    assert "instruction-override:encode.base32" in keys    # promoted to active; key still present
+    assert "system-override:homoglyph.capital" in keys     # promoted to active; key still present
+    assert "instruction-override:encode.rot47" in keys     # promoted to active; key still present
+    assert "instruction-override:encode.caesar3" in keys   # current active known-miss
 
 
 async def test_candidate_is_always_known_miss_never_active():

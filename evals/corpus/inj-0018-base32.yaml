@@ -12,7 +12,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   DecodeInspector only attempts base64 / hex / rot13 / url / homoglyph views.
   base32 is not in its decoder set, so the trigger never surfaces. Would be

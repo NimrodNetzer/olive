@@ -110,6 +110,143 @@ async def test_recent_agent_tools_empty_for_unknown_agent(store):
     assert tools == []
 
 
+# ── BehaviorSentinel: M11 call-rate anomaly ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_call_rate_anomaly_fires_when_session_is_5x_above_average():
+    """Session with 5× the historical average call count fires the rate signal."""
+
+    async def rate_baseline_fn(agent_id, org_id):
+        return [4, 4, 4]  # avg = 4; 5× = 20
+
+    sentinel = BehaviorSentinel(rate_baseline_fn=rate_baseline_fn)
+    # 20 calls total: 19 in history + 1 current = 5× average
+    history = tuple(f"read_faq_{i}" for i in range(19))
+    event = _event(tool="read_faq", history=history)
+
+    sig = await sentinel.analyze(event)
+
+    assert sig.detected
+    assert sig.attack_type == "call-rate-anomaly"
+    assert sig.confidence == 0.55
+    assert "historical average" in sig.evidence
+
+
+@pytest.mark.asyncio
+async def test_call_rate_anomaly_requires_min_3_sessions():
+    """With fewer than 3 prior sessions the rate signal does not fire."""
+
+    async def rate_baseline_fn(agent_id, org_id):
+        return [4, 4]  # only 2 prior sessions — not enough history
+
+    sentinel = BehaviorSentinel(rate_baseline_fn=rate_baseline_fn)
+    history = tuple(f"read_faq_{i}" for i in range(100))
+    event = _event(tool="read_faq", history=history)
+
+    sig = await sentinel.analyze(event)
+
+    assert not sig.detected
+
+
+@pytest.mark.asyncio
+async def test_call_rate_no_signal_below_threshold():
+    """A session at 4× average does not trip the 5× threshold."""
+
+    async def rate_baseline_fn(agent_id, org_id):
+        return [5, 5, 5]  # avg = 5; 5× = 25; 20 calls is only 4×
+
+    sentinel = BehaviorSentinel(rate_baseline_fn=rate_baseline_fn)
+    history = tuple(f"read_faq_{i}" for i in range(19))  # 20 calls total
+    event = _event(tool="read_faq", history=history)
+
+    sig = await sentinel.analyze(event)
+
+    assert not sig.detected
+
+
+@pytest.mark.asyncio
+async def test_call_rate_swallows_fn_exception():
+    """An exception in rate_baseline_fn is silenced — never propagates."""
+
+    async def failing_rate_fn(agent_id, org_id):
+        raise RuntimeError("store unavailable")
+
+    sentinel = BehaviorSentinel(rate_baseline_fn=failing_rate_fn)
+    event = _event(tool="read_faq", history=())
+
+    sig = await sentinel.analyze(event)
+
+    assert not sig.detected  # fail safe
+
+
+# ── BehaviorSentinel: M11 novel-tool signal ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_novel_sensitive_tool_fires_when_not_in_known_set():
+    """First-ever use of a sensitive tool by an agent fires the novel-tool signal."""
+
+    async def known_tools_fn(agent_id, org_id):
+        return {"read_faq", "search_kb"}  # agent has history but no sensitive tools
+
+    sentinel = BehaviorSentinel(known_tools_fn=known_tools_fn)
+    event = _event(tool="read_customer_ssn", history=())
+
+    sig = await sentinel.analyze(event)
+
+    assert sig.detected
+    assert sig.attack_type == "novel-tool"
+    assert sig.confidence == 0.5
+    assert "read_customer_ssn" in sig.evidence
+
+
+@pytest.mark.asyncio
+async def test_no_novel_signal_when_tool_is_known():
+    """If the agent has used the sensitive tool before, no novel signal fires."""
+
+    async def known_tools_fn(agent_id, org_id):
+        return {"read_faq", "read_customer_ssn"}  # already in known set
+
+    sentinel = BehaviorSentinel(known_tools_fn=known_tools_fn)
+    event = _event(tool="read_customer_ssn", history=())
+
+    sig = await sentinel.analyze(event)
+
+    # May still fire a sequence signal, but not the novel-tool signal
+    assert not sig.detected or sig.attack_type != "novel-tool"
+
+
+@pytest.mark.asyncio
+async def test_no_novel_signal_when_known_set_is_empty():
+    """An empty known-tools set means no prior history — novel signal suppressed."""
+
+    async def known_tools_fn(agent_id, org_id):
+        return set()  # brand-new agent, no history at all
+
+    sentinel = BehaviorSentinel(known_tools_fn=known_tools_fn)
+    event = _event(tool="read_customer_ssn", history=())
+
+    sig = await sentinel.analyze(event)
+
+    assert not sig.detected or sig.attack_type != "novel-tool"
+
+
+@pytest.mark.asyncio
+async def test_novel_tool_swallows_fn_exception():
+    """An exception in known_tools_fn is silenced — never propagates."""
+
+    async def failing_fn(agent_id, org_id):
+        raise RuntimeError("connection lost")
+
+    sentinel = BehaviorSentinel(known_tools_fn=failing_fn)
+    event = _event(tool="read_credentials", history=())
+
+    sig = await sentinel.analyze(event)
+
+    assert not sig.detected  # fail safe
+
+
 # ── BehaviorSentinel: cross-session baseline ──────────────────────────────────
 
 

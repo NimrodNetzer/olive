@@ -19,7 +19,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   The whitespace-stripped whole-body base64 attempt is the decoder's answer to
   line-wrapped payloads, but it only fires when the entire stripped body is one

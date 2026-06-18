@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.mode import OperatingMode
+from olive.identity.tokens import RevokedTokenCache
 from olive.intelligence.bus import IncidentBus, IncidentObject
 from olive.intelligence.reporter import IncidentReport
 
@@ -51,10 +52,17 @@ def target_mode(current: OperatingMode, quarantines: int, max_confidence: float)
 
 
 class SecurityCommander:
-    def __init__(self, breaker: CircuitBreaker, bus: IncidentBus, store=None) -> None:
+    def __init__(
+        self,
+        breaker: CircuitBreaker,
+        bus: IncidentBus,
+        store=None,
+        revocations: RevokedTokenCache | None = None,
+    ) -> None:
         self._breaker = breaker
         self._bus = bus
         self._store = store  # EventStore | None — optional persistence (ADR-0003 seam)
+        self._revocations = revocations  # RevokedTokenCache | None — M11 Siege token freeze
         self._quarantines = 0
         self._max_confidence = 0.0
 
@@ -89,6 +97,24 @@ class SecurityCommander:
             raise CommanderError(f"a mode change requires the '{COMMAND_SCOPE}' capability")
         return await self._apply_mode(mode, reason="human-forced mode change", incident_id=None)
 
+    async def _revoke_quarantined_tokens(self) -> None:
+        """Bulk-revoke the live JWT of every quarantined session on SIEGE (M11).
+        Errors are swallowed so a revocation failure never blocks the mode change
+        (fail-safe: mode propagates even if persistence hiccups)."""
+        if self._revocations is None and self._store is None:
+            return
+        jti_map = self._breaker.quarantined_jtis()
+        for jti in jti_map.values():
+            try:
+                if self._revocations is not None:
+                    self._revocations.revoke(jti)
+                if self._store is not None:
+                    await self._store.revoke_token(  # type: ignore[attr-defined]
+                        jti, org_id="", agent_id="", reason="siege-declared"
+                    )
+            except Exception:  # noqa: BLE001 - revocation must not block the mode change
+                pass
+
     async def _apply_mode(
         self, mode: OperatingMode, *, reason: str, incident_id: str | None
     ) -> bool:
@@ -119,10 +145,12 @@ class SecurityCommander:
                 incident_id=incident_id,
             )
             await self._bus.publish(obj)
-            # Siege-specific crisis announcement (M9): publish a typed siege-declared
-            # object carrying the quarantined session count so the UI and future fleet
-            # relay can react to the crisis transition specifically.
+            # Siege-specific crisis announcement (M9 / M11): publish a typed
+            # siege-declared object AND bulk-revoke every quarantined session's
+            # live token so a compromised agent cannot re-authenticate on a new
+            # session to escape the siege perimeter.
             if mode is OperatingMode.SIEGE:
+                await self._revoke_quarantined_tokens()
                 frozen = self._breaker.quarantined_count()
                 siege_report = IncidentReport(
                     session_key="",

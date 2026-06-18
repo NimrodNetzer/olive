@@ -54,10 +54,21 @@ class ContextRule:
     def applies_to(self, ctx: SecurityContext, res: ResourceRef | None) -> bool:
         if self.tool is not None and self.tool != ctx.tool:
             return False
+        # Task-binding rules (resource.id_in) must not be silenced by a type
+        # mislabel attack: if a resource IS extracted but carries the wrong type,
+        # a task-binding rule still fires so that id 9999 cannot bypass the check
+        # by being labelled "invoice" instead of "order" (ctx-0006, ctx-0007).
+        # When no resource is extracted at all, the type gate still makes the rule
+        # inert — a rule targeting "order" resources does not apply to tool calls
+        # that produced no resource at all.
+        has_id_binding = "resource.id_in" in self.require
         for key, expected in self.when.items():
             if key == "resource.type":
-                if res is None or res.type != expected:
-                    return False
+                if res is None:
+                    return False  # no resource extracted; rule not applicable
+                if res.type != expected and not has_id_binding:
+                    return False  # different resource kind and no id binding
+                # resource present + has_id_binding: allow through; id_in checks it
             else:  # an unknown `when` key can never be satisfied -> rule inert
                 return False
         return True

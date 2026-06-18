@@ -35,6 +35,11 @@ class SessionState:
     # The incident that tripped the breaker; later quarantined calls reference
     # it instead of each minting a new incident (ADR-0006, CLAUDE.md rule 5).
     quarantine_incident_id: str | None = None
+    # The most recently seen JWT token ID (jti) for this session. Updated on
+    # each authenticated request so that when a session is quarantined or SIEGE
+    # is declared the live token can be revoked immediately (M11). Empty for
+    # stdio/unverified sessions.
+    current_jti: str = ""
 
     @property
     def quarantined(self) -> bool:

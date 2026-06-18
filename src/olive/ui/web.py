@@ -98,6 +98,30 @@ async def _corpus_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(request.app.state.corpus)
 
 
+async def _events_recent_endpoint(request: Request) -> JSONResponse:
+    """Return the last N gateway decision events for UI history replay."""
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return JSONResponse([])
+    try:
+        limit = min(int(request.query_params.get("limit", 50)), 200)
+    except (ValueError, TypeError):
+        limit = 50
+    return JSONResponse(await store.recent_events(limit))
+
+
+async def _incidents_list_endpoint(request: Request) -> JSONResponse:
+    """Return the last N incidents for the UI incidents panel."""
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return JSONResponse([])
+    try:
+        limit = min(int(request.query_params.get("limit", 20)), 100)
+    except (ValueError, TypeError):
+        limit = 20
+    return JSONResponse(await store.recent_incidents(limit))
+
+
 async def _operator_endpoint(request: Request) -> JSONResponse:
     """The single inbound write surface (ADR-0019 SS4). Accepts
     `{"action": "<action>"}` from the browser and publishes an announce-only
@@ -140,6 +164,8 @@ def ui_routes() -> list:
     return [
         WebSocketRoute("/ws", _ws_endpoint),
         Route("/corpus", _corpus_endpoint, methods=["GET"]),
+        Route("/events/recent", _events_recent_endpoint, methods=["GET"]),
+        Route("/incidents/list", _incidents_list_endpoint, methods=["GET"]),
         Route("/operator", _operator_endpoint, methods=["POST"]),
         Mount("/", StaticFiles(directory=str(_STATIC), html=True)),
     ]
@@ -149,6 +175,7 @@ def build_app(
     broker: UIBroker,
     bus: IncidentBus | None = None,
     corpus_dir: Path | None = None,
+    store=None,
 ) -> Starlette:
     """Build the standalone Starlette ASGI app (`olive ui --web`, a separate
     process). `broker` is required (stream source); `bus` is optional (enables
@@ -158,4 +185,5 @@ def build_app(
     app.state.broker = broker
     app.state.bus = bus
     app.state.corpus = _corpus_stems(corpus_dir)
+    app.state.store = store
     return app

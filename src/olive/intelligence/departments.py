@@ -47,17 +47,29 @@ def build_sentinels(config, store=None) -> list:
     So `olive serve --ui` produces real detections with NO `ANTHROPIC_API_KEY`; the
     semantic path simply adds nothing without a key (ADR-0020 §7).
 
-    When `store` is provided (M10), BehaviorSentinel receives a cross-session
-    lookup so it can detect multi-day slow-burn sequences across sessions."""
+    When `store` is provided (M10/M11), BehaviorSentinel receives three cross-session
+    callbacks for: sequence detection, call-rate anomaly, and novel-tool detection."""
     cross_session_fn = None
+    rate_baseline_fn = None
+    known_tools_fn = None
     if store is not None:
         async def cross_session_fn(agent_id: str, org_id: str) -> list[str]:
             return await store.recent_agent_tools(agent_id, org_id)  # type: ignore[attr-defined]
 
+        async def rate_baseline_fn(agent_id: str, org_id: str) -> list[int]:
+            return await store.agent_calls_per_session(agent_id, org_id)  # type: ignore[attr-defined]
+
+        async def known_tools_fn(agent_id: str, org_id: str) -> set[str]:
+            return await store.agent_known_tools(agent_id, org_id)  # type: ignore[attr-defined]
+
     return [
         PromptInjectionSentinel(config.injection_patterns),
         DataLeakSentinel(),
-        BehaviorSentinel(cross_session_fn=cross_session_fn),
+        BehaviorSentinel(
+            cross_session_fn=cross_session_fn,
+            rate_baseline_fn=rate_baseline_fn,
+            known_tools_fn=known_tools_fn,
+        ),
     ]
 
 
@@ -200,6 +212,7 @@ def build_runtime_org(
     queue,
     sentinels,
     store=None,
+    revocations=None,
     threshold: float = 0.8,
     redteam_policy: str = "default.yaml",
     redteam_corpus_dir=None,
@@ -217,7 +230,7 @@ def build_runtime_org(
     bus (and any supplied ledger) must already be open."""
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
-    commander = SecurityCommander(breaker, bus, store=store)
+    commander = SecurityCommander(breaker, bus, store=store, revocations=revocations)
     commander.subscribe()
     remediation.subscribe(bus)
     runner = SentinelRunner(

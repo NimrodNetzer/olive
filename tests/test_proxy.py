@@ -11,6 +11,7 @@ from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway, extract_inspectable_text
 from olive.gateway.ratelimit import RateLimiter
 from olive.identity.claims import IdentityClaims
+from olive.identity.tokens import RevokedTokenCache
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector, RolePolicy
 from olive.store.events import EventStore
@@ -356,6 +357,64 @@ async def test_poisoned_prompt_listing_is_withheld(gateway):
     result = await handler(types.ListPromptsRequest(method="prompts/list"))
     assert result.root.prompts == [], "poisoned prompt withheld"
     assert (await store.summary()).incidents == 1
+
+
+# ── M11 Slice B: token revocation on quarantine ──────────────────────────────
+
+
+async def test_quarantine_revokes_live_token(store):
+    """When a session is quarantined the agent's live JWT is immediately revoked."""
+    config = make_config()
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    revocations = RevokedTokenCache()
+    breaker = CircuitBreaker(max_blocks=1)
+    gw = OliveGateway(
+        config, store, pipeline, breaker=breaker, revocations=revocations
+    )
+    upstream = StubUpstream()
+    # Agent identity with a real JTI
+    identity = IdentityClaims(
+        agent_id="agent-x",
+        organization="org-x",
+        role="customer-support",
+        session_id="sess-revoke",
+        capabilities=(),
+        task_resources=(),
+        jti="jti-to-be-revoked",
+    )
+    # One block trips the breaker (max_blocks=1) → quarantine → revocation
+    result = await gw.handle_call_tool(
+        upstream, "access_payroll", {}, identity=identity
+    )
+    assert result.isError
+    assert revocations.is_revoked("jti-to-be-revoked"), "live token must be revoked on quarantine"
+
+
+async def test_no_revocation_without_jti(store):
+    """stdio sessions without a JTI do not cause a revocation error."""
+    config = make_config()
+    pipeline = InspectorPipeline(
+        [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+    )
+    revocations = RevokedTokenCache()
+    breaker = CircuitBreaker(max_blocks=1)
+    gw = OliveGateway(
+        config, store, pipeline, breaker=breaker, revocations=revocations
+    )
+    identity = IdentityClaims(
+        agent_id="agent-stdio",
+        organization="org-stdio",
+        role="customer-support",
+        session_id="sess-stdio",
+        capabilities=(),
+        task_resources=(),
+        jti="",  # no JTI — stdio mode
+    )
+    await gw.handle_call_tool(upstream=StubUpstream(), name="access_payroll", arguments={}, identity=identity)
+    # No JTI to revoke; revocation set stays empty
+    assert len(revocations._revoked) == 0
 
 
 def test_extract_covers_all_text_surfaces():

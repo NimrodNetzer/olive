@@ -14,7 +14,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   _CONFUSABLES is lowercase-only. Trigger patterns are lowercased in normalize(),
   but the homoglyph fold runs on the raw text before lowercasing, so an uppercase

@@ -93,3 +93,40 @@ async def test_no_raw_arguments_ever_persisted(store, make_context, tmp_path):
     raw = (tmp_path / "events.db").read_bytes()
     assert secret.encode() not in raw
     assert hash_arguments({"body": secret}).encode() in raw
+
+
+# ── M11: cross-session behavioral baseline queries ──────────────────────────
+
+
+async def test_agent_calls_per_session_returns_counts_in_recency_order(store):
+    """agent_calls_per_session groups by session and returns most-recent first."""
+    await store.log_allowed_call("agent-a", "org-1", "sess-old", "read_faq")
+    await store.log_allowed_call("agent-a", "org-1", "sess-old", "search")
+    await store.log_allowed_call("agent-a", "org-1", "sess-new", "read_faq")
+    counts = await store.agent_calls_per_session("agent-a", "org-1")
+    assert sorted(counts, reverse=True) == [2, 1]  # both sessions present
+
+
+async def test_agent_calls_per_session_empty_for_unknown_agent(store):
+    assert await store.agent_calls_per_session("nobody", "org-1") == []
+
+
+async def test_agent_calls_per_session_respects_n_sessions_limit(store):
+    for i in range(5):
+        await store.log_allowed_call("agent-b", "org-1", f"sess-{i}", "read_faq")
+    counts = await store.agent_calls_per_session("agent-b", "org-1", n_sessions=3)
+    assert len(counts) == 3
+
+
+async def test_agent_known_tools_returns_distinct_set(store):
+    await store.log_allowed_call("agent-a", "org-1", "s1", "read_faq")
+    await store.log_allowed_call("agent-a", "org-1", "s1", "read_faq")  # duplicate
+    await store.log_allowed_call("agent-a", "org-1", "s2", "search")
+    known = await store.agent_known_tools("agent-a", "org-1")
+    assert known == {"read_faq", "search"}
+
+
+async def test_agent_known_tools_scoped_to_org(store):
+    await store.log_allowed_call("agent-a", "org-1", "s1", "privileged_tool")
+    known_org2 = await store.agent_known_tools("agent-a", "org-2")
+    assert "privileged_tool" not in known_org2

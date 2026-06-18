@@ -18,6 +18,8 @@ import pytest
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.mode import OperatingMode
+from olive.gateway.session import SessionStatus
+from olive.identity.tokens import RevokedTokenCache
 from olive.intelligence.bus import BusError, IncidentBus, IncidentObject
 from olive.intelligence.commander import (
     COMMAND_SCOPE,
@@ -173,6 +175,52 @@ async def test_force_mode_can_deescalate_with_capability(bus):
     changed = await commander.force_mode(OperatingMode.NORMAL, capabilities=(COMMAND_SCOPE,))
     assert changed is True
     assert await breaker.mode() is OperatingMode.NORMAL
+
+
+# ---- M11 Slice B: Commander bulk-revokes tokens on SIEGE --------------------
+
+
+async def test_commander_revokes_quarantined_tokens_on_siege(bus):
+    """When the Commander escalates to SIEGE every quarantined session's JTI
+    is revoked so the agent cannot re-authenticate to escape containment."""
+    breaker = CircuitBreaker(max_blocks=1)
+    revocations = RevokedTokenCache()
+    commander = SecurityCommander(breaker, bus, revocations=revocations)
+    commander.subscribe()
+
+    # Quarantine two sessions that have live JTIs
+    await breaker.record_jti("sess-a", "jti-a")
+    await breaker.record_block("sess-a", "INC-0001")
+    await breaker.record_jti("sess-b", "jti-b")
+    await breaker.record_block("sess-b", "INC-0002")
+    # Session without a JTI (stdio)
+    await breaker.record_block("sess-nojti", "INC-0003")
+
+    # Escalate to SIEGE via three quarantine detections
+    for iid in ("INC-0001", "INC-0002", "INC-0003"):
+        await bus.publish(bus.make_object(
+            kind="detection", source_dept="defense",
+            report=_report(incident_id=iid),
+        ))
+
+    assert await breaker.mode() is OperatingMode.SIEGE
+    assert revocations.is_revoked("jti-a"), "quarantined session JTI must be revoked"
+    assert revocations.is_revoked("jti-b"), "quarantined session JTI must be revoked"
+
+
+async def test_commander_siege_revocation_noop_without_revocations(bus):
+    """Commander without a RevokedTokenCache still escalates cleanly."""
+    breaker = CircuitBreaker(max_blocks=1)
+    commander = SecurityCommander(breaker, bus)  # no revocations
+    commander.subscribe()
+    await breaker.record_jti("sess-x", "jti-x")
+    await breaker.record_block("sess-x", "INC-0001")
+    for _ in range(3):
+        await bus.publish(bus.make_object(
+            kind="detection", source_dept="defense",
+            report=_report(incident_id="INC-0001"),
+        ))
+    assert await breaker.mode() is OperatingMode.SIEGE  # escalation still works
 
 
 # ---- end-to-end: the departments collaborate through the bus -----------------

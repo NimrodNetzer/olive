@@ -338,6 +338,71 @@ class EventStore:
         rows = await cursor.fetchall()
         return [r[0] for r in rows]
 
+    async def agent_calls_per_session(
+        self, agent_id: str, org_id: str, n_sessions: int = 20
+    ) -> list[int]:
+        """Return per-session call counts for the N most recent completed sessions.
+        Used by BehaviorSentinel to compute the agent's historical call-rate
+        baseline so an unusually active session raises a drift signal."""
+        cursor = await self._conn.execute(
+            "SELECT session_key, COUNT(*) AS cnt FROM agent_tool_history"
+            " WHERE agent_id = ? AND org_id = ?"
+            " GROUP BY session_key ORDER BY MAX(call_ts) DESC LIMIT ?",
+            (agent_id, org_id, n_sessions),
+        )
+        rows = await cursor.fetchall()
+        return [r[1] for r in rows]
+
+    async def agent_known_tools(self, agent_id: str, org_id: str) -> set[str]:
+        """Return the complete set of tool names this agent has ever used.
+        Used by BehaviorSentinel to flag a call to a tool the agent has never
+        touched before — a novel-tool signal for sensitive or privileged tools."""
+        cursor = await self._conn.execute(
+            "SELECT DISTINCT tool FROM agent_tool_history"
+            " WHERE agent_id = ? AND org_id = ?",
+            (agent_id, org_id),
+        )
+        rows = await cursor.fetchall()
+        return {r[0] for r in rows}
+
+    async def recent_events(self, limit: int = 50) -> list[dict]:
+        """Return the last N gateway decisions for UI history replay."""
+        cursor = await self._conn.execute(
+            "SELECT event_id, timestamp, agent_id, session_id, tool, direction,"
+            " decision, policy_rule, latency_ms, incident_id"
+            " FROM events ORDER BY timestamp DESC LIMIT ?",
+            (min(limit, 200),),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "event_id": r[0], "timestamp": r[1], "agent_id": r[2],
+                "session_id": r[3], "tool": r[4], "direction": r[5],
+                "decision": r[6], "rule": r[7], "latency_ms": r[8],
+                "incident_id": r[9],
+            }
+            for r in rows
+        ]
+
+    async def recent_incidents(self, limit: int = 20) -> list[dict]:
+        """Return the last N incidents for the UI incidents panel."""
+        cursor = await self._conn.execute(
+            "SELECT incident_id, timestamp, agent_id, session_id, attack_type,"
+            " evidence, confidence, detection_method, decision, status"
+            " FROM incidents ORDER BY timestamp DESC LIMIT ?",
+            (min(limit, 100),),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "incident_id": r[0], "timestamp": r[1], "agent_id": r[2],
+                "session_id": r[3], "attack_type": r[4], "evidence": r[5],
+                "confidence": r[6], "detection_method": r[7],
+                "decision": r[8], "status": r[9],
+            }
+            for r in rows
+        ]
+
     async def quarantined_session_count(self) -> int:
         """Number of currently persisted quarantined sessions."""
         cursor = await self._conn.execute(

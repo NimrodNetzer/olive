@@ -55,7 +55,7 @@ Inspect the whole MCP surface, not just `tools/call` content:
   screened (poison/rug-pull → withheld); `resources/read` + `prompts/get`
   content inspected like a tool response (poison → sanitized).
 
-## M4 — Contextual authorization  🚧 in progress
+## M4 — Contextual authorization  ✅ done
 
 Move beyond "this role may call this tool" toward "this specific agent may
 perform this specific action on this specific resource for this specific task."
@@ -261,6 +261,35 @@ wired into `olive serve`.
   "fire drill" button → `run-campaign-request` → a deterministic `OperatorBridge`
   → a sandbox `run_once()`. Additive, default-off, no API key required for the
   full detect → bus → UI → fix-proposal loop. Loopback-only by default.
+
+## M11 — Supervision tier: behavioral baselines + credential freeze  🚧 in progress
+
+The company-of-agents hierarchy gains its first real supervision capability:
+cross-session drift detection and hard credential revocation when an agent is
+contained. Complements M7's command structure with runtime threat intelligence
+that spans sessions and survives re-authentication attempts.
+
+**First slice (built — ADR-0024, 2026-06-18):**
+- ✅ **Cross-session call-rate anomaly**: `EventStore.agent_calls_per_session()` +
+  `BehaviorSentinel` Signal 1 — fires when the current session is ≥5× the agent's
+  historical per-session average with 3+ prior sessions. Detects exfiltration
+  loops and enumeration bursts that look clean call-by-call.
+- ✅ **Novel-tool detection**: `EventStore.agent_known_tools()` +
+  `BehaviorSentinel` Signal 2 — fires when a sensitive/egress tool is called for
+  the first time across all prior sessions. A stable agent's tool repertoire is
+  a meaningful signal; a sudden first-ever privileged call is not.
+- ✅ **Siege token freezing**: `CircuitBreaker.record_jti()` tracks each
+  session's live JWT; `CircuitBreaker.quarantined_jtis()` enumerates them.
+  On quarantine trip: live token is immediately revoked (in-memory +
+  persistent). On SIEGE escalation: Commander bulk-revokes all quarantined
+  sessions' tokens. A contained agent cannot re-authenticate to escape.
+- ✅ 387 tests, eval gate 56/56 detection, 0 FP, corpus 109 cases.
+
+**Still deferred:**
+- Shared SQLite + control plane API across multiple gateway instances.
+- Multi-gateway fleet dashboard.
+- Supervisor tier: a dedicated agent that monitors department health and can
+  override or escalate independently of the Commander.
 
 ## Later — the bets
 
