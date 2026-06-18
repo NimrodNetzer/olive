@@ -755,9 +755,101 @@ async def _run_control_plane(args: argparse.Namespace) -> None:
         await registry.close()
 
 
+def run_ca(args: argparse.Namespace) -> int:
+    """Drive the `olive ca` subcommands — CA key management and token issuance."""
+    from olive.identity.ca import CertificateAuthority, default_ca_dir
+
+    ca_dir = Path(args.ca_dir) if getattr(args, "ca_dir", None) else None
+
+    if args.ca_command == "init":
+        try:
+            ca = CertificateAuthority.init(ca_dir)
+            print(f"[olive ca] keypair written to {ca._ca_dir}", file=sys.stderr)
+            print(f"[olive ca] public key:  {ca.public_key_path}", file=sys.stderr)
+            print(f"[olive ca] pass to gateway: --ca-pubkey {ca.public_key_path}", file=sys.stderr)
+        except FileExistsError as exc:
+            print(f"[olive ca] {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.ca_command == "pubkey":
+        try:
+            ca = CertificateAuthority.load(ca_dir)
+            print(str(ca.public_key_path))
+        except FileNotFoundError as exc:
+            print(f"[olive ca] {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.ca_command == "issue":
+        try:
+            ca = CertificateAuthority.load(ca_dir)
+        except FileNotFoundError as exc:
+            print(f"[olive ca] {exc}", file=sys.stderr)
+            return 1
+        caps = [c.strip() for c in (args.capabilities or "").split(",") if c.strip()]
+        resources = [r.strip() for r in (args.task_resources or "").split(",") if r.strip()]
+        token = ca.issue(
+            agent_id=args.agent_id,
+            organization=args.org,
+            role=args.role,
+            session_id=getattr(args, "session_id", None) or None,
+            capabilities=caps,
+            task_resources=resources,
+            ttl_hours=float(getattr(args, "ttl_hours", 24)),
+        )
+        print(token)  # stdout — scriptable
+        print(
+            f"[olive ca] issued token for agent={args.agent_id} org={args.org} "
+            f"role={args.role} caps={caps or '(none)'} ttl={args.ttl_hours}h",
+            file=sys.stderr,
+        )
+        return 0
+
+    print(f"[olive ca] unknown command: {args.ca_command}", file=sys.stderr)
+    return 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    _ca_dir_kwargs = dict(
+        dest="ca_dir", default=None, metavar="DIR",
+        help="CA directory (default: ~/.olive/ca/)",
+    )
+    ca = sub.add_parser("ca", help="manage the local CA keypair and issue agent identity tokens")
+    ca_sub = ca.add_subparsers(dest="ca_command", required=True)
+
+    ca_init = ca_sub.add_parser("init", help="generate a new RSA-2048 CA keypair")
+    ca_init.add_argument("--dir", **_ca_dir_kwargs)
+
+    ca_pubkey = ca_sub.add_parser("pubkey", help="print the path to the CA public key (for --ca-pubkey)")
+    ca_pubkey.add_argument("--dir", **_ca_dir_kwargs)
+
+    ca_issue = ca_sub.add_parser("issue", help="issue a signed RS256 bearer token for an agent")
+    ca_issue.add_argument("--dir", **_ca_dir_kwargs)
+    ca_issue.add_argument("--agent-id", required=True, help="agent identifier (sub claim)")
+    ca_issue.add_argument("--org", required=True, help="organization name")
+    ca_issue.add_argument("--role", required=True, help="role name (must exist in the policy file)")
+    ca_issue.add_argument(
+        "--capabilities", default="",
+        metavar="CAP1,CAP2",
+        help="comma-separated capability strings (e.g. olive:release,olive:approve)",
+    )
+    ca_issue.add_argument(
+        "--task-resources", default="",
+        metavar="R1,R2",
+        help="comma-separated resource IDs to bind to this token",
+    )
+    ca_issue.add_argument(
+        "--session-id", default=None,
+        help="explicit session ID (default: random UUID)",
+    )
+    ca_issue.add_argument(
+        "--ttl-hours", type=float, default=24.0,
+        help="token lifetime in hours (default: 24)",
+    )
 
     run = sub.add_parser("run", help="run the gateway over stdio in front of an upstream")
     run.add_argument("--config", required=True, help="policy YAML file")
@@ -950,6 +1042,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.command == "ca":
+        sys.exit(run_ca(args))
 
     if args.command == "cycle":
         try:
