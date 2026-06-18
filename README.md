@@ -3,9 +3,21 @@
 > A zero-trust runtime security gateway for AI agents — a transparent MCP proxy that inspects every tool call **and** every tool response, blocks unauthorized actions before they execute, and stops prompt injections before they ever reach the agent, with every decision fully auditable.
 
 [![Tests](https://img.shields.io/badge/tests-387%20passing-brightgreen)](tests/)
-[![Eval](https://img.shields.io/badge/eval-56%2F56%20detected%20·%200%20FP-brightgreen)](evals/)
-[![Corpus](https://img.shields.io/badge/corpus-109%20cases-blue)](evals/corpus/)
+[![Eval](https://img.shields.io/badge/eval-57%2F57%20detected%20·%200%20FP-brightgreen)](evals/)
+[![Corpus](https://img.shields.io/badge/corpus-110%20cases-blue)](evals/corpus/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-black)](https://docs.astral.sh/ruff/)
+
+**See the attack Olive stops → [DEMO.md](DEMO.md)**
+
+```bash
+# macOS / Linux — see it in 60 seconds
+./quickstart.sh
+
+# Windows
+quickstart.bat
+```
+
+Opens a live dashboard at `http://127.0.0.1:7799`. Watch agents appear, attacks get blocked in real time, and the operating mode escalate to Siege.
 
 ---
 
@@ -119,8 +131,8 @@ Detection is **measured continuously** against a maintained attack corpus. The e
 
 | Metric | Current |
 |---|---|
-| Corpus cases | 109 (active + known-miss + benign hard negatives) |
-| Detection rate | **56 / 56 active cases** |
+| Corpus cases | 110 (active + known-miss + benign hard negatives) |
+| Detection rate | **57 / 57 active cases** |
 | False-positive rate | **0** |
 | Known-miss (honest backlog) | Encoded/semantic bypasses layer-zero can't catch; visible in the report |
 | Tests | **387 passing** |
@@ -340,6 +352,8 @@ python evals/run_evals.py --update-baseline  # lock in a detection win
 
 | Doc | What it covers |
 |---|---|
+| [DEMO.md](DEMO.md) | The attack story — what Olive stops and why it matters |
+| [docs/quickstart.md](docs/quickstart.md) | 5-minute setup guide with CA, tokens, and policy |
 | [docs/VISION.md](docs/VISION.md) | Product thesis, market, differentiation |
 | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, surfaces, guarantees and non-guarantees |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The proxy, inspector pipeline, audit store |
