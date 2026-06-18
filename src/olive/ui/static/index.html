@@ -70,6 +70,7 @@ header h1{font-size:14px;font-weight:bold;color:var(--green);letter-spacing:2px}
 body.siege #hc-frozen-wrap{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--red)}
 #hc-frozen{font-weight:bold;color:var(--red)}
 .hcv.tick{animation:bus-tick .4s ease-out}
+#eval-badge{font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:3px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.22);color:rgba(63,185,80,.75);flex-shrink:0;white-space:nowrap}
 #conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;transition:background .3s}
 #conn-dot.live{background:var(--green);box-shadow:0 0 5px var(--green)}
 #conn-lbl{color:var(--muted);font-size:10px}
@@ -357,6 +358,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   <span style="font-size:17px">🫒</span>
   <h1>OLIVE</h1>
   <span class="hsub">Agentic Command Center &mdash; zero-trust MCP gateway</span>
+  <span id="eval-badge">42/42 CAUGHT &middot; 0/24 FP &middot; 365 TESTS</span>
   <div id="mode-badge">NORMAL</div>
   <div class="hcounts">
     <div class="hc">detections:<span class="hcv" id="hc-det">0</span></div>
