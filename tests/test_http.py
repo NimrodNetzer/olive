@@ -287,3 +287,88 @@ async def test_end_to_end_authenticated_enforcement(app_ctx, ca, tmp_path):
     rows = db.execute("SELECT DISTINCT agent_id, session_id FROM events").fetchall()
     db.close()
     assert ("wire-agent", "sess-wire") in rows
+
+
+# ---- DashboardAuthMiddleware ------------------------------------------------
+
+
+@pytest.fixture
+async def app_with_dashboard_token(tmp_path, ca):
+    """App built with --dashboard-token set. Adds a minimal GET / route for testing."""
+    from starlette.responses import PlainTextResponse
+    from starlette.routing import Route
+    from olive.transport.http import DashboardAuthMiddleware
+
+    store = EventStore(tmp_path / "events.db")
+    await store.open()
+    upstream = StubUpstream()
+
+    @contextlib.asynccontextmanager
+    async def make_resources():
+        config = make_config()
+        pipeline = InspectorPipeline(
+            [PolicyInspector(config.roles), PatternInspector(config.injection_patterns)]
+        )
+        gateway = OliveGateway(config, store, pipeline)
+        server = gateway.build_server(upstream, identity_resolver=identity_from_context)
+        yield session_manager_for(server, json_response=True), gateway
+
+    dashboard_route = Route("/", endpoint=lambda _: PlainTextResponse("ok"), methods=["GET"])
+    app = build_http_app(
+        ca.public_key_pem(),
+        serving_lifespan(make_resources),
+        extra_routes=[dashboard_route],
+        dashboard_token="s3cret",
+    )
+    try:
+        yield app, store
+    finally:
+        await store.close()
+
+
+async def test_dashboard_auth_blocks_missing_token(app_with_dashboard_token):
+    app, _ = app_with_dashboard_token
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
+            resp = await client.get("/")
+    assert resp.status_code == 401
+    assert resp.json()["error"] == "unauthorized"
+
+
+async def test_dashboard_auth_blocks_wrong_token(app_with_dashboard_token):
+    app, _ = app_with_dashboard_token
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
+            resp = await client.get("/", headers={"Authorization": "Bearer wrong"})
+    assert resp.status_code == 401
+
+
+async def test_dashboard_auth_passes_correct_token(app_with_dashboard_token):
+    app, _ = app_with_dashboard_token
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
+            resp = await client.get("/", headers={"Authorization": "Bearer s3cret"})
+    assert resp.status_code == 200
+
+
+async def test_dashboard_auth_does_not_gate_mcp(app_with_dashboard_token, ca):
+    """MCP endpoint must still use CA-token auth, not the dashboard token."""
+    app, _ = app_with_dashboard_token
+    token = issue(ca)
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://olive.test") as client:
+            # No dashboard token, but a valid MCP CA-token — must reach MCP (not 401 from dashboard)
+            resp = await client.post(
+                "/mcp",
+                json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
+    # MCP will return something other than the dashboard's 401
+    assert resp.status_code != 401 or "unauthorized" not in (resp.text or "")

@@ -134,6 +134,9 @@ def serve_http(
     ui: bool = False,
     control_plane_url: str | None = None,
     fleet_token: str | None = None,
+    dashboard_token: str | None = None,
+    webhook_url: str | None = None,
+    webhook_token: str | None = None,
 ) -> None:
     """Serve over streamable HTTP with bearer-token identity enforcement.
 
@@ -161,11 +164,21 @@ def serve_http(
     public_key_pem = Path(ca_pubkey_path).read_bytes()
     db_path = db_override or config.db_path
 
+    if dashboard_token and not ui:
+        print(
+            "[olive] WARNING: --dashboard-token has no effect without --ui "
+            "(the dashboard is only mounted in --ui mode). Pass --ui to enforce it.",
+            file=sys.stderr,
+        )
+
     if ui:
         serve_http_live(
             config, specs, public_key_pem, host, port, db_path, json_response, build_http_app,
             control_plane_url=control_plane_url,
             fleet_token=fleet_token,
+            dashboard_token=dashboard_token,
+            webhook_url=webhook_url,
+            webhook_token=webhook_token,
         )
         return
 
@@ -195,6 +208,9 @@ def serve_http_live(
     config, specs, public_key_pem, host, port, db_path, json_response, build_http_app,
     control_plane_url: str | None = None,
     fleet_token: str | None = None,
+    dashboard_token: str | None = None,
+    webhook_url: str | None = None,
+    webhook_token: str | None = None,
 ) -> None:
     """The `olive serve --ui` assembly (ADR-0020): one process, one event loop,
     sharing ONE breaker + bus + UIBroker between the gateway and the co-mounted
@@ -278,6 +294,9 @@ def serve_http_live(
                 if fleet_client is not None:
                     from olive.fleet.sink import FleetSink
                     telemetry_sinks.append(FleetSink(fleet_client))
+                if webhook_url:
+                    from olive.gateway.telemetry import WebhookSink
+                    telemetry_sinks.append(WebhookSink(webhook_url, token=webhook_token))
 
                 gateway = OliveGateway(
                     config,
@@ -348,11 +367,18 @@ def serve_http_live(
         serving_lifespan_with_org(make_resources),
         extra_routes=ui_routes(),
         revocation=revocation,
+        dashboard_token=dashboard_token,
     )
     if host not in ("127.0.0.1", "localhost"):
         print(
             f"[olive] WARNING: binding {host} exposes the UNAUTHENTICATED Command "
             "Center dashboard + POST /operator to the network (ADR-0020)",
+            file=sys.stderr,
+        )
+    if webhook_url and webhook_url.startswith("http://"):
+        print(
+            "[olive] WARNING: --webhook-url is http:// — decision metadata and the "
+            "webhook bearer token will be sent in plaintext. Use https:// in production.",
             file=sys.stderr,
         )
     print(
@@ -777,6 +803,27 @@ def main() -> None:
         help="CA-signed bearer token carrying olive:fleet capability for control-plane auth",
     )
     serve.add_argument(
+        "--dashboard-token",
+        default=None,
+        metavar="TOKEN",
+        help="static shared secret for the Command Center dashboard (GET / + POST /operator). "
+        "If set, all dashboard paths require 'Authorization: Bearer <token>'. "
+        "No-op when absent (preserves current localhost-only dev UX).",
+    )
+    serve.add_argument(
+        "--webhook-url",
+        default=None,
+        metavar="URL",
+        help="HTTP endpoint to receive fire-and-forget event summaries (hashes only, rule 3). "
+        "POST on every allow/block/hold/quarantine decision.",
+    )
+    serve.add_argument(
+        "--webhook-token",
+        default=None,
+        metavar="TOKEN",
+        help="bearer token for --webhook-url authentication (sent as Authorization header).",
+    )
+    serve.add_argument(
         "upstream",
         nargs=argparse.REMAINDER,
         help="upstream MCP server command (prefix with --)",
@@ -962,6 +1009,9 @@ def main() -> None:
                 ui=args.ui,
                 control_plane_url=getattr(args, "control_plane_url", None),
                 fleet_token=getattr(args, "fleet_token", None),
+                dashboard_token=getattr(args, "dashboard_token", None),
+                webhook_url=getattr(args, "webhook_url", None),
+                webhook_token=getattr(args, "webhook_token", None),
             )
         else:
             asyncio.run(run_gateway(args.config, upstream, args.db))
