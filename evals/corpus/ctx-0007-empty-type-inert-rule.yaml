@@ -15,7 +15,7 @@ context:
     id: "9999"
     classification: customer-pii
 expected: block
-status: known-miss
+status: active
 notes: >
   Same inertness class as ctx-0006 but with an empty type string. `when:
   resource.type: order` compares res.type ("") != "order" -> rule does not apply

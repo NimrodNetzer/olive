@@ -13,7 +13,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   Defeats both base64 paths in _decoded_views: each chunk is < 16 symbols so
   _B64_RUN never matches a run, and the whitespace-stripped whole-body attempt

@@ -118,6 +118,55 @@ async def test_quarantined_sessions_are_never_evicted():
     assert b.snapshot("idle-active") is None
 
 
+# ── M11 Slice B: JTI tracking ───────────────────────────────────────────────
+
+
+async def test_record_jti_updates_current_jti():
+    b = breaker()
+    await b.record_jti(SID, "tok-abc123")
+    state = b.snapshot(SID)
+    assert state is not None and state.current_jti == "tok-abc123"
+
+
+async def test_record_jti_empty_string_is_noop():
+    """Empty jti (stdio/unverified sessions) must not overwrite a real one."""
+    b = breaker()
+    await b.record_jti(SID, "tok-real")
+    await b.record_jti(SID, "")
+    state = b.snapshot(SID)
+    assert state is not None and state.current_jti == "tok-real"
+
+
+async def test_record_jti_most_recent_wins():
+    b = breaker()
+    await b.record_jti(SID, "tok-v1")
+    await b.record_jti(SID, "tok-v2")
+    state = b.snapshot(SID)
+    assert state is not None and state.current_jti == "tok-v2"
+
+
+async def test_quarantined_jtis_returns_only_quarantined_with_jti():
+    b = CircuitBreaker(max_blocks=1)
+    # Session with JTI, trips into quarantine
+    await b.record_jti("attacker", "tok-evil")
+    await b.record_block("attacker", "INC-0001")
+    # Active session with JTI
+    await b.record_jti("normal", "tok-ok")
+    # Quarantined session with no JTI (stdio)
+    await b.record_block("nojti", "INC-0002")
+
+    result = b.quarantined_jtis()
+    assert result == {"attacker": "tok-evil"}
+    assert "normal" not in result
+    assert "nojti" not in result
+
+
+async def test_quarantined_jtis_empty_when_no_quarantines():
+    b = breaker()
+    await b.record_jti(SID, "tok-abc")
+    assert b.quarantined_jtis() == {}
+
+
 async def test_recent_sessions_survive_eviction():
     b = CircuitBreaker(idle_ttl_seconds=10_000)
     await b.begin_call("fresh")

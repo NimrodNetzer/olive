@@ -37,6 +37,7 @@ from olive.gateway.ratelimit import RateLimiter
 from olive.gateway.resources import extract_resource
 from olive.gateway.telemetry import NullSink, TelemetryEvent, TelemetrySink
 from olive.identity.claims import IdentityClaims, unverified_from_config
+from olive.identity.tokens import RevokedTokenCache
 from olive.store.events import BaselineStatus, EventStore
 
 _ATTACK_TYPE_BY_RULE_PREFIX = {
@@ -205,6 +206,7 @@ class OliveGateway:
         identity: IdentityClaims | None = None,
         approvals: ApprovalRegistry | None = None,
         telemetry: TelemetrySink | None = None,
+        revocations: RevokedTokenCache | None = None,
     ) -> None:
         self._config = config
         self._store = store
@@ -217,6 +219,10 @@ class OliveGateway:
         # only when a HOLD verdict fires; an operator approval releases one
         # specific held call.
         self._approvals = approvals or ApprovalRegistry()
+        # In-memory revocation cache. When a session is quarantined its live JWT is
+        # revoked immediately so the agent cannot re-authenticate on a new session
+        # to escape containment (M11 Slice B). None for stdio/unverified mode.
+        self._revocations = revocations
         # Identity is the verified (or, for stdio fallback, config-derived)
         # subject the gateway enforces as. Role comes from here, not config, so
         # it cannot be self-asserted once tokens are required (ADR-0007).
@@ -426,6 +432,8 @@ class OliveGateway:
         # reused session_id across tenants can't share quarantine/rate state.
         sid = identity.session_key
         started = perf_counter()
+        # Track the latest JTI so quarantine can revoke the live token (M11 Slice B).
+        await self._breaker.record_jti(sid, identity.jti)
         ticket = await self._breaker.begin_call(sid)
 
         # Containment first: a quarantined session is denied before any
@@ -472,6 +480,16 @@ class OliveGateway:
                         sid, state.block_count, state.quarantined,
                         state.quarantine_reason, state.quarantine_incident_id,
                     )
+                    # Revoke the agent's live token so it cannot re-authenticate
+                    # on a new session to escape quarantine (M11 Slice B).
+                    if state.current_jti and self._revocations is not None:
+                        self._revocations.revoke(state.current_jti)
+                        await self._store.revoke_token(
+                            state.current_jti,
+                            identity.organization,
+                            identity.agent_id,
+                            reason=f"session quarantined: {state.quarantine_reason}",
+                        )
             await self._emit(out_ctx, out_verdict, sid, arguments=arguments)
             return _blocked_result("outbound", out_verdict, incident_id or "unrecorded")
 

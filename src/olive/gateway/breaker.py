@@ -233,3 +233,22 @@ class CircuitBreaker:
         """Restore operating mode from persistent state on startup.
         Must be called before the event loop begins processing requests."""
         self._mode = mode
+
+    async def record_jti(self, session_id: str, jti: str) -> None:
+        """Track the most recently seen JWT token ID for this session.
+        Called on every authenticated request so that if the session is
+        quarantined or SIEGE is declared the live token can be revoked."""
+        if not jti:
+            return
+        async with self._lock:
+            state = self._get(session_id)
+            state.current_jti = jti
+
+    def quarantined_jtis(self) -> dict[str, str]:
+        """Return {session_id: jti} for every quarantined session that has a
+        non-empty jti. Used by the Commander to bulk-revoke tokens on SIEGE."""
+        return {
+            sid: st.current_jti
+            for sid, st in self._sessions.items()
+            if st.quarantined and st.current_jti
+        }

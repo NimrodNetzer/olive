@@ -15,7 +15,7 @@ context:
     id: "9999"
     classification: customer-pii
 expected: block
-status: known-miss
+status: active
 notes: >
   The order-must-match-task rule is gated by `when: resource.type: order`.
   When the resource carries any other type label (here "invoice"),

@@ -13,7 +13,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   _decoded_views decodes exactly one layer. The first decode produces a valid,
   printable base64 string (passes _is_plausible_text) but contains no trigger,

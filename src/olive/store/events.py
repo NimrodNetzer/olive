@@ -338,6 +338,33 @@ class EventStore:
         rows = await cursor.fetchall()
         return [r[0] for r in rows]
 
+    async def agent_calls_per_session(
+        self, agent_id: str, org_id: str, n_sessions: int = 20
+    ) -> list[int]:
+        """Return per-session call counts for the N most recent completed sessions.
+        Used by BehaviorSentinel to compute the agent's historical call-rate
+        baseline so an unusually active session raises a drift signal."""
+        cursor = await self._conn.execute(
+            "SELECT session_key, COUNT(*) AS cnt FROM agent_tool_history"
+            " WHERE agent_id = ? AND org_id = ?"
+            " GROUP BY session_key ORDER BY MAX(call_ts) DESC LIMIT ?",
+            (agent_id, org_id, n_sessions),
+        )
+        rows = await cursor.fetchall()
+        return [r[1] for r in rows]
+
+    async def agent_known_tools(self, agent_id: str, org_id: str) -> set[str]:
+        """Return the complete set of tool names this agent has ever used.
+        Used by BehaviorSentinel to flag a call to a tool the agent has never
+        touched before — a novel-tool signal for sensitive or privileged tools."""
+        cursor = await self._conn.execute(
+            "SELECT DISTINCT tool FROM agent_tool_history"
+            " WHERE agent_id = ? AND org_id = ?",
+            (agent_id, org_id),
+        )
+        rows = await cursor.fetchall()
+        return {r[0] for r in rows}
+
     async def recent_events(self, limit: int = 50) -> list[dict]:
         """Return the last N gateway decisions for UI history replay."""
         cursor = await self._conn.execute(

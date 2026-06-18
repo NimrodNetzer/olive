@@ -4,13 +4,18 @@ Each strategy takes a seed malicious intent (a plain trigger phrase the gateway
 catches verbatim) and obfuscates it into a variant. The engine runs the variant
 through the real pipeline; if it is allowed, that is a bypass.
 
-The first slice ships exactly the mutators that map to existing `known-miss`
-corpus cases, so the engine's findings can be checked against committed ground
-truth (inj-0018 base32, inj-0020 double-base64, inj-0021 chunked-base64,
-inj-0024 capital-homoglyph). Each is pure and deterministic: same seed, same
+Strategies map to committed `known-miss` corpus cases so findings can be checked
+against committed ground truth. Each is pure and deterministic: same seed, same
 variant, reproducible in CI.
 
-These are mutators of OUR OWN trigger phrases against OUR OWN pipeline - the
+FIXED strategies (decoder now catches them — kept for regression coverage):
+  base32 (inj-0018), double-base64 (inj-0020), chunked-base64 (inj-0021),
+  capital-homoglyph (inj-0024), rot47 (inj-0041).
+
+ACTIVE bypass strategy: caesar3 (inj-0042) — a letter-only Caesar cipher with
+  shift=3. DecodeInspector only decodes rot13 (shift 13); shift 3 is not caught.
+
+These are mutators of OUR OWN trigger phrases against OUR OWN pipeline — the
 authorized-testing-only rule (VISION, ADR-0015). They have no external target.
 """
 
@@ -21,8 +26,8 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 # Capital ASCII -> capital Cyrillic/Greek lookalike. The DecodeInspector's fold
-# table is lowercase-only, so a capital homoglyph survives (inj-0024). Mirrors,
-# inverted, the gap that case documents.
+# table was lowercase-only; capital confusables have since been added (inj-0024
+# now active). Kept here for regression coverage.
 _CAPITAL_CONFUSABLES = {
     "A": "А",
     "B": "В",
@@ -65,8 +70,8 @@ class _Base32:
     id: str = "encode.base32"
     category: str = "injection.encoded"
     note: str = (
-        "base32 is not in DecodeInspector._decoded_views; a [A-Z2-7] blob never "
-        "surfaces the trigger. Fix: add a base32 view (mirrors the base64 path)."
+        "FIXED (inj-0018 now active): base32 view added to DecodeInspector. "
+        "Kept for regression coverage — a plain base32 blob is now caught."
     )
 
     def mutate(self, seed: SeedIntent) -> str:
@@ -79,8 +84,8 @@ class _DoubleBase64:
     id: str = "encode.double_base64"
     category: str = "injection.encoded"
     note: str = (
-        "Single-pass decoder: one base64 decode yields more (plausible) base64, "
-        "not the trigger. Fix: re-feed a clean base64 view to a small fixed depth."
+        "FIXED (inj-0020 now active): second-pass base64 decode added. "
+        "Kept for regression coverage."
     )
 
     def mutate(self, seed: SeedIntent) -> str:
@@ -94,9 +99,8 @@ class _ChunkedBase64:
     id: str = "encode.base64_chunked"
     category: str = "injection.encoded"
     note: str = (
-        "base64 split into <16-char groups with interleaved prose defeats both "
-        "the per-run regex and the whole-body attempt. Fix: concatenate the "
-        "base64-looking tokens (drop prose) before decoding."
+        "FIXED (inj-0021 now active): token-concat base64 view added. "
+        "Kept for regression coverage."
     )
 
     def mutate(self, seed: SeedIntent) -> str:
@@ -110,12 +114,54 @@ class _CapitalHomoglyph:
     id: str = "homoglyph.capital"
     category: str = "injection.encoded"
     note: str = (
-        "_CONFUSABLES is lowercase-only, so a capital Cyrillic lookalike survives "
-        "the fold. Fix: add capital confusables (or fold after a casefold pass)."
+        "FIXED (inj-0024 now active): capital Cyrillic/Greek confusables added. "
+        "Kept for regression coverage."
     )
 
     def mutate(self, seed: SeedIntent) -> str:
         return seed.trigger.translate(str.maketrans(_CAPITAL_CONFUSABLES))
+
+
+@dataclass(frozen=True, slots=True)
+class _Rot47:
+    id: str = "encode.rot47"
+    category: str = "injection.encoded"
+    note: str = (
+        "FIXED (inj-0041 now active): rot47 view added to DecodeInspector. "
+        "Kept for regression coverage."
+    )
+
+    def mutate(self, seed: SeedIntent) -> str:
+        rot47 = "".join(
+            chr((ord(c) - 33 + 47) % 94 + 33) if 33 <= ord(c) <= 126 else c
+            for c in seed.trigger
+        )
+        return f"Debug output: {rot47}"
+
+
+@dataclass(frozen=True, slots=True)
+class _Caesar3:
+    """Caesar cipher with shift=3 over ASCII letters only. DecodeInspector only
+    has rot13 (shift 13); a shift-3 variant is never reversed (inj-0042
+    known-miss). Fix direction: add a general Caesar decode view that tries
+    all 25 shifts and checks for trigger phrases."""
+
+    id: str = "encode.caesar3"
+    category: str = "injection.encoded"
+    note: str = (
+        "Caesar cipher shift-3 over ASCII letters. DecodeInspector only has "
+        "rot13 (shift 13); other shifts are not tried. A shift-3 payload slips "
+        "through. Fix: add a Caesar brute-force view (25 shifts, letters only)."
+    )
+
+    def mutate(self, seed: SeedIntent) -> str:
+        shifted = "".join(
+            chr((ord(c) - 65 + 3) % 26 + 65) if "A" <= c <= "Z"
+            else chr((ord(c) - 97 + 3) % 26 + 97) if "a" <= c <= "z"
+            else c
+            for c in seed.trigger
+        )
+        return f"Processing: {shifted}"
 
 
 # Seed intents: each plain trigger MUST be caught by the default policy's
@@ -137,4 +183,6 @@ STRATEGIES: list[AttackStrategy] = [
     _DoubleBase64(),
     _ChunkedBase64(),
     _CapitalHomoglyph(),
+    _Rot47(),
+    _Caesar3(),
 ]

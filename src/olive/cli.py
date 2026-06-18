@@ -255,6 +255,7 @@ def serve_http_live(
                     build_pipeline(config),
                     breaker=breaker,
                     telemetry=MultiSink(queue_sink, broker),
+                    revocations=revocation,
                 )
                 org = build_runtime_org(
                     breaker=breaker,
@@ -263,6 +264,7 @@ def serve_http_live(
                     queue=queue_sink.queue,
                     sentinels=build_sentinels(config, store=store),
                     store=store,
+                    revocations=revocation,
                     proposal_ledger=proposals,
                     operator_bridge=True,
                 )

@@ -126,24 +126,44 @@ _EGRESS_TOOLS = ("send", "email", "upload", "post", "webhook", "exfil", "externa
 
 
 class BehaviorSentinel:
-    """Session-sequence drift: a sensitive read earlier in the session followed by
-    an egress tool now is the classic read -> exfiltrate chain that no single
-    message reveals. With cross_session_fn (M10), detection extends across sessions
-    so multi-day slow-burn campaigns are visible. Confidence is modest because
-    behavioral inference is soft (advisory by design — ADR-0005)."""
+    """Behavioral drift detection across sessions (M10/M11).
+
+    Three complementary signals, all advisory (ADR-0005):
+
+    1. Sequence (existing): sensitive read → egress in the same session.
+    2. Call-rate anomaly (M11): current session call count is anomalously high
+       compared to the agent's historical per-session average. A compromised agent
+       being used to enumerate/exfiltrate at scale will hit this even if every
+       individual call looks innocent.
+    3. Novel-tool (M11): the agent calls a sensitive tool it has never used in any
+       prior session. Normal agents have stable tool repertoires; a sudden first-
+       ever call to a privileged tool is a meaningful deviation signal.
+
+    Confidence is modest throughout because behavioral inference is soft — the
+    sentinel advises, the deterministic breaker decides (ADR-0005).
+    """
 
     name = "behavior"
     directions: frozenset[Direction] = frozenset({"outbound"})
+
+    # Call-rate anomaly: trip signal when current session is this many times
+    # above the agent's historical average (requires >= _MIN_SESSIONS_FOR_RATE).
+    _RATE_MULTIPLIER = 5.0
+    _MIN_SESSIONS_FOR_RATE = 3
 
     def __init__(
         self,
         sensitive_tools: tuple[str, ...] = _SENSITIVE_TOOLS,
         egress_tools: tuple[str, ...] = _EGRESS_TOOLS,
-        cross_session_fn=None,  # Callable[[str, str], Awaitable[list[str]]] | None
+        cross_session_fn=None,       # Callable[[str, str], Awaitable[list[str]]] | None
+        rate_baseline_fn=None,       # Callable[[str, str], Awaitable[list[int]]] | None
+        known_tools_fn=None,         # Callable[[str, str], Awaitable[set[str]]] | None
     ) -> None:
         self._sensitive = sensitive_tools
         self._egress = egress_tools
         self._cross_session_fn = cross_session_fn
+        self._rate_baseline_fn = rate_baseline_fn
+        self._known_tools_fn = known_tools_fn
 
     def _is(self, tool: str, needles: tuple[str, ...]) -> bool:
         low = tool.lower()
@@ -151,38 +171,87 @@ class BehaviorSentinel:
 
     async def analyze(self, event: TelemetryEvent) -> Signal:
         tool = event.ctx.tool
-        if not self._is(tool, self._egress):
-            return Signal.none(self.name)
-        # Current-session history first (fast, in-memory)
-        history = event.ctx.session_tool_history
-        prior_sensitive = [t for t in history if self._is(t, self._sensitive)]
-        if prior_sensitive:
-            return Signal.fire(
-                self.name,
-                confidence=0.6,
-                evidence=(
-                    f"egress tool '{tool}' after sensitive read(s) "
-                    f"{prior_sensitive[:3]} in this session"
-                ),
-                attack_type="suspicious-sequence",
-            )
-        # Cross-session baseline (M10): look back across all prior sessions.
-        if self._cross_session_fn is not None:
+        call_count = len(event.ctx.session_tool_history) + 1  # +1 for current call
+
+        # ── Signal 1: call-rate anomaly ───────────────────────────────────────
+        # Check BEFORE the egress gate so high-volume attacks on any tool fire it.
+        if self._rate_baseline_fn is not None:
             try:
-                cross = await self._cross_session_fn(
+                counts = await self._rate_baseline_fn(
                     event.ctx.agent_id, event.ctx.organization_id
                 )
-                prior_cross = [t for t in cross if self._is(t, self._sensitive)]
-                if prior_cross:
+                if len(counts) >= self._MIN_SESSIONS_FOR_RATE:
+                    avg = sum(counts) / len(counts)
+                    if avg > 0 and call_count >= self._RATE_MULTIPLIER * avg:
+                        return Signal.fire(
+                            self.name,
+                            confidence=0.55,
+                            evidence=(
+                                f"call #{call_count} in session; agent historical "
+                                f"average is {avg:.1f} calls/session "
+                                f"({len(counts)} prior sessions)"
+                            ),
+                            attack_type="call-rate-anomaly",
+                        )
+            except Exception:  # noqa: BLE001
+                pass
+
+        # ── Signals 2 & 3 only fire on egress or sensitive tool calls ─────────
+        if not (self._is(tool, self._egress) or self._is(tool, self._sensitive)):
+            return Signal.none(self.name)
+
+        # ── Signal 2: novel sensitive/egress tool ─────────────────────────────
+        if self._known_tools_fn is not None:
+            try:
+                known = await self._known_tools_fn(
+                    event.ctx.agent_id, event.ctx.organization_id
+                )
+                if known and tool not in known:
                     return Signal.fire(
                         self.name,
-                        confidence=0.5,  # lower confidence: cross-session is softer signal
+                        confidence=0.5,
                         evidence=(
-                            f"egress tool '{tool}' after sensitive reads "
-                            f"{prior_cross[:3]} in prior sessions (cross-session baseline)"
+                            f"'{tool}' is a sensitive/egress tool this agent "
+                            f"has never used across {len(known)} known tools"
                         ),
-                        attack_type="suspicious-sequence",
+                        attack_type="novel-tool",
                     )
-            except Exception:  # noqa: BLE001 - baseline failure must not block the runner
+            except Exception:  # noqa: BLE001
                 pass
+
+        # ── Signal 3a: sequence — within this session ─────────────────────────
+        if self._is(tool, self._egress):
+            history = event.ctx.session_tool_history
+            prior_sensitive = [t for t in history if self._is(t, self._sensitive)]
+            if prior_sensitive:
+                return Signal.fire(
+                    self.name,
+                    confidence=0.6,
+                    evidence=(
+                        f"egress tool '{tool}' after sensitive read(s) "
+                        f"{prior_sensitive[:3]} in this session"
+                    ),
+                    attack_type="suspicious-sequence",
+                )
+
+            # ── Signal 3b: sequence — across prior sessions ───────────────────
+            if self._cross_session_fn is not None:
+                try:
+                    cross = await self._cross_session_fn(
+                        event.ctx.agent_id, event.ctx.organization_id
+                    )
+                    prior_cross = [t for t in cross if self._is(t, self._sensitive)]
+                    if prior_cross:
+                        return Signal.fire(
+                            self.name,
+                            confidence=0.5,
+                            evidence=(
+                                f"egress tool '{tool}' after sensitive reads "
+                                f"{prior_cross[:3]} in cross-session baseline history"
+                            ),
+                            attack_type="suspicious-sequence",
+                        )
+                except Exception:  # noqa: BLE001
+                    pass
+
         return Signal.none(self.name)

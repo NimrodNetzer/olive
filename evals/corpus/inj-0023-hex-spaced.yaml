@@ -12,7 +12,7 @@ context:
   tool: read_file
   source_trust: untrusted
 expected: block
-status: known-miss
+status: active
 notes: >
   _HEX_RUN requires a contiguous \b[0-9a-fA-F]{16,}\b run. Inserting a space
   between every byte (a normal hex-dump format) caps each run at 2 chars, so no
