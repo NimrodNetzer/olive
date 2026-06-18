@@ -275,6 +275,7 @@ def serve_http_live(
                     "bus": bus,
                     "corpus": _corpus_stems(corpus_dir),
                     "revocation": revocation,  # M9: /admin/revoke reads this
+                    "store": store,  # history endpoints read from this
                 }
                 yield (
                     session_manager_for(server, json_response=json_response),
@@ -609,6 +610,10 @@ async def run_ui(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     bus = IncidentBus(args.db or config.db_path, os.urandom(32))
     await bus.open()
+    from olive.store.events import EventStore
+
+    store = EventStore(args.db or config.db_path)
+    await store.open()
     try:
         broker = UIBroker()
         await _seed_broker(broker, bus)
@@ -620,7 +625,7 @@ async def run_ui(args: argparse.Namespace) -> int:
 
             from olive.ui.web import build_app
 
-            app = build_app(broker, bus=bus, corpus_dir=corpus_dir)
+            app = build_app(broker, bus=bus, corpus_dir=corpus_dir, store=store)
             host = getattr(args, "host", "127.0.0.1")
             port = getattr(args, "port", 7700)
             print(
@@ -637,6 +642,7 @@ async def run_ui(args: argparse.Namespace) -> int:
             await tui.run_async()
         return 0
     finally:
+        await store.close()
         await bus.close()
 
 

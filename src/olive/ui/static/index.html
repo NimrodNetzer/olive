@@ -350,6 +350,27 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 .ov-v.r{color:var(--red)}.ov-v.g{color:var(--green)}.ov-v.y{color:var(--yellow)}.ov-v.p{color:var(--purple)}
 #ov-close{margin-top:14px;display:block;width:100%;padding:8px;background:var(--surf2);border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer;transition:border-color .2s,color .2s;letter-spacing:1px}
 #ov-close:hover{border-color:var(--text);color:var(--text)}
+
+/* ── Incidents panel ── */
+#inc-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:3px;min-height:0}
+#inc-list::-webkit-scrollbar{width:2px}
+#inc-list::-webkit-scrollbar-thumb{background:var(--border)}
+.inc-row{display:flex;align-items:flex-start;gap:6px;padding:5px 6px;border-radius:3px;border-left:2px solid transparent;cursor:pointer;transition:background .15s}
+.inc-row:hover{background:rgba(255,255,255,.03)}
+.inc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.inc-dot.H{background:var(--red)}.inc-dot.M{background:var(--yellow)}.inc-dot.L{background:var(--cyan)}
+.inc-id{font-size:9px;color:var(--dim);flex-shrink:0;width:52px;padding-top:1px}
+.inc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.inc-type{font-size:10px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inc-meta{font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inc-status{font-size:8px;padding:1px 4px;border-radius:2px;flex-shrink:0;white-space:nowrap;margin-top:2px}
+.inc-status.open{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.3);color:var(--red)}
+.inc-status.contained{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.25);color:var(--green)}
+/* unread badge on tab */
+.tab-badge{display:none;background:var(--red);color:#fff;font-size:7px;font-weight:bold;padding:0 3px;border-radius:2px;margin-left:3px;min-width:12px;text-align:center;line-height:14px;vertical-align:middle}
+.tab-badge.show{display:inline-block}
+/* historical feed entries */
+.fe-hist{opacity:.4}
 </style>
 </head>
 <body>
@@ -596,6 +617,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 
   <div class="tab-bar">
     <button class="tab active" data-pane="theater">THEATER</button>
+    <button class="tab" data-pane="incidents">INCIDENTS<span class="tab-badge" id="inc-badge">0</span></button>
     <button class="tab" data-pane="log">LOG</button>
     <button class="tab" data-pane="org">ORG</button>
   </div>
@@ -661,6 +683,12 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
       <div class="sum-bar-lbl"><span>QUAR</span><span id="sum-bar-q-n">0</span></div>
       <div class="sum-bar-bg"><div class="sum-bar" id="sum-bar-q" style="width:0%;background:var(--purple)"></div></div>
     </div>
+  </div>
+
+  <!-- INCIDENTS pane -->
+  <div class="pane hidden" id="pane-incidents">
+    <div class="log-hdr">DETECTED INCIDENTS &nbsp;<span id="inc-count" style="color:var(--dim)">(—)</span>&nbsp;<span style="font-size:8px;color:var(--dim)">&mdash; click for detail</span></div>
+    <div id="inc-list"><div style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">loading&hellip;</div></div>
   </div>
 
   <!-- LOG pane -->
@@ -749,6 +777,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 const st={allow:0,block:0,hold:0,quar:0};
+let incUnread=0;
 const dce={def:0,rem:0,rt:0};
 let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0, neuCnt=0;
 let busMsgs=0, cmdDirs=0, curMode='normal';
@@ -798,13 +827,123 @@ const neuEl  =document.getElementById('neu-count');
 const toastEl=document.getElementById('toast');
 let toastTimer=null;
 
+// ── History & incidents ───────────────────────────────────────────────────────
+function timeAgo(ts){
+  if(!ts) return '';
+  const d=Date.now()-new Date(ts).getTime();
+  const s=Math.floor(d/1000);
+  if(s<60) return `${s}s ago`;
+  const m=Math.floor(s/60);
+  if(m<60) return `${m}m ago`;
+  const h=Math.floor(m/60);
+  if(h<24) return `${h}h ago`;
+  return `${Math.floor(h/24)}d ago`;
+}
+function sevLvl(c){return(c==null||c>=0.8)?'H':c>=0.4?'M':'L';}
+
+function showIncOverlay(inc){
+  document.getElementById('ov-title').textContent=`INCIDENT: ${inc.incident_id||'—'}`;
+  const kindEl=document.getElementById('ov-kind');
+  kindEl.textContent=inc.attack_type||'—';
+  kindEl.style.color='var(--red)';
+  const fields=[
+    ['incident_id',inc.incident_id],['timestamp',inc.timestamp],
+    ['agent_id',inc.agent_id],['session_id',inc.session_id],
+    ['attack_type',inc.attack_type],['detection_method',inc.detection_method],
+    ['decision',inc.decision],
+    ['confidence',inc.confidence!=null?Number(inc.confidence).toFixed(2):null],
+    ['evidence',inc.evidence],['status',inc.status],
+  ].filter(([,v])=>v!=null&&v!=='');
+  document.getElementById('ov-content').innerHTML=fields.map(([k,v])=>{
+    const cls=k==='decision'?'r':k==='status'&&v==='open'?'r':k==='status'?'g':'';
+    return `<div class="ov-row"><span class="ov-k">${k}</span><span class="ov-v ${cls}">${v}</span></div>`;
+  }).join('');
+  document.getElementById('overlay').classList.add('show');
+}
+
+function renderIncidentRow(inc){
+  const lv=sevLvl(inc.confidence);
+  const st2=inc.status||'open';
+  const typeDisp=(inc.attack_type||'unknown').replace(/[._]/g,' ').toUpperCase().substring(0,28);
+  const evid=(inc.evidence||'').substring(0,55);
+  const row=document.createElement('div');
+  row.className='inc-row';
+  row.style.borderLeftColor=lv==='H'?'rgba(248,81,73,.6)':lv==='M'?'rgba(210,153,34,.5)':'rgba(57,211,195,.4)';
+  row.innerHTML=`<div class="inc-dot ${lv}"></div><div class="inc-id">${inc.incident_id||'—'}</div><div class="inc-body"><div class="inc-type">${typeDisp}</div><div class="inc-meta">${inc.agent_id||'—'} &bull; ${timeAgo(inc.timestamp)}</div>${evid?`<div class="inc-meta" style="color:var(--dim);font-size:8px">${evid}</div>`:''}</div><div class="inc-status ${st2}">${st2.toUpperCase()}</div>`;
+  row.addEventListener('click',()=>showIncOverlay(inc));
+  return row;
+}
+
+async function loadIncidents(){
+  try{
+    const r=await fetch('/incidents/list?limit=20');
+    if(!r.ok) return;
+    const incidents=await r.json();
+    const list=document.getElementById('inc-list');
+    if(!list) return;
+    const cntEl=document.getElementById('inc-count');
+    if(cntEl) cntEl.textContent=`(${incidents.length})`;
+    list.innerHTML='';
+    if(!incidents.length){
+      list.innerHTML='<div style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">no incidents recorded</div>';
+      return;
+    }
+    incidents.forEach(inc=>list.appendChild(renderIncidentRow(inc)));
+  }catch(_){}
+}
+
+async function loadHistory(){
+  try{
+    const r=await fetch('/events/recent?limit=50');
+    if(!r.ok) return;
+    const events=await r.json();
+    if(!events||!events.length) return;
+    // events come newest-first from DB; replay oldest-first so counters are correct
+    const ordered=[...events].reverse();
+    ordered.forEach(ev=>{
+      const d=ev.decision||'';
+      if(d==='allow')           st.allow++;
+      else if(d==='block')      st.block++;
+      else if(d==='hold')       st.hold++;
+      else if(d==='quarantine') st.quar++;
+      if(d==='block'||d==='quarantine'){detCnt++;neuCnt++;}
+      const aid=ev.agent_id;
+      if(aid){
+        if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0};
+        if(agents[aid][d]!==undefined) agents[aid][d]++;
+      }
+      // add dimmed historical entry to feed
+      const clsMap={allow:'da',block:'db',hold:'dh',quarantine:'dq'};
+      const el=document.createElement('div');
+      const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
+      el.className=`fe ${clsMap[d]||'df'} fe-hist`;
+      el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${d||'—'}</span>${ev.rule||'—'} &bull; ${ev.tool||''} &bull; ${ev.agent_id||''}`;
+      el.addEventListener('click',()=>showOverlay({kind:'decision',...ev}));
+      feedLog.appendChild(el);
+    });
+    // trim feed
+    while(feedLog.children.length>60) feedLog.removeChild(feedLog.firstChild);
+    // refresh all counter displays
+    document.getElementById('st-a').textContent=st.allow;
+    document.getElementById('st-b').textContent=st.block;
+    document.getElementById('st-h').textContent=st.hold;
+    document.getElementById('st-q').textContent=st.quar;
+    document.getElementById('hc-det').textContent=detCnt;
+    neuEl.textContent=neuCnt;
+    if(neuCnt>0) neuEl.classList.remove('zero');
+    renderTrust();
+    updateSummary();
+    updateOrgCounts();
+  }catch(_){}
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws,rdelay=1500,_wsAt=0;
 function connect(){
   const proto=location.protocol==='https:'?'wss':'ws';
   try{ws=new WebSocket(`${proto}://${location.host}/ws`);}catch(_){return;}
   _wsAt=Date.now();
-  ws.onopen =()=>{dot.classList.add('live');lbl.textContent='live';rdelay=1500;};
+  ws.onopen =()=>{dot.classList.add('live');lbl.textContent='live';rdelay=1500;loadHistory();loadIncidents();};
   ws.onmessage=(e)=>{try{handle(JSON.parse(e.data));}catch(_){}};
   const retry=()=>{
     dot.classList.remove('live');
@@ -848,6 +987,14 @@ function onDecision(ev){
     neuCnt++; neuEl.textContent=neuCnt;
     neuEl.classList.remove('zero','tick'); void neuEl.offsetWidth; neuEl.classList.add('tick');
     flash('defense',5000,'decision:'+d);
+    // refresh incidents panel and bump unread badge if tab not visible
+    loadIncidents();
+    const incTab=document.querySelector('.tab[data-pane="incidents"]');
+    if(!incTab||!incTab.classList.contains('active')){
+      incUnread++;
+      const badge=document.getElementById('inc-badge');
+      if(badge){badge.textContent=incUnread;badge.classList.add('show');}
+    }
   } else {
     flash('defense',3000,'decision:'+d);
   }
@@ -1196,6 +1343,11 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
     tab.classList.add('active');
     document.getElementById('pane-'+tab.dataset.pane).classList.remove('hidden');
+    if(tab.dataset.pane==='incidents'){
+      incUnread=0;
+      const badge=document.getElementById('inc-badge');
+      if(badge) badge.classList.remove('show');
+    }
   });
 });
 
