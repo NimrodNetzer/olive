@@ -28,6 +28,8 @@ from olive.inspectors.context_policy import ContextPolicyInspector
 from olive.inspectors.decode import DecodeInspector
 from olive.inspectors.patterns import PatternInspector
 from olive.inspectors.policy import PolicyInspector
+from olive.inspectors.self_protect import SelfProtectInspector
+from olive.security.integrity import PolicyIntegrityStatus, compute_file_hash
 from olive.store.events import EventStore
 
 # Capability a token must carry to approve a remediation fix (ADR-0013). Distinct
@@ -46,10 +48,14 @@ def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
         [
             # Coarse allowlist first (default-deny). ContextPolicyInspector runs
             # next so it can only refine an already-allowed call - restrict or
-            # hold, never grant (ADR-0010). Pattern inspection (layer zero), then
-            # the decode layer (0.5) which defeats deterministic obfuscation.
+            # hold, never grant (ADR-0010). SelfProtectInspector (ADR-0026) comes
+            # before config-driven patterns so gateway-targeting content is caught
+            # even if the policy YAML was tampered with. Pattern inspection (layer
+            # zero), then the decode layer (0.5) which defeats deterministic
+            # obfuscation.
             PolicyInspector(config.roles),
             ContextPolicyInspector(config.context_rules),
+            SelfProtectInspector(),
             PatternInspector(config.injection_patterns),
             DecodeInspector(config.injection_patterns),
         ]
@@ -86,6 +92,33 @@ async def _connect_multiplex(
     return MultiplexUpstream(upstreams)
 
 
+async def _check_policy_integrity(store: EventStore, config_path: str) -> None:
+    """Compare the policy file's current SHA-256 to the stored hash (ADR-0026).
+    Warns on stderr if the file changed since the last recorded startup. On first
+    run, records the hash silently. Never blocks startup — detection, not prevention."""
+    abs_path = str(Path(config_path).resolve())
+    current_hash = compute_file_hash(abs_path)
+    status, stored_hash = await store.check_policy_hash(abs_path, current_hash)
+    if status == PolicyIntegrityStatus.NEW:
+        await store.record_policy_hash(abs_path, current_hash)
+        print(
+            f"[olive] policy integrity: recorded hash for {config_path} "
+            f"(sha256:{current_hash[:16]}…)",
+            file=sys.stderr,
+        )
+    elif status == PolicyIntegrityStatus.CHANGED:
+        print(
+            f"[olive] WARNING: policy integrity check FAILED for {config_path}\n"
+            f"  stored hash : {(stored_hash or '')[:16]}…\n"
+            f"  current hash: {current_hash[:16]}…\n"
+            "  Policy file may have been modified since the last recorded startup. "
+            "Run `olive verify-integrity` to investigate.",
+            file=sys.stderr,
+        )
+        # Record the new hash so subsequent restarts reflect the current file.
+        await store.record_policy_hash(abs_path, current_hash)
+
+
 async def run_gateway(
     config_path: str, upstream_command: list[str], db_override: str | None
 ) -> None:
@@ -96,6 +129,7 @@ async def run_gateway(
     store = EventStore(db_path)
     await store.open()
     try:
+        await _check_policy_integrity(store, config_path)
         from olive.gateway.breaker import CircuitBreaker
         from olive.gateway.mode import OperatingMode
 
@@ -404,6 +438,70 @@ async def reset_baselines(config_path: str, db_override: str | None, tool: str |
         print(f"[olive] cleared {count} baseline(s) for {target}", file=sys.stderr)
     finally:
         await store.close()
+
+
+async def verify_integrity(
+    config_path: str, db_override: str | None, *, audit: bool
+) -> int:
+    """Operator health-check: verify the policy file hash and (optionally) the
+    tamper-evident audit chain (ADR-0026). Exits 0 if everything is clean,
+    1 if any check fails. Intended for monitoring scripts and post-mortem use."""
+    config = load_config(config_path)
+    store = EventStore(db_override or config.db_path)
+    await store.open()
+    exit_code = 0
+    try:
+        # Policy file integrity
+        abs_path = str(Path(config_path).resolve())
+        current_hash = compute_file_hash(abs_path)
+        status, stored_hash = await store.check_policy_hash(abs_path, current_hash)
+        if status == PolicyIntegrityStatus.NEW:
+            print(
+                f"Policy: {config_path}\n"
+                f"  Status : NO RECORD (first run — hash not yet stored)\n"
+                f"  Current: {current_hash}",
+                file=sys.stderr,
+            )
+        elif status == PolicyIntegrityStatus.UNCHANGED:
+            print(
+                f"Policy: {config_path}\n"
+                f"  Status : OK\n"
+                f"  sha256 : {current_hash}",
+                file=sys.stderr,
+            )
+        else:  # changed
+            print(
+                f"Policy: {config_path}\n"
+                f"  Status  : CHANGED — possible tampering!\n"
+                f"  Stored  : {stored_hash}\n"
+                f"  Current : {current_hash}",
+                file=sys.stderr,
+            )
+            exit_code = 1
+
+        # Audit chain
+        if audit:
+            chain = await store.verify_audit_chain()
+            if chain.ok:
+                print(
+                    f"\nAudit chain:\n"
+                    f"  Status : OK\n"
+                    f"  Events : {chain.total_events} total, {chain.chained_events} chained\n"
+                    f"  Detail : {chain.detail}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"\nAudit chain:\n"
+                    f"  Status : BROKEN — possible tampering!\n"
+                    f"  Events : {chain.total_events} total, {chain.chained_events} chained\n"
+                    f"  Detail : {chain.detail}",
+                    file=sys.stderr,
+                )
+                exit_code = 1
+    finally:
+        await store.close()
+    return exit_code
 
 
 def _run_eval_gate(*, update_baseline: bool = False) -> tuple[int, dict | None]:
@@ -949,6 +1047,19 @@ def main() -> None:
         "--port", type=int, default=7700, help="bind port for --web mode (default 7700)"
     )
 
+    vi = sub.add_parser(
+        "verify-integrity",
+        help="check the policy file SHA-256 and (optionally) the tamper-evident audit chain "
+        "(ADR-0026). Exits 0 if clean, 1 if any check fails.",
+    )
+    vi.add_argument("--config", required=True, help="policy YAML file")
+    vi.add_argument("--db", default=None, help="override audit DB path from the policy file")
+    vi.add_argument(
+        "--audit",
+        action="store_true",
+        help="also walk the full audit chain (O(n) in events; for post-mortem / monitoring use)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "cycle":
@@ -978,6 +1089,13 @@ def main() -> None:
     if args.command == "ui":
         try:
             sys.exit(asyncio.run(run_ui(args)))
+        except ConfigError as exc:
+            parser.error(str(exc))
+        return
+
+    if args.command == "verify-integrity":
+        try:
+            sys.exit(asyncio.run(verify_integrity(args.config, args.db, audit=args.audit)))
         except ConfigError as exc:
             parser.error(str(exc))
         return
