@@ -12,8 +12,12 @@ group chat." This module is that channel:
     incidents by `incident_id` *string* only (open-core seam, ADR-0003);
   - HMAC signing + verification so a compromised LLM agent cannot forge a
     `mode-change` or `verified` object onto the bus: an unsigned or wrongly
-    signed object is rejected (fail-closed). The first slice uses a per-process
-    HMAC key; per-department CA identities are the documented next step.
+    signed object is rejected (fail-closed). ADR-0027 upgrades to per-department
+    keys derived via HKDF so a compromised department cannot forge another's
+    objects;
+  - publisher validation (ADR-0027): `PERMITTED_KINDS` maps source_dept →
+    allowed kinds; an unauthorised (dept, kind) pair is rejected before HMAC
+    verification (fail-closed).
 
 Rule 3 is guarded hardest here: the bus persists only the bounded `IncidentReport`
 fields (confidence, attack types, ≤200-char evidence) and non-secret ids. Raw
@@ -36,6 +40,44 @@ import aiosqlite
 from olive.intelligence.reporter import IncidentReport
 
 _EVIDENCE_MAX = 200  # rule 3: bounded evidence excerpt
+
+
+def _derive_dept_key(process_key: bytes, dept: str) -> bytes:
+    """Derive a per-department 32-byte signing key (HKDF, RFC 5869, single block).
+
+    HKDF-Extract: PRK = HMAC-SHA256(salt=0x00×32, IKM=process_key)
+    HKDF-Expand:  OKM = HMAC-SHA256(PRK, info=b"olive-bus-<dept>" + 0x01)
+
+    Each department gets a unique key; one leaked key cannot forge another's objects.
+    """
+    info = b"olive-bus-" + dept.encode("utf-8")
+    prk = hmac.new(b"\x00" * 32, process_key, hashlib.sha256).digest()
+    return hmac.new(prk, info + b"\x01", hashlib.sha256).digest()
+
+
+#: Publisher-validation registry (ADR-0027). Maps source_dept → allowed kinds.
+#: `IncidentBus.publish()` rejects any (dept, kind) pair not in this table
+#: before HMAC verification — fail-closed. Extend with `register_dept()`.
+PERMITTED_KINDS: dict[str, frozenset[str]] = {
+    "defense":     frozenset({"detection"}),
+    "remediation": frozenset({"reproduced"}),
+    "redteam":     frozenset({"redteam-finding"}),
+    "builder":     frozenset({"fix-proposed"}),
+    "commander":   frozenset({"mode-change", "siege-declared"}),
+    "operator":    frozenset({"operator-request"}),
+    "ui":          frozenset({"operator-request"}),
+    "supervisor":  frozenset({"supervisor-health"}),
+}
+
+
+def register_dept(dept: str, allowed_kinds: frozenset[str]) -> None:
+    """Add or replace a department entry in `PERMITTED_KINDS`.
+
+    Use for test departments and future extensions — avoids modifying the core
+    table while keeping publisher validation effective.
+    """
+    PERMITTED_KINDS[dept] = allowed_kinds
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS incident_events (
@@ -120,13 +162,20 @@ class IncidentBus:
         if not signing_key:
             raise ValueError("the incident bus requires a non-empty signing key")
         self._path = str(db_path)
-        self._key = signing_key
+        self._key = signing_key  # process key — HKDF input material (ADR-0027)
+        self._dept_key_cache: dict[str, bytes] = {}
         self._db: aiosqlite.Connection | None = None
         self._subs: list[tuple[str | None, Handler]] = []
         # Serializes id derivation + insert so concurrent department publishes
         # cannot race to the same IOB-NNNN (the table is append-only).
         self._persist_lock = asyncio.Lock()
         self.delivery_failures = 0
+
+    def _dept_key(self, dept: str) -> bytes:
+        """Return the HKDF-derived signing key for `dept`, lazily cached."""
+        if dept not in self._dept_key_cache:
+            self._dept_key_cache[dept] = _derive_dept_key(self._key, dept)
+        return self._dept_key_cache[dept]
 
     async def open(self) -> None:
         self._db = await aiosqlite.connect(self._path)
@@ -173,10 +222,23 @@ class IncidentBus:
 
     async def publish(self, obj: IncidentObject, *, signature: str | None = None) -> IncidentObject:
         """Verify, persist (assigning an `IOB-NNNN` id), then fan out to matching
-        subscribers. A bad/absent signature is rejected (fail-closed) before the
-        object is persisted or delivered. A handler that raises is isolated (the
-        failure is counted) so one broken department cannot silence the others."""
-        expected = obj.sign(self._key)
+        subscribers. Publisher validation (ADR-0027) runs first — an unknown dept or
+        unauthorized kind raises BusError before the HMAC is checked (fail-closed).
+        A bad/absent signature is then rejected. A handler that raises is isolated
+        (the failure is counted) so one broken department cannot silence the others."""
+        # Publisher validation — fail-closed before HMAC (ADR-0027).
+        allowed = PERMITTED_KINDS.get(obj.source_dept)
+        if allowed is None:
+            raise BusError(
+                f"rejected {obj.kind!r} from unknown dept {obj.source_dept!r}"
+            )
+        if obj.kind not in allowed:
+            raise BusError(
+                f"dept {obj.source_dept!r} is not permitted to publish kind {obj.kind!r}"
+            )
+        # Per-dept HMAC verification (ADR-0027): each dept has its own derived key.
+        dept_key = self._dept_key(obj.source_dept)
+        expected = obj.sign(dept_key)
         if signature is None:
             signature = expected
         if not hmac.compare_digest(signature, expected):

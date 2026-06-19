@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+import sys
+import types
+from dataclasses import dataclass, field
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.intelligence.builder_dept import BuilderDepartment, ProposalLedger
@@ -38,6 +40,29 @@ from olive.intelligence.sentinels import (
 )
 
 _log = logging.getLogger(__name__)
+
+
+def _assert_sandbox(module_name: str, forbidden: tuple[str, ...]) -> None:
+    """Runtime complement to AST import tests (ADR-0027).
+
+    Scans the live module namespace for attributes whose `__module__` origin
+    is a forbidden namespace. Raises RuntimeError (fail-closed) if any are
+    found, aborting wiring before a compromised department is connected.
+    """
+    mod = sys.modules.get(module_name)
+    if mod is None:
+        return
+    for attr, obj in vars(mod).items():
+        try:
+            origin: str = getattr(obj, "__module__", "") or ""
+        except Exception:  # noqa: BLE001
+            continue
+        for f in forbidden:
+            if origin == f or origin.startswith(f + "."):
+                raise RuntimeError(
+                    f"department {module_name!r}: attribute {attr!r} originates "
+                    f"from forbidden module {f!r} — wiring aborted (fail-closed)"
+                )
 
 
 def build_sentinels(config, store=None) -> list:
@@ -82,6 +107,7 @@ class DefenseDepartment:
         self._bus = bus
         self._tasks: set[asyncio.Task] = set()
         self.publish_failures = 0  # observable: a swallowed publish is counted
+        self.last_report_time: float | None = None  # asyncio loop time; used by DefenseSupervisor
 
     async def publish_report(self, report: IncidentReport) -> IncidentObject:
         obj = self._bus.make_object(
@@ -95,6 +121,10 @@ class DefenseDepartment:
     def on_report(self, report: IncidentReport) -> None:
         """Sync hook for SentinelRunner.on_report. Schedules the publish on the
         running loop and keeps a reference so the task is not GC'd mid-flight."""
+        try:
+            self.last_report_time = asyncio.get_running_loop().time()
+        except RuntimeError:
+            pass  # called outside an async context (tests); skip timestamp
         task = asyncio.ensure_future(self.publish_report(report))
         self._tasks.add(task)
         task.add_done_callback(self._on_publish_done)
@@ -182,8 +212,8 @@ class OperatorBridge:
 @dataclass(slots=True)
 class RuntimeOrg:
     """The wired runtime organization. `start`/`stop` drive the SentinelRunner's
-    drain loop, the (optional) red-team scheduler, and the (optional) fleet
-    heartbeat loop; everything else reacts through the bus."""
+    drain loop, the (optional) red-team scheduler, the (optional) fleet heartbeat
+    loop, and the (optional) supervisor; everything else reacts through the bus."""
 
     breaker: CircuitBreaker
     bus: IncidentBus
@@ -195,18 +225,37 @@ class RuntimeOrg:
     builder: BuilderDepartment | None = None  # optional (ADR-0018); off unless wired
     operator_bridge: OperatorBridge | None = None  # optional (ADR-0020); on-demand drills
     heartbeat: object | None = None  # HeartbeatLoop | None (ADR-0024); off unless configured
+    supervisor: object | None = None  # DepartmentSupervisor | None (ADR-0027); off by default
 
     def start(self) -> None:
         self.runner.start()
         self.redteam.start()  # no-op unless a scheduling interval was configured
         if self.heartbeat is not None:
             self.heartbeat.start()  # type: ignore[union-attr]
+        if self.supervisor is not None:
+            asyncio.ensure_future(self.supervisor.start())  # type: ignore[union-attr]
 
     async def stop(self) -> None:
         await self.runner.stop()
         await self.redteam.stop()
         if self.heartbeat is not None:
             await self.heartbeat.stop()  # type: ignore[union-attr]
+        if self.supervisor is not None:
+            await self.supervisor.stop()  # type: ignore[union-attr]
+
+
+_DEPT_FORBIDDEN = (
+    "olive.gateway.proxy",
+    "olive.gateway.upstreams",
+    "mcp.client.session",
+)
+
+# Runtime sandbox checks (ADR-0027): called before each dept is wired.
+_SANDBOX_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("olive.intelligence.redteam_dept", _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.builder_dept", _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.supervisor",   _DEPT_FORBIDDEN),
+)
 
 
 def build_runtime_org(
@@ -225,6 +274,9 @@ def build_runtime_org(
     proposal_ledger: ProposalLedger | None = None,
     operator_bridge: bool = False,
     heartbeat_loop=None,  # HeartbeatLoop | None (ADR-0024); wired by cli.py
+    include_supervisor: bool = False,  # ADR-0027; off by default
+    supervisor_silence_threshold: float = 120.0,
+    supervisor_poll_interval: float = 30.0,
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
@@ -233,7 +285,15 @@ def build_runtime_org(
     additive - ADR-0016). The Builder department is wired only when an opened
     `proposal_ledger` is supplied (default off, additive - ADR-0018); it then
     subscribes to confirmed weaknesses and publishes `fix-proposed` objects. The
-    bus (and any supplied ledger) must already be open."""
+    supervisor is wired only when `include_supervisor=True` (default off, additive
+    - ADR-0027). The bus (and any supplied ledger) must already be open.
+
+    Runtime sandbox checks (ADR-0027) run before restricted departments are wired;
+    a forbidden import reference in the live module namespace raises RuntimeError."""
+    # Runtime import guard — fail-closed before wiring (ADR-0027).
+    for module_name, forbidden in _SANDBOX_CHECKS:
+        _assert_sandbox(module_name, forbidden)
+
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
     commander = SecurityCommander(breaker, bus, store=store, revocations=revocations)
@@ -253,6 +313,15 @@ def build_runtime_org(
     if operator_bridge:
         bridge = OperatorBridge(bus, redteam)
         bridge.subscribe()
+    sup = None
+    if include_supervisor:
+        from olive.intelligence.supervisor import DefenseSupervisor
+        sup = DefenseSupervisor(
+            defense,
+            bus,
+            silence_threshold=supervisor_silence_threshold,
+            poll_interval=supervisor_poll_interval,
+        )
     return RuntimeOrg(
         breaker=breaker,
         bus=bus,
@@ -264,4 +333,5 @@ def build_runtime_org(
         builder=builder,
         operator_bridge=bridge,
         heartbeat=heartbeat_loop,
+        supervisor=sup,
     )
