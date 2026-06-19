@@ -1,8 +1,8 @@
 {
-  "detected": 60,
-  "malicious_total": 60,
+  "detected": 61,
+  "malicious_total": 61,
   "false_positives": 0,
-  "benign_total": 25,
+  "benign_total": 26,
   "per_category": {
     "chain": {
       "detected": 3,
@@ -23,6 +23,10 @@
     "escalation": {
       "detected": 2,
       "total": 2
+    },
+    "escalation.capability": {
+      "detected": 1,
+      "total": 1
     },
     "escalation.identity": {
       "detected": 1,

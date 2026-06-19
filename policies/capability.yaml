@@ -1,0 +1,31 @@
+# Olive policy — capability enforcement demo/eval fixture.
+# Used by esc-0009 and esc-0010 eval corpus cases.
+
+gateway:
+  agent_id: finance-agent
+  organization_id: demo-company
+  role: finance
+  declared_goal: process financial transactions
+  db_path: olive_events.db
+
+roles:
+  finance:
+    allowed_tools:
+      - transfer_funds
+      - read_balance
+    forbidden_tools:
+      - delete_record
+
+upstream:
+  trust: untrusted
+
+containment:
+  max_blocks_before_quarantine: 3
+
+# Tool-level capability requirements (ADR-0028).
+# transfer_funds requires the finance:transfer capability in the agent's token.
+# read_balance has no capability requirement — role membership alone is sufficient.
+capability_requirements:
+  transfer_funds:
+    required_capabilities:
+      - "finance:transfer"

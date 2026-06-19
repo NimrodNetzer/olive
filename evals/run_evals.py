@@ -85,6 +85,7 @@ def build_context(case: dict) -> SecurityContext:
         source_trust=ctx.get("source_trust", "untrusted"),
         timestamp=SecurityContext.now(),
         requested_resource=_resource_ref(ctx),
+        capabilities=tuple(ctx.get("capabilities", ())),
         task_resources=tuple(ctx.get("task_resources", ())),
     )
 

@@ -45,6 +45,7 @@ _ATTACK_TYPE_BY_RULE_PREFIX = {
     "patterns.": "prompt-injection",
     "decode.": "prompt-injection",
     "context.": "authorization-violation",
+    "capability.": "privilege-escalation",
 }
 
 
@@ -298,6 +299,7 @@ class OliveGateway:
             source_trust=self._config.upstream_trust,
             timestamp=SecurityContext.now(),
             requested_resource=requested_resource,
+            capabilities=identity.capabilities,
             task_resources=identity.task_resources,
         )
 

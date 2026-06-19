@@ -1,0 +1,20 @@
+id: esc-0009
+title: agent calls high-privilege tool without required capability
+category: escalation.capability
+vector: tool_call
+direction: outbound
+payload: null
+policy: capability.yaml
+context:
+  role: finance
+  tool: transfer_funds
+  source_trust: untrusted
+  capabilities: []
+expected: block
+status: active
+notes: >
+  Agent has the correct role (finance) and the tool is in the allowlist, but
+  the token carries no capabilities. transfer_funds requires "finance:transfer"
+  per the capability_requirements policy. CapabilityInspector must block before
+  the call reaches the upstream, enforcing that role membership alone is not
+  sufficient for high-privilege tools (ADR-0028).
