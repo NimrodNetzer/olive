@@ -1680,7 +1680,7 @@ async function loadStatsSummary(){
   try{
     const r=await fetch('/stats/summary'); if(!r.ok) return;
     const s=await r.json();
-    if(s.latency_p50>0) updateLatencyChipVal(s.latency_p50, s.latency_p95);
+    updateLatencyChipVal(s.latency_p50, s.latency_p95);
   }catch(_){}
 }
 
@@ -1786,7 +1786,8 @@ function updateLatencyChip(){
 function updateLatencyChipVal(p50,p95){
   const el=document.getElementById('latency-chip');
   if(!el) return;
-  const txt=p95?`⚡ p50:${p50}ms p95:${p95}ms`:`⚡ p50:${p50}ms`;
+  const fmt=v=>(v>0?`${v}ms`:'<1ms');
+  const txt=p95?`⚡ p50:${fmt(p50)} p95:${fmt(p95)}`:`⚡ p50:${fmt(p50)}`;
   el.textContent=txt;
   el.classList.toggle('warn',p50>200);
 }
