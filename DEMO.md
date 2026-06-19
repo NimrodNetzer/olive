@@ -84,10 +84,23 @@ Detect → Contain → Reproduce → Repair → Verify → Learn
 
 1. **Reproduce** — the Red-Team department replays the attack in a safe sandbox, confirms it's a real gap, writes it as a corpus case
 2. **Repair** — the Builder department proposes a fix (a policy update, a pattern addition, a decode rule)
-3. **Verify** — the fix is re-tested against the full 110-case corpus; detection rate must not drop, false positives must not rise
+3. **Verify** — the fix is re-tested against the full 116-case corpus; detection rate must not drop, false positives must not rise
 4. **Learn** — a human approves; the baseline is updated; the attack can never silently return
 
 This is the loop the rest of the industry leaves open.
+
+---
+
+## Auto-demo sequence (as of 2026-06-19)
+
+1. Open `http://127.0.0.1:7799/` after `python demo/live_demo.py`
+2. Click **▶ AUTO DEMO** — runs 4 attack categories (injection, exfil, escalation, evasion)
+3. After the 4 drills complete, the system automatically escalates to **SUSPICIOUS** mode
+4. A final exfil attack fires — this typically pushes the Commander to **SIEGE**
+5. The **SIEGE banner** overlays the screen (full-screen red flash)
+6. Dashboard switches to **INCIDENTS tab** showing the full picture with severity bar
+7. The **quarantine wall** shows any contained agents at the bottom
+8. Trust scores for active agents show call counts, block%, last tool
 
 ---
 
@@ -109,7 +122,7 @@ Or run the eval corpus directly to see measured detection numbers:
 python evals/run_evals.py
 ```
 
-Current results: **57 / 57 active attack cases caught, 0 / 24 false positives.**
+Current results: **61 / 61 active attack cases caught, 0 / 26 false positives.**
 
 ---
 

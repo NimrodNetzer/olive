@@ -2,9 +2,9 @@
 
 > A zero-trust runtime security gateway for AI agents — a transparent MCP proxy that inspects every tool call **and** every tool response, blocks unauthorized actions before they execute, and stops prompt injections before they ever reach the agent, with every decision fully auditable.
 
-[![Tests](https://img.shields.io/badge/tests-387%20passing-brightgreen)](tests/)
-[![Eval](https://img.shields.io/badge/eval-57%2F57%20detected%20·%200%20FP-brightgreen)](evals/)
-[![Corpus](https://img.shields.io/badge/corpus-110%20cases-blue)](evals/corpus/)
+[![Tests](https://img.shields.io/badge/tests-504%20passing-brightgreen)](tests/)
+[![Eval](https://img.shields.io/badge/eval-61%2F61%20detected%20·%200%20FP-brightgreen)](evals/)
+[![Corpus](https://img.shields.io/badge/corpus-116%20cases-blue)](evals/corpus/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-black)](https://docs.astral.sh/ruff/)
 
 **See the attack Olive stops → [DEMO.md](DEMO.md)**
@@ -131,11 +131,11 @@ Detection is **measured continuously** against a maintained attack corpus. The e
 
 | Metric | Current |
 |---|---|
-| Corpus cases | 110 (active + known-miss + benign hard negatives) |
-| Detection rate | **57 / 57 active cases** |
+| Corpus cases | 116 (active + known-miss + benign hard negatives) |
+| Detection rate | **61 / 61 active cases** |
 | False-positive rate | **0** |
 | Known-miss (honest backlog) | Encoded/semantic bypasses layer-zero can't catch; visible in the report |
-| Tests | **387 passing** |
+| Tests | **504 passing** |
 
 Every red-team bypass becomes a corpus case (`known-miss` until fixed). Every promoted fix raises the baseline. Known misses stay visible — a gateway that hides its blind spots is marketing.
 
@@ -285,10 +285,10 @@ olive/
 │       ├── web.py             Starlette/WebSocket dashboard (`olive ui --web`)
 │       └── broker.py          UIBroker — read-only TelemetrySink + bus subscriber
 ├── evals/
-│   ├── corpus/                Attack corpus — 109 YAML cases
+│   ├── corpus/                Attack corpus — 116 YAML cases
 │   ├── run_evals.py           Eval runner + CI regression gate
 │   └── baseline.json          Pinned detection counts (gate fails on backslide)
-├── tests/                     387 pytest unit + integration tests
+├── tests/                     504 pytest unit + integration tests
 ├── demo/
 │   ├── tools_server.py        Demo MCP tool server
 │   └── run_demo.py            Scripted demo: allow / block escalation / block injection
@@ -332,7 +332,7 @@ olive serve --config policies/default.yaml --ca-pubkey ca_pub.pem --ui -- python
 ## Development
 
 ```bash
-pytest            # 387 unit + end-to-end tests (real MCP over stdio)
+pytest            # 504 unit + end-to-end tests (real MCP over stdio)
 ruff check .      # lint
 python evals/run_evals.py          # detection report
 python evals/run_evals.py --update-baseline  # lock in a detection win
