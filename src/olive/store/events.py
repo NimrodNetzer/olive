@@ -10,6 +10,7 @@ This module is the only place SQL lives. All access is parameterized.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
@@ -83,7 +84,28 @@ CREATE TABLE IF NOT EXISTS agent_tool_history (
     call_ts    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ath_agent ON agent_tool_history (agent_id, org_id, call_ts DESC);
+CREATE TABLE IF NOT EXISTS policy_checksums (
+    path        TEXT PRIMARY KEY,
+    sha256_hash TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS audit_chain (
+    event_id   TEXT PRIMARY KEY,
+    prev_hash  TEXT NOT NULL,
+    row_hash   TEXT NOT NULL
+);
 """
+
+
+_CHAIN_GENESIS = "0" * 64  # sentinel prev_hash for the first event in the chain
+
+
+def _chain_hash(event_id: str, decision: str, timestamp: str, prev_hash: str) -> str:
+    """SHA-256 of the four fields that uniquely describe a gateway decision.
+    Linking each row to the previous hash makes deletions and modifications
+    detectable (ADR-0026 layer 2)."""
+    payload = f"{event_id}|{decision}|{timestamp}|{prev_hash}"
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 class BaselineStatus(StrEnum):
@@ -98,6 +120,15 @@ class EventSummary:
     allowed: int
     blocked: int
     incidents: int
+
+
+@dataclass(frozen=True, slots=True)
+class AuditChainStatus:
+    ok: bool
+    total_events: int
+    chained_events: int      # rows that have a chain record
+    broken_at_event_id: str | None  # first broken link, None if ok
+    detail: str              # human-readable one-liner
 
 
 class EventStore:
@@ -149,6 +180,17 @@ class EventStore:
                 latency_ms,
                 incident_id,
             ),
+        )
+        # Tamper-evident audit chain (ADR-0026): link this event to the previous one.
+        cursor = await self._conn.execute(
+            "SELECT row_hash FROM audit_chain ORDER BY rowid DESC LIMIT 1"
+        )
+        row = await cursor.fetchone()
+        prev_hash = row[0] if row else _CHAIN_GENESIS
+        row_hash = _chain_hash(event_id, verdict.decision.value, ctx.timestamp, prev_hash)
+        await self._conn.execute(
+            "INSERT INTO audit_chain (event_id, prev_hash, row_hash) VALUES (?, ?, ?)",
+            (event_id, prev_hash, row_hash),
         )
         await self._conn.commit()
         return event_id
@@ -422,3 +464,92 @@ class EventStore:
             )
         await self._conn.commit()
         return cursor.rowcount
+
+    # ── Policy file integrity (ADR-0026 layer 1) ─────────────────────────────
+
+    async def record_policy_hash(self, path: str, sha256_hash: str) -> None:
+        """Upsert the policy file hash. Called at gateway startup."""
+        now = SecurityContext.now()
+        await self._conn.execute(
+            "INSERT OR REPLACE INTO policy_checksums (path, sha256_hash, recorded_at)"
+            " VALUES (?, ?, ?)",
+            (path, sha256_hash, now),
+        )
+        await self._conn.commit()
+
+    async def check_policy_hash(self, path: str, current_hash: str) -> tuple[str, str | None]:
+        """Compare *current_hash* to the stored hash for *path*.
+
+        Returns ``(status, stored_hash)`` where status is one of:
+        - ``"new"``       — no stored hash; caller should call record_policy_hash.
+        - ``"unchanged"`` — hashes match; policy untouched.
+        - ``"changed"``   — hashes differ; policy was modified since last run.
+        """
+        cursor = await self._conn.execute(
+            "SELECT sha256_hash FROM policy_checksums WHERE path = ?", (path,)
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return "new", None
+        stored = row[0]
+        if stored == current_hash:
+            return "unchanged", stored
+        return "changed", stored
+
+    # ── Audit chain verification (ADR-0026 layer 2) ──────────────────────────
+
+    async def verify_audit_chain(self) -> AuditChainStatus:
+        """Walk the entire audit chain and verify every hash link.
+
+        Detects deleted rows (missing prev_hash links), modified rows (hash
+        mismatch), and inserted-out-of-order rows (wrong prev_hash value).
+        O(n) in the number of events; for post-mortem / operator use only.
+        """
+        cursor = await self._conn.execute(
+            "SELECT ac.event_id, ac.prev_hash, ac.row_hash,"
+            "       e.decision, e.timestamp"
+            " FROM audit_chain ac"
+            " JOIN events e USING (event_id)"
+            " ORDER BY ac.rowid"
+        )
+        rows = await cursor.fetchall()
+        chained = len(rows)
+
+        total_cursor = await self._conn.execute("SELECT COUNT(*) FROM events")
+        total_row = await total_cursor.fetchone()
+        total = (total_row[0] or 0) if total_row else 0
+
+        if chained == 0:
+            return AuditChainStatus(
+                ok=True, total_events=total, chained_events=0,
+                broken_at_event_id=None, detail="no events in chain"
+            )
+
+        expected_prev = _CHAIN_GENESIS
+        for event_id, prev_hash, stored_row_hash, decision, timestamp in rows:
+            if prev_hash != expected_prev:
+                return AuditChainStatus(
+                    ok=False, total_events=total, chained_events=chained,
+                    broken_at_event_id=event_id,
+                    detail=(
+                        f"prev_hash mismatch at {event_id}: "
+                        f"expected {expected_prev[:16]}…, got {prev_hash[:16]}…"
+                    ),
+                )
+            expected = _chain_hash(event_id, decision, timestamp, prev_hash)
+            if expected != stored_row_hash:
+                return AuditChainStatus(
+                    ok=False, total_events=total, chained_events=chained,
+                    broken_at_event_id=event_id,
+                    detail=(
+                        f"row_hash mismatch at {event_id}: "
+                        f"expected {expected[:16]}…, got {stored_row_hash[:16]}…"
+                    ),
+                )
+            expected_prev = stored_row_hash
+
+        return AuditChainStatus(
+            ok=True, total_events=total, chained_events=chained,
+            broken_at_event_id=None,
+            detail=f"all {chained} chain links verified",
+        )
