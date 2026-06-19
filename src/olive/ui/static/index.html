@@ -318,25 +318,37 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 .ta-danger .ta-badge{background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.3)}
 #trust-empty{font-size:10px;color:var(--muted);text-align:center;padding:14px 0}
 
-/* ── Feed panel ── */
+/* ── Decision log panel ── */
 #feed{grid-column:2;grid-row:2;background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:7px 12px;overflow:hidden;display:flex;flex-direction:column}
 #feed .ptitle{color:var(--blue)}
-#feed-log{flex:1;height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
-#feed-log::-webkit-scrollbar{width:3px}
-#feed-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.fe{font-size:11px;padding:2px 5px;border-radius:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:fadein .3s ease;border-left:2px solid transparent;cursor:pointer}
-.fe:hover{background:rgba(255,255,255,.04)}
-.fe.da{color:var(--green); border-left-color:rgba(63,185,80,.5)}
-.fe.db{color:var(--red);   border-left-color:rgba(248,81,73,.5)}
-.fe.dh{color:var(--yellow);border-left-color:rgba(210,153,34,.5)}
-.fe.dq{color:var(--purple);border-left-color:rgba(188,140,255,.5)}
-.fe.rt{color:var(--orange);border-left-color:rgba(227,179,65,.5)}
-.fe.fp{color:var(--cyan);  border-left-color:rgba(57,211,195,.5)}
-.fe.op{color:var(--blue);  border-left-color:rgba(88,166,255,.5)}
-.fe.mc{color:var(--purple);border-left-color:var(--purple);font-weight:bold}
-.fe.df{color:var(--muted)}
-.fts{color:var(--dim);margin-right:5px}
-.fk{font-weight:bold;margin-right:5px;text-transform:uppercase;font-size:10px}
+#dl-head{display:grid;grid-template-columns:52px 140px 1fr 70px 1fr;gap:0 10px;padding:3px 6px 4px;border-bottom:1px solid var(--border);flex-shrink:0}
+#dl-head span{font-size:8px;font-weight:bold;letter-spacing:1px;color:var(--dim);text-transform:uppercase}
+#decision-log{flex:1;height:0;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+#decision-log::-webkit-scrollbar{width:3px}
+#decision-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.dl-row{display:grid;grid-template-columns:52px 140px 1fr 70px 1fr;gap:0 10px;padding:3px 6px;border-radius:2px;cursor:pointer;animation:fadein .25s ease;border-left:2px solid transparent;align-items:center}
+.dl-row:hover{background:rgba(255,255,255,.04)}
+.dl-row.da{border-left-color:rgba(63,185,80,.5)}
+.dl-row.db{border-left-color:rgba(248,81,73,.5)}
+.dl-row.dh{border-left-color:rgba(210,153,34,.5)}
+.dl-row.dq{border-left-color:rgba(188,140,255,.5)}
+.dl-row.rt{border-left-color:rgba(227,179,65,.5)}
+.dl-row.op{border-left-color:rgba(88,166,255,.5)}
+.dl-row.df{border-left-color:transparent}
+.dl-row.hist{opacity:.35}
+.dl-ts{font-size:9px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-agent{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-tool{font-size:9px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.dl-dec{font-size:8px;font-weight:bold;letter-spacing:.5px;white-space:nowrap;text-align:center;padding:1px 4px;border-radius:2px}
+.dl-dec.da{color:var(--green);background:rgba(63,185,80,.08)}
+.dl-dec.db{color:var(--red);background:rgba(248,81,73,.08)}
+.dl-dec.dh{color:var(--yellow);background:rgba(210,153,34,.08)}
+.dl-dec.dq{color:var(--purple);background:rgba(188,140,255,.08)}
+.dl-dec.rt{color:var(--orange);background:rgba(227,179,65,.08)}
+.dl-dec.op{color:var(--blue);background:rgba(88,166,255,.08)}
+.dl-dec.df{color:var(--muted);background:transparent}
+.dl-rule{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dl-empty{font-size:10px;color:var(--dim);padding:20px 6px;letter-spacing:.5px}
 
 /* ── Event detail overlay ── */
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:none;align-items:center;justify-content:center}
@@ -369,8 +381,6 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 /* unread badge on tab */
 .tab-badge{display:none;background:var(--red);color:#fff;font-size:7px;font-weight:bold;padding:0 3px;border-radius:2px;margin-left:3px;min-width:12px;text-align:center;line-height:14px;vertical-align:middle}
 .tab-badge.show{display:inline-block}
-/* historical feed entries */
-.fe-hist{opacity:.4}
 
 /* ── Sparkline + calls/min ── */
 #sparkline-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;width:100%;max-width:300px;padding:0 12px}
@@ -406,9 +416,6 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 .sev-H .sev-fill{background:var(--red)}.sev-M .sev-fill{background:var(--yellow)}.sev-L .sev-fill{background:var(--cyan)}
 .sev-n{font-weight:bold}
 
-/* ── Feed timeline gutter ── */
-#feed-log{padding-left:16px;position:relative}
-#feed-log::before{content:'';position:absolute;left:6px;top:4px;bottom:4px;width:1px;background:var(--border);border-radius:1px}
 </style>
 </head>
 <body>
@@ -818,10 +825,15 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   </div>
 </div>
 
-<!-- ── Mitigation feed ── -->
+<!-- ── Gateway decision log ── -->
 <div id="feed">
-  <div class="ptitle">&#9889; MITIGATION FEED <span style="font-size:8px;color:var(--dim);font-weight:normal;letter-spacing:0">&nbsp;&mdash; click for details</span></div>
-  <div id="feed-log"></div>
+  <div class="ptitle">&#9889; GATEWAY DECISION LOG <span style="font-size:8px;color:var(--dim);font-weight:normal;letter-spacing:0">&nbsp;&mdash; click row for details</span></div>
+  <div id="dl-head">
+    <span>Time</span><span>Agent</span><span>Tool</span><span>Decision</span><span>Rule</span>
+  </div>
+  <div id="decision-log">
+    <div id="dl-empty">awaiting gateway decisions&hellip;</div>
+  </div>
 </div>
 
 </main>
@@ -896,7 +908,7 @@ const gwDec  =document.getElementById('gw-dec');
 const gwRule =document.getElementById('gw-rule');
 const arc    =document.getElementById('arc');
 const modeBadge=document.getElementById('mode-badge');
-const feedLog=document.getElementById('feed-log');
+const decisionLog=document.getElementById('decision-log');
 const fireBtn=document.getElementById('fire-btn');
 const impRing=document.getElementById('gw-impact-ring');
 const neuEl  =document.getElementById('neu-count');
@@ -996,17 +1008,8 @@ async function loadHistory(){
         if((ev.timestamp||'')>=(a.last_seen||'')) a.last_seen=ev.timestamp||'';
         if(d==='quarantine') quarantinedAgents.add(aid);
       }
-      // add dimmed historical entry to feed
-      const clsMap={allow:'da',block:'db',hold:'dh',quarantine:'dq'};
-      const el=document.createElement('div');
-      const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
-      el.className=`fe ${clsMap[d]||'df'} fe-hist`;
-      el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${d||'—'}</span>${ev.rule||'—'} &bull; ${ev.tool||''} &bull; ${ev.agent_id||''}`;
-      el.addEventListener('click',()=>showOverlay({kind:'decision',...ev}));
-      feedLog.appendChild(el);
+      addDecisionRow({kind:'decision',...ev}, true);
     });
-    // trim feed
-    while(feedLog.children.length>60) feedLog.removeChild(feedLog.firstChild);
     // refresh all counter displays
     document.getElementById('st-a').textContent=st.allow;
     document.getElementById('st-b').textContent=st.block;
@@ -1051,7 +1054,7 @@ function handle(ev){
 
   if(ev.kind==='decision') onDecision(ev);
   else                     onIntel(ev);
-  addFeed(ev);
+  addDecisionRow(ev, false);
   updateOrgCounts();
 }
 
@@ -1373,29 +1376,37 @@ function showOverlay(ev){
 function closeOv(){document.getElementById('overlay').classList.remove('show');}
 function ovClick(e){if(e.target===document.getElementById('overlay'))closeOv();}
 
-// ── Feed ──────────────────────────────────────────────────────────────────────
+// ── Gateway decision log ──────────────────────────────────────────────────────
 const KIND_CLS={
   'decision:allow':'da','decision:block':'db','decision:hold':'dh','decision:quarantine':'dq',
-  'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'mc',
+  'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'op',
 };
-const FEED_ICON={
-  da:'✓',db:'✗',dh:'⏸',dq:'⛔',rt:'⚡',fp:'🔧',op:'▶',mc:'⚠',df:'·',
-};
-function addFeed(ev){
-  const el=document.createElement('div');
+const DEC_LABEL={da:'ALLOW',db:'BLOCK',dh:'HOLD',dq:'QUAR',rt:'RT',op:'OP',df:'—'};
+function addDecisionRow(ev, isHist){
+  const empty=document.getElementById('dl-empty');
+  if(empty) empty.remove();
   const clsKey=ev.kind==='decision'?('decision:'+ev.decision):ev.kind;
   const cls=KIND_CLS[clsKey]||'df';
-  el.className='fe '+cls;
-  const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
-  const dept=ev.source_dept?` [${ev.source_dept}]`:'';
-  const icon=FEED_ICON[cls]||'·';
-  const detail=ev.kind==='decision'
-    ?`${(ev.decision||'').toUpperCase()} ${ev.tool||''} ${ev.rule||'-'}`
-    :`${ev.kind}${dept} ${ev.evidence?ev.evidence.substring(0,55):''}`;
-  el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${icon}</span>${detail}`;
-  el.addEventListener('click',()=>showOverlay(ev));
-  feedLog.prepend(el);
-  while(feedLog.children.length>50) feedLog.removeChild(feedLog.lastChild);
+  const row=document.createElement('div');
+  row.className='dl-row '+cls+(isHist?' hist':'');
+  const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'—';
+  let agent=ev.agent_id||ev.source_dept||'—';
+  if(agent.length>18) agent=agent.substring(0,16)+'…';
+  let tool=ev.tool||ev.kind||'—';
+  if(ev.kind==='redteam-finding') tool='red-team probe';
+  if(ev.kind==='operator-request') tool=ev.evidence?ev.evidence.substring(0,28):'operator';
+  const dec=DEC_LABEL[cls]||cls.toUpperCase();
+  const rule=ev.rule||ev.evidence?.substring(0,30)||'—';
+  row.innerHTML=
+    `<span class="dl-ts">${ts}</span>`+
+    `<span class="dl-agent">${agent}</span>`+
+    `<span class="dl-tool">${tool}</span>`+
+    `<span class="dl-dec ${cls}">${dec}</span>`+
+    `<span class="dl-rule">${rule}</span>`;
+  row.addEventListener('click',()=>showOverlay(ev.kind==='decision'?ev:{kind:ev.kind,...ev}));
+  if(isHist) decisionLog.appendChild(row);
+  else       decisionLog.prepend(row);
+  while(decisionLog.children.length>60) decisionLog.removeChild(decisionLog.lastChild);
 }
 
 // ── Attack animation ──────────────────────────────────────────────────────────
@@ -1468,10 +1479,10 @@ fireBtn.addEventListener('click',async()=>{
       body:JSON.stringify({action:'run-campaign-request',evidence:`category:${selCat} case:${chosen}`}),
     });
     const d=await r.json();
-    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,
+    addDecisionRow({kind:'operator-request',source_dept:'ui',object_id:d.object_id,
              evidence:`attack drill [${selCat}] ${chosen}`});
   }catch(err){
-    addFeed({kind:'operator-request',source_dept:'ui',evidence:`error: ${err}`});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',evidence:`error: ${err}`});
     pendingDrill=null;
   }finally{
     fireBtn.classList.remove('firing');
@@ -1552,9 +1563,9 @@ async function fireDemoStep(){
     const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'run-campaign-request',evidence:`category:${cat} case:${chosen}`})});
     const d=await r.json();
-    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO ${demoStep+1}/4] ${cat} — ${chosen}`});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO ${demoStep+1}/4] ${cat} — ${chosen}`});
   }catch(e){
-    addFeed({kind:'operator-request',source_dept:'ui',evidence:`demo error: ${e}`});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',evidence:`demo error: ${e}`});
   }
 
   demoStep++;
@@ -1590,7 +1601,7 @@ function stopDemo(finished=false){
       try{
         await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({action:'force-mode-request',evidence:'SUSPICIOUS — threshold exceeded, elevated monitoring'})});
-        addFeed({kind:'mode-change',source_dept:'ui',evidence:'[DEMO] escalating to SUSPICIOUS'});
+        addDecisionRow({kind:'mode-change',source_dept:'ui',evidence:'[DEMO] escalating to SUSPICIOUS'});
       }catch(e){}
     },800);
     setTimeout(async()=>{
@@ -1603,7 +1614,7 @@ function stopDemo(finished=false){
           const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({action:'run-campaign-request',evidence:`category:exf case:${chosen}`})});
           const d=await r.json();
-          addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO FINALE] exfil cascade — ${chosen}`});
+          addDecisionRow({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO FINALE] exfil cascade — ${chosen}`});
         }catch(e){}
       }
     },3500);
@@ -1634,11 +1645,11 @@ schedBtn.addEventListener('click',()=>{
     schedInterval=null;
     schedBtn.classList.remove('on');
     schedBtn.title='Toggle autonomous red-team sweep every 30s';
-    addFeed({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: OFF'});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: OFF'});
   } else {
     schedBtn.classList.add('on');
     schedBtn.title='Scheduled drill ACTIVE (30s) — click to stop';
-    addFeed({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: ON (every 30s)'});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',evidence:'scheduled drill: ON (every 30s)'});
     // Fire once immediately, then on interval
     if(!demoRunning) triggerSchedDrill();
     schedInterval=setInterval(()=>{if(!demoRunning) triggerSchedDrill();},30000);
@@ -1659,7 +1670,7 @@ async function triggerSchedDrill(){
     const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'run-campaign-request',evidence:`category:${cat} case:${chosen}`})});
     const d=await r.json();
-    addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[SCHED] ${cat} — ${chosen}`});
+    addDecisionRow({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[SCHED] ${cat} — ${chosen}`});
   }catch(e){}
 }
 
