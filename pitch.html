@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Olive — The Agent Wall</title>
+<style>
+:root {
+  --bg:      #060a0f;
+  --surf:    #0b0f17;
+  --surf2:   #0f1520;
+  --border:  #1a2235;
+  --border2: #253045;
+  --text:    #c9d1d9;
+  --muted:   #5a6270;
+  --green:   #3fb950;
+  --red:     #f85149;
+  --yellow:  #d29922;
+  --blue:    #58a6ff;
+  --purple:  #bc8cff;
+  --cyan:    #39d3c3;
+  --orange:  #e3b341;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Slide system ── */
+.deck { width: 100%; height: 100vh; position: relative; }
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 80px;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity .45s ease, transform .45s ease;
+  pointer-events: none;
+}
+.slide.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+.slide.exit {
+  opacity: 0;
+  transform: translateY(-30px);
+  transition: opacity .3s ease, transform .3s ease;
+}
+
+/* ── Navigation ── */
+.nav {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 100;
+}
+.nav button {
+  background: var(--surf);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 8px 22px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.nav button:hover { background: var(--surf2); border-color: var(--blue); }
+.nav button:disabled { opacity: .3; cursor: default; }
+#slide-counter { font-size: 12px; color: var(--muted); min-width: 60px; text-align: center; }
+
+.dots {
+  position: fixed;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border2);
+  transition: background .3s, transform .3s;
+  cursor: pointer;
+}
+.dot.active { background: var(--green); transform: scale(1.5); }
+
+/* ── Typography ── */
+.label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+.label.red   { color: var(--red); }
+.label.blue  { color: var(--blue); }
+.label.yellow{ color: var(--yellow); }
+.label.purple{ color: var(--purple); }
+.label.cyan  { color: var(--cyan); }
+
+h1 {
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  color: #fff;
+  text-align: center;
+}
+h2 {
+  font-size: clamp(26px, 3.5vw, 44px);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+  text-align: center;
+}
+h3 { font-size: 20px; font-weight: 600; color: #fff; margin-bottom: 8px; }
+
+.sub {
+  font-size: clamp(14px, 1.8vw, 20px);
+  color: var(--muted);
+  text-align: center;
+  max-width: 700px;
+  line-height: 1.6;
+  margin-top: 16px;
+}
+.sub strong { color: var(--text); }
+
+em { color: var(--green); font-style: normal; font-weight: 600; }
+em.red    { color: var(--red); }
+em.blue   { color: var(--blue); }
+em.yellow { color: var(--yellow); }
+em.purple { color: var(--purple); }
+em.cyan   { color: var(--cyan); }
+
+/* ── Layout helpers ── */
+.row  { display: flex; gap: 24px; width: 100%; max-width: 1100px; align-items: stretch; }
+.col  { display: flex; flex-direction: column; }
+.full { width: 100%; max-width: 1100px; }
+.center { text-align: center; }
+.mt { margin-top: 32px; }
+.mt-sm { margin-top: 16px; }
+.spacer { flex: 1; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  flex: 1;
+  transition: border-color .3s;
+}
+.card:hover { border-color: var(--border2); }
+.card.green { border-color: rgba(63,185,80,.35); }
+.card.red   { border-color: rgba(248,81,73,.35); }
+.card.blue  { border-color: rgba(88,166,255,.35); }
+.card.yellow{ border-color: rgba(210,153,34,.35); }
+.card.purple{ border-color: rgba(188,140,255,.35); }
+.card.cyan  { border-color: rgba(57,211,195,.35); }
+
+.card p { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 8px; }
+.card p strong { color: var(--text); }
+
+/* ── Stat blocks ── */
+.stats { display: flex; gap: 28px; margin-top: 32px; }
+.stat {
+  text-align: center;
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 32px;
+  flex: 1;
+}
+.stat-num {
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1;
+}
+.stat-num.red    { color: var(--red); }
+.stat-num.blue   { color: var(--blue); }
+.stat-num.yellow { color: var(--yellow); }
+.stat-lbl { font-size: 12px; color: var(--muted); margin-top: 8px; letter-spacing: .5px; }
+
+/* ── Timeline / flow ── */
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 960px;
+  margin-top: 36px;
+}
+.flow-step {
+  flex: 1;
+  text-align: center;
+  padding: 18px 12px;
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  position: relative;
+}
+.flow-step small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 4px; }
+.flow-arrow {
+  font-size: 18px;
+  color: var(--border2);
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+.flow-step.green { border-color: rgba(63,185,80,.4); color: var(--green); }
+.flow-step.red   { border-color: rgba(248,81,73,.4); color: var(--red); }
+.flow-step.blue  { border-color: rgba(88,166,255,.4); color: var(--blue); }
+.flow-step.yellow{ border-color: rgba(210,153,34,.4); color: var(--yellow); }
+.flow-step.purple{ border-color: rgba(188,140,255,.4); color: var(--purple); }
+.flow-step.cyan  { border-color: rgba(57,211,195,.4); color: var(--cyan); }
+
+/* ── Comparison table ── */
+.compare {
+  width: 100%;
+  max-width: 960px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  margin-top: 28px;
+}
+.compare th {
+  padding: 12px 20px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.compare th:first-child { color: var(--muted); }
+.compare th.them { color: var(--red); }
+.compare th.us   { color: var(--green); }
+.compare td {
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  vertical-align: top;
+}
+.compare td:first-child { color: var(--text); font-weight: 500; }
+.compare tr:last-child td { border-bottom: none; }
+.check { color: var(--green); font-size: 16px; }
+.cross { color: var(--red);   font-size: 16px; }
+.part  { color: var(--yellow);font-size: 14px; }
+
+/* ── Code block ── */
+.code {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 28px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.8;
+  margin-top: 24px;
+  width: 100%;
+  max-width: 860px;
+}
+.code .c-green  { color: var(--green); }
+.code .c-red    { color: var(--red); }
+.code .c-yellow { color: var(--yellow); }
+.code .c-blue   { color: var(--blue); }
+.code .c-muted  { color: var(--muted); }
+.code .c-cyan   { color: var(--cyan); }
+.code .c-purple { color: var(--purple); }
+
+/* ── Badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  border: 1px solid;
+}
+.badge.green { background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.35); color: var(--green); }
+.badge.red   { background: rgba(248,81,73,.1); border-color: rgba(248,81,73,.35); color: var(--red); }
+.badge.blue  { background: rgba(88,166,255,.1); border-color: rgba(88,166,255,.35); color: var(--blue); }
+.badge.yellow{ background: rgba(210,153,34,.1); border-color: rgba(210,153,34,.35); color: var(--yellow); }
+
+/* ── Bullets ── */
+.bullets { list-style: none; width: 100%; max-width: 820px; margin-top: 24px; }
+.bullets li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.bullets li:last-child { border-bottom: none; }
+.bullets li strong { color: var(--text); }
+.bul-icon { flex-shrink: 0; margin-top: 2px; font-size: 16px; }
+
+/* ── Arch diagram ── */
+.arch {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 32px;
+  width: 100%;
+  max-width: 1000px;
+}
+.arch-box {
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.arch-box small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 4px; }
+.arch-box.agent { border-color: var(--blue); color: var(--blue); flex: 1; }
+.arch-box.olive {
+  flex: 3;
+  border-color: var(--green);
+  background: rgba(63,185,80,.04);
+  margin: 0 8px;
+  padding: 24px;
+}
+.arch-box.tool  { border-color: var(--yellow); color: var(--yellow); flex: 1; }
+.arch-arrow { font-size: 22px; color: var(--border2); padding: 0 4px; flex-shrink: 0; }
+
+.arch-inner {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.arch-chip {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  border: 1px solid;
+}
+.arch-chip.green  { background: rgba(63,185,80,.1);  border-color: rgba(63,185,80,.35);  color: var(--green); }
+.arch-chip.red    { background: rgba(248,81,73,.1);   border-color: rgba(248,81,73,.35);  color: var(--red); }
+.arch-chip.blue   { background: rgba(88,166,255,.1);  border-color: rgba(88,166,255,.35); color: var(--blue); }
+.arch-chip.yellow { background: rgba(210,153,34,.1);  border-color: rgba(210,153,34,.35); color: var(--yellow); }
+.arch-chip.purple { background: rgba(188,140,255,.1); border-color: rgba(188,140,255,.35);color: var(--purple); }
+.arch-chip.cyan   { background: rgba(57,211,195,.1);  border-color: rgba(57,211,195,.35); color: var(--cyan); }
+
+/* ── Org chart ── */
+.org { display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 28px; width: 100%; max-width: 900px; }
+.org-row { display: flex; gap: 16px; position: relative; }
+.org-row::before {
+  content: '';
+  position: absolute;
+  top: -20px; left: 50%; transform: translateX(-50%);
+  width: 1px; height: 20px;
+  background: var(--border2);
+}
+.org-node {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid;
+}
+.org-node small { display: block; font-size: 11px; font-weight: 400; margin-top: 3px; }
+.org-connector { display: flex; justify-content: center; height: 20px; }
+.org-connector-line { width: 1px; background: var(--border2); }
+.org-top { margin-bottom: 0; }
+
+/* ── Quote ── */
+.quote {
+  border-left: 3px solid var(--green);
+  padding: 16px 24px;
+  margin: 24px 0;
+  background: var(--surf);
+  border-radius: 0 8px 8px 0;
+  max-width: 800px;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--text);
+  font-style: italic;
+}
+
+/* ── Title slide specific ── */
+.title-glow {
+  font-size: clamp(56px, 8vw, 96px);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--green) 0%, var(--cyan) 50%, var(--blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+.title-sub {
+  font-size: clamp(14px, 2vw, 22px);
+  color: var(--muted);
+  margin-top: 20px;
+  letter-spacing: .5px;
+}
+.title-badges { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; justify-content: center; }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide.active .card,
+.slide.active .stat,
+.slide.active .flow-step,
+.slide.active li,
+.slide.active .arch-chip,
+.slide.active .org-node {
+  animation: fadeUp .4s ease both;
+}
+.slide.active .card:nth-child(1),
+.slide.active .stat:nth-child(1),
+.slide.active li:nth-child(1),
+.slide.active .flow-step:nth-child(1),
+.slide.active .arch-chip:nth-child(1) { animation-delay: .05s; }
+.slide.active .card:nth-child(2),
+.slide.active .stat:nth-child(2),
+.slide.active li:nth-child(2),
+.slide.active .flow-step:nth-child(3),
+.slide.active .arch-chip:nth-child(2) { animation-delay: .12s; }
+.slide.active .card:nth-child(3),
+.slide.active .stat:nth-child(3),
+.slide.active li:nth-child(3),
+.slide.active .flow-step:nth-child(5),
+.slide.active .arch-chip:nth-child(3) { animation-delay: .19s; }
+.slide.active .card:nth-child(4),
+.slide.active li:nth-child(4),
+.slide.active .arch-chip:nth-child(4) { animation-delay: .26s; }
+.slide.active li:nth-child(5) { animation-delay: .33s; }
+
+/* slide number label top-left */
+.slide-num-label {
+  position: fixed;
+  top: 22px;
+  left: 28px;
+  font-size: 11px;
+  color: var(--border2);
+  letter-spacing: 1px;
+  z-index: 100;
+}
+
+/* progress bar */
+.progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: var(--green);
+  transition: width .4s ease;
+  z-index: 200;
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="slide-num-label" id="slide-num-label">OLIVE</div>
+
+<div class="deck" id="deck">
+
+<!-- ─── 1. TITLE ─────────────────────────────────────────────────────────── -->
+<div class="slide active" id="s1">
+  <div class="label">2026</div>
+  <div class="title-glow">Olive</div>
+  <div class="title-sub">Zero-trust runtime security gateway for AI agents</div>
+  <p class="sub" style="margin-top:28px">
+    A transparent MCP proxy that sits between every AI agent and its tools —
+    <strong>inspecting every call, every response, blocking every attack,
+    auditing every decision.</strong>
+  </p>
+  <div class="title-badges">
+    <span class="badge green">57/57 attacks detected</span>
+    <span class="badge green">0 false positives</span>
+    <span class="badge blue">110-case eval corpus</span>
+    <span class="badge yellow">387 tests passing</span>
+  </div>
+</div>
+
+<!-- ─── 2. THE ERA ────────────────────────────────────────────────────────── -->
+<div class="slide" id="s2">
+  <div class="label">The moment we are in</div>
+  <h2>Every era creates a new attack surface.<br>Every attack surface needs a new wall.</h2>
+  <div class="row mt" style="max-width:900px">
+    <div class="card blue" style="text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">⚔️</div>
+      <h3 style="color:var(--blue)">Swords</h3>
+      <p>Created the need for <strong>shields</strong></p>
+    </div>
+    <div class="card yellow" style="text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">🌐</div>
+      <h3 style="color:var(--yellow)">Networks</h3>
+      <p>Created the need for <strong>firewalls</strong></p>
+    </div>
+    <div class="card green" style="text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">🤖</div>
+      <h3 style="color:var(--green)">AI Agents</h3>
+      <p>Create the need for the <strong>Agent Wall</strong></p>
+    </div>
+  </div>
+  <div class="quote" style="margin-top:36px">
+    "By 2027, fleets of AI agents will read files, query databases, send emails,
+    write code, and call each other autonomously. Every tool they touch is attack surface.
+    The question is not <em>if</em> they will be exploited — it's <em>when</em>."
+  </div>
+</div>
+
+<!-- ─── 3. THE PROBLEM ───────────────────────────────────────────────────── -->
+<div class="slide" id="s3">
+  <div class="label red">The attack nobody sees</div>
+  <h2>The most dangerous direction<br>is the one everyone ignores</h2>
+  <div class="row mt" style="max-width:960px;align-items:flex-start">
+    <div class="card red" style="flex:1.2">
+      <div class="label red" style="margin-bottom:12px">The attack</div>
+      <h3 style="color:var(--red)">Indirect Prompt Injection</h3>
+      <p>An attacker embeds hidden instructions inside a document, API response,
+      or web page that an AI agent will read. The agent's <strong>tool call is legitimate</strong>.
+      The <strong>network request is valid</strong>. Only the content is malicious —
+      and it arrives from a trusted tool, in the direction nobody inspects.</p>
+      <p style="margin-top:12px">The injected instruction silently <strong>re-programs
+      a legitimate, authorized agent mid-session</strong>. No login. No exploit.
+      Just a poisoned document.</p>
+    </div>
+    <div class="col" style="flex:1;gap:16px">
+      <div class="card">
+        <div class="label" style="margin-bottom:8px">What existing tools see</div>
+        <p>✅ Valid HTTPS connection<br>
+           ✅ Authorized agent<br>
+           ✅ Permitted tool call<br>
+           ✅ Normal-looking response<br>
+           <span style="color:var(--red)">✗ Injection inside the content</span></p>
+      </div>
+      <div class="card">
+        <div class="label" style="margin-bottom:8px">Why it works</div>
+        <p>Perimeter firewalls inspect addresses and protocols — <strong>not meaning</strong>.
+        SAST scans code — not runtime behavior. Model-level guardrails read the
+        user message — <strong>not the tool response</strong>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 4. WHAT THE GIANTS MISS ─────────────────────────────────────────── -->
+<div class="slide" id="s4">
+  <div class="label yellow">The gap in the market</div>
+  <h2>The big players validated the category.<br>Then missed the most important layer.</h2>
+  <table class="compare mt">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th class="them">Palo Alto · Cisco · Check Point · SentinelOne</th>
+        <th class="us">Olive</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Speaks MCP natively</td>
+        <td><span class="cross">✗</span> &nbsp;None are MCP-aware</td>
+        <td><span class="check">✓</span> &nbsp;Drop-in MCP proxy</td>
+      </tr>
+      <tr>
+        <td>Inspects tool responses (inbound)</td>
+        <td><span class="cross">✗</span> &nbsp;Model-API level only</td>
+        <td><span class="check">✓</span> &nbsp;Every response, bidirectional</td>
+      </tr>
+      <tr>
+        <td>Tool description poisoning / rug-pull</td>
+        <td><span class="cross">✗</span> &nbsp;Not on their threat model</td>
+        <td><span class="check">✓</span> &nbsp;Trust-on-first-use baselines</td>
+      </tr>
+      <tr>
+        <td>Cryptographic agent identity</td>
+        <td><span class="part">~</span> &nbsp;API-key level only</td>
+        <td><span class="check">✓</span> &nbsp;RS256 JWT, role is identity-bound</td>
+      </tr>
+      <tr>
+        <td>Session-level containment (quarantine)</td>
+        <td><span class="cross">✗</span> &nbsp;Per-message only</td>
+        <td><span class="check">✓</span> &nbsp;Circuit breaker, Siege token freeze</td>
+      </tr>
+      <tr>
+        <td>Measured detection with public corpus</td>
+        <td><span class="cross">✗</span> &nbsp;Claimed detection only</td>
+        <td><span class="check">✓</span> &nbsp;57/57, CI-gated, known-miss visible</td>
+      </tr>
+      <tr>
+        <td>Self-improving: detect → reproduce → fix → verify</td>
+        <td><span class="cross">✗</span> &nbsp;No closed loop</td>
+        <td><span class="check">✓</span> &nbsp;The full cycle, human-gated</td>
+      </tr>
+      <tr>
+        <td>Zero changes to agent or tool server</td>
+        <td><span class="cross">✗</span> &nbsp;Require SDK integration</td>
+        <td><span class="check">✓</span> &nbsp;Transparent proxy, 5 min to protected</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ─── 5. HOW OLIVE WORKS ───────────────────────────────────────────────── -->
+<div class="slide" id="s5">
+  <div class="label cyan">How it works</div>
+  <h2>A transparent proxy. Zero changes.<br>Everything inspected in both directions.</h2>
+  <div class="arch">
+    <div class="arch-box agent">
+      <div>Agent</div>
+      <small>any MCP client</small>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box olive">
+      <div style="color:var(--green);font-size:15px;font-weight:700;letter-spacing:1px">OLIVE</div>
+      <small style="color:var(--muted)">transparent MCP proxy</small>
+      <div class="arch-inner">
+        <span class="arch-chip blue">Identity · JWT RS256</span>
+        <span class="arch-chip red">Circuit Breaker</span>
+        <span class="arch-chip yellow">Rate Limiter</span>
+        <span class="arch-chip green">Policy Inspector</span>
+        <span class="arch-chip green">Context Policy</span>
+        <span class="arch-chip cyan">Decode Layer</span>
+        <span class="arch-chip green">Pattern Inspector</span>
+        <span class="arch-chip purple">LLM Sentinels · advisory</span>
+        <span class="arch-chip yellow">SQLite Audit Trail</span>
+      </div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box tool">
+      <div>Tool Server</div>
+      <small>real MCP upstream</small>
+    </div>
+  </div>
+  <div class="row mt" style="max-width:960px">
+    <div class="card green">
+      <h3>Fast path — enforces</h3>
+      <p>Deterministic inspectors run inline on every call and response.
+      First non-allow verdict wins. Any inspector failure → <strong>block</strong>.
+      Never silent pass-through.</p>
+    </div>
+    <div class="card purple">
+      <h3>Parallel path — advises</h3>
+      <p>LLM sentinels analyze semantics, context, behavior across the session.
+      They can only <strong>signal the circuit breaker</strong> — they can never
+      directly enforce. An LLM cannot override a deterministic decision.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 6. THE ARCHITECTURAL LAW ─────────────────────────────────────────── -->
+<div class="slide" id="s6">
+  <div class="label purple">The core principle</div>
+  <h2>The law that governs everything</h2>
+  <div class="quote" style="font-size:22px;border-left-color:var(--purple);margin-top:32px;max-width:760px;text-align:center;border-left:none;border-top:3px solid var(--purple);border-radius:8px 8px 0 0;padding:28px">
+    Agents provide intelligence.<br>
+    Deterministic systems enforce authority.
+  </div>
+  <div class="row mt" style="max-width:900px">
+    <div class="card purple">
+      <h3 style="color:var(--purple)">Why this matters</h3>
+      <p>An LLM can be <strong>prompt-injected into approving a bad verdict</strong>.
+      It can be confused, hallucinated, or manipulated. A deterministic circuit breaker
+      cannot. The hard security decisions — block, quarantine, Siege — are never
+      touched by an LLM.</p>
+    </div>
+    <div class="card green">
+      <h3>What it means in practice</h3>
+      <p>LLM sentinels produce evidence. The deterministic circuit breaker decides
+      what to do with it. A compromised sentinel can at worst produce a bad signal —
+      it cannot bypass enforcement. <strong>The wall holds even if the intelligence
+      is wrong.</strong></p>
+    </div>
+  </div>
+  <div class="code" style="margin-top:28px;font-size:12px;max-width:760px">
+    <span class="c-muted"># The only path from LLM signal to enforcement action:</span><br>
+    <span class="c-blue">SentinelRunner</span>.<span class="c-green">on_signal</span>(signal) &nbsp;→&nbsp; <span class="c-yellow">if</span> score &gt; threshold &nbsp;→&nbsp; <span class="c-red">breaker.trip()</span><br>
+    <span class="c-muted">#                                                    ↑ deterministic threshold</span><br>
+    <span class="c-muted"># The LLM never calls trip() directly. Ever.</span>
+  </div>
+</div>
+
+<!-- ─── 7. THE COMPANY OF AGENTS ─────────────────────────────────────────── -->
+<div class="slide" id="s7">
+  <div class="label green">The company of agents</div>
+  <h2>Not one big security agent.<br>A coordinated organization of specialists.</h2>
+  <div class="org">
+    <div class="org-node" style="border-color:var(--green);color:var(--green);font-size:14px;padding:14px 32px">
+      Security Commander
+      <small style="color:var(--muted)">deterministic · sole set_mode authority</small>
+    </div>
+    <div class="org-connector"><div class="org-connector-line"></div></div>
+    <div class="org-row">
+      <div class="org-node" style="border-color:var(--blue);color:var(--blue)">
+        Defense Dept
+        <small>sentinel signals → breaker.trip</small>
+      </div>
+      <div class="org-node" style="border-color:var(--yellow);color:var(--yellow)">
+        Remediation Dept
+        <small>reproduced → fix cycle</small>
+      </div>
+      <div class="org-node" style="border-color:var(--red);color:var(--red)">
+        Red-Team Dept
+        <small>sandbox drills · bypass finding</small>
+      </div>
+      <div class="org-node" style="border-color:var(--purple);color:var(--purple)">
+        Builder Dept
+        <small>proposes fixes · never enforces</small>
+      </div>
+    </div>
+  </div>
+  <div class="row mt" style="max-width:960px">
+    <div class="card red">
+      <h3 style="color:var(--red)">Self-simulation</h3>
+      <p>The Red-Team department autonomously attacks Olive's own pipeline in a
+      sandbox — never live traffic. Every bypass it finds becomes a corpus case.
+      The system <strong>discovers its own blind spots</strong> without human prompting.</p>
+    </div>
+    <div class="card yellow">
+      <h3 style="color:var(--yellow)">The closed loop</h3>
+      <p>No competitor does this: bypass found → reproduced → fix proposed →
+      eval gate re-run → human approves → baseline locked in. The system gets
+      <strong>harder to attack after every incident</strong>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 8. THE FULL CYCLE ─────────────────────────────────────────────────── -->
+<div class="slide" id="s8">
+  <div class="label yellow">What nobody else builds</div>
+  <h2>The full security cycle.<br>End to end. Human-gated at every step.</h2>
+  <div class="flow">
+    <div class="flow-step green">Govern<small>policy · identity · context</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step blue">Detect<small>deterministic + advisory LLM</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step red">Contain<small>quarantine · Siege · token freeze</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step yellow">Reproduce<small>red-team sandbox</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step purple">Repair<small>builder proposes fix</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step cyan">Verify<small>eval corpus re-run</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step green">Learn<small>baseline locked in</small></div>
+  </div>
+  <div class="quote" style="margin-top:32px">
+    "Everyone detects and blocks. Almost nobody does <em>Reproduce → Repair → Verify</em>:
+    turn an incident into a reproducible attack case, verify the fix, lock in the baseline.
+    That closes the loop competitors leave permanently open."
+  </div>
+  <div class="sub mt-sm">
+    Auto-apply of any fix is <strong>permanently human-gated by design</strong>.
+    The eval gate is a subprocess — it cannot be prompt-injected.
+    A fix reaches production only through version control.
+  </div>
+</div>
+
+<!-- ─── 9. OPERATING MODES ────────────────────────────────────────────────── -->
+<div class="slide" id="s9">
+  <div class="label red">Runtime response</div>
+  <h2>Three operating modes.<br>The system responds to attacks as they escalate.</h2>
+  <div class="row mt" style="max-width:1000px">
+    <div class="card green">
+      <div class="badge green" style="margin-bottom:14px">NORMAL</div>
+      <p>Standard monitoring. Normal containment thresholds. Scheduled red-team
+      drills. Minimal overhead. <strong>Clean traffic flows freely.</strong></p>
+    </div>
+    <div class="card yellow">
+      <div class="badge yellow" style="margin-bottom:14px">SUSPICIOUS</div>
+      <p>Containment threshold halved — sessions quarantined sooner.
+      High-risk calls held for operator approval. Sentinels elevated.
+      <strong>Triggered automatically</strong> when a session is quarantined.</p>
+    </div>
+    <div class="card red">
+      <div class="badge red" style="margin-bottom:14px">SIEGE</div>
+      <p>Threshold collapses to one block. <strong>Live JWT tokens revoked
+      for all quarantined sessions</strong> — a contained agent cannot
+      re-authenticate to escape. Commander bulk-freezes credentials.
+      Only a capability-gated human de-escalates.</p>
+    </div>
+  </div>
+  <div class="sub mt">
+    Mode escalates <strong>monotonically and automatically</strong>.
+    De-escalation requires a human with an <code style="color:var(--green);font-size:13px">olive:command</code> token.
+    The Security Commander is deterministic code — not an LLM.
+  </div>
+</div>
+
+<!-- ─── 10. WHY NOW ───────────────────────────────────────────────────────── -->
+<div class="slide" id="s10">
+  <div class="label blue">Market timing</div>
+  <h2>The window is open.<br>And it closes as MCP matures.</h2>
+  <div class="row mt" style="max-width:960px;align-items:flex-start">
+    <div class="col" style="flex:1;gap:16px">
+      <div class="card blue">
+        <h3 style="color:var(--blue)">MCP is becoming the enterprise standard</h3>
+        <p>Released by Anthropic in late 2024. Now adopted by Microsoft, Google,
+        hundreds of tool-server builders. Think of HTTP in 1997 —
+        <strong>not yet dominant, but clearly where everything is going.</strong>
+        Nobody owns the security layer yet.</p>
+      </div>
+      <div class="card yellow">
+        <h3 style="color:var(--yellow)">Compliance tailwind</h3>
+        <p><strong>EU AI Act</strong> enforcement: high-risk AI systems must have
+        auditable decision trails. <strong>SOC 2 for agents</strong>: auditors are
+        starting to ask "what controls do you have over your AI agents?"
+        Olive produces the answer natively, per call.</p>
+      </div>
+    </div>
+    <div class="col" style="flex:1;gap:16px">
+      <div class="card green">
+        <h3>Market already validated</h3>
+        <p>Lakera → Check Point. Prompt Security → SentinelOne. Robust Intelligence → Cisco ($500M).
+        Protect AI → Palo Alto (~$500M). <strong>The category is real.
+        The incumbents bought in.</strong> None of them are MCP-native.
+        None inspect tool responses.</p>
+      </div>
+      <div class="card red">
+        <h3 style="color:var(--red)">The window: ~12–18 months</h3>
+        <p>After that, Check Point or SentinelOne will bolt something MCP-shaped
+        onto what they acquired. The window to be
+        <strong>"the first serious MCP-native security gateway with a maintained corpus"</strong>
+        is right now.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 11. AS AGENTS GET STRONGER ──────────────────────────────────────────── -->
+<div class="slide" id="s11">
+  <div class="label cyan">The flywheel</div>
+  <h2>As AI agents get more powerful,<br>Olive becomes more essential.</h2>
+  <ul class="bullets">
+    <li>
+      <span class="bul-icon" style="color:var(--blue)">📈</span>
+      <div><strong>More agents = more attack surface.</strong> Every new MCP tool server,
+      every new agent deployment, every new integration is a surface Olive can protect.
+      The market grows with us — we don't need to convince people to adopt agents,
+      enterprises are already doing it.</div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--red)">⚡</span>
+      <div><strong>More autonomous agents = higher blast radius per attack.</strong>
+      An agent that can send emails, write code, and query databases does more damage
+      when compromised than one that can only answer questions. The value of containment
+      grows proportionally.</div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--yellow)">🔍</span>
+      <div><strong>Richer MCP surfaces = more interception points.</strong>
+      Resources, prompts, tool descriptions, multi-agent communication — every new
+      MCP capability Anthropic ships is a surface Olive already knows how to inspect.
+      Competitors must retrofit. We're already there.</div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--green)">🌱</span>
+      <div><strong>Every incident makes the corpus stronger.</strong>
+      The eval corpus is a moat that grows with every real attack and every red-team
+      bypass. Competitors cannot copy operational history. This advantage compounds
+      over time.</div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--purple)">🏢</span>
+      <div><strong>Enterprise agent fleets need fleet management.</strong>
+      A company running 50 agents across 10 departments needs centralized policy,
+      cross-agent visibility, and fleet-wide incident response —
+      the commercial layer the roadmap already defines.</div>
+    </li>
+  </ul>
+</div>
+
+<!-- ─── 12. THE VISION ───────────────────────────────────────────────────── -->
+<div class="slide" id="s12">
+  <div class="label green">The vision</div>
+  <h2>The MCP ecosystem needs<br>one trusted security layer.</h2>
+  <div class="code" style="font-size:13px;line-height:2">
+<span class="c-muted">External agents, users, services, untrusted content</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+&nbsp;&nbsp;&nbsp;<span class="c-green">████████████████████████████████████████████</span><br>
+&nbsp;&nbsp;&nbsp;<span class="c-green">█</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-green">THE AGENT WALL — powered by Olive</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-green">█</span><br>
+&nbsp;&nbsp;&nbsp;<span class="c-green">█</span>&nbsp;&nbsp;Identity · Policy · Inspection · Containment&nbsp;<span class="c-green">█</span><br>
+&nbsp;&nbsp;&nbsp;<span class="c-green">████████████████████████████████████████████</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br>
+<span class="c-blue">Support Agent</span> · <span class="c-yellow">Coding Agent</span> · <span class="c-purple">Finance Agent</span> · <span class="c-cyan">Internal APIs</span> · <span class="c-muted">Databases · Files</span>
+  </div>
+  <div class="row mt" style="max-width:960px">
+    <div class="card">
+      <div class="label" style="margin-bottom:10px">Open core</div>
+      <h3>The local gateway</h3>
+      <p>Free, open-source, drop-in. Developer adoption through the MCP ecosystem.
+      <strong>Five minutes to protected</strong> for any MCP client.</p>
+    </div>
+    <div class="card blue">
+      <div class="label blue" style="margin-bottom:10px">Commercial</div>
+      <h3>The enterprise layer</h3>
+      <p>Fleet management, centralized policy, cross-agent visibility,
+      compliance evidence export, incident workflow, SLA.
+      <strong>The control plane for agent security at scale.</strong></p>
+    </div>
+    <div class="card green">
+      <div class="label" style="margin-bottom:10px">The moat</div>
+      <h3>The attack corpus</h3>
+      <p>110 cases today. Growing with every real incident and red-team bypass.
+      <strong>Operational history that can't be copied overnight.</strong>
+      Detection that's measured, not claimed.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 13. THE NUMBERS ───────────────────────────────────────────────────── -->
+<div class="slide" id="s13">
+  <div class="label green">Where we are today</div>
+  <h2>Not a prototype.<br>A complete, tested, running system.</h2>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num">57/57</div>
+      <div class="stat-lbl">Active attack cases detected<br>CI-gated, reproducible</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-lbl">False positives<br>out of 24 benign cases</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">110</div>
+      <div class="stat-lbl">Corpus cases<br>active + known-miss + benign</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">387</div>
+      <div class="stat-lbl">Tests passing<br>unit + end-to-end</div>
+    </div>
+  </div>
+  <div class="row mt" style="max-width:960px">
+    <div class="card green">
+      <h3>Milestones complete</h3>
+      <p>M1–M7 + M11 first slice: proxy, identity, containment, full MCP surface,
+      contextual authz, measured corpus, LLM sentinels, the full department cycle,
+      operating modes, Siege token freeze, live web dashboard.</p>
+    </div>
+    <div class="card yellow">
+      <h3>Known-miss cases: 29</h3>
+      <p>Semantic injections the deterministic layer can't catch yet.
+      <strong>Listed publicly, not hidden.</strong> A product that shows its blind spots
+      is more credible than one that claims perfection.
+      LLM sentinels close these; M6 already started.</p>
+    </div>
+    <div class="card blue">
+      <h3>Running in 60 seconds</h3>
+      <p><code style="color:var(--green);font-size:12px">./quickstart.sh</code> →
+      gateway starts, live dashboard opens, attack demo runs automatically.
+      Zero configuration. Zero changes to any existing agent or tool.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 14. THE 5 DIFFERENTIATORS ──────────────────────────────────────────── -->
+<div class="slide" id="s14">
+  <div class="label green">Why Olive wins</div>
+  <h2>Five things no competitor has<br>at the same time.</h2>
+  <ul class="bullets" style="max-width:900px">
+    <li>
+      <span class="bul-icon" style="color:var(--green)">1</span>
+      <div><strong>MCP-native, drop-in.</strong> A transparent proxy — point any MCP client
+      at it, zero changes to agent or tool server. Five minutes to protected.
+      <em>No SDK. No wrapper. No rewrites.</em></div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--blue)">2</span>
+      <div><strong>Bidirectional inspection.</strong> Inbound tool responses are the most
+      dangerous surface. Olive is one of the only systems that inspects them.
+      <em>That's where indirect prompt injection lives.</em></div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--yellow)">3</span>
+      <div><strong>Measured detection, not claimed.</strong> A maintained 110-case attack corpus,
+      CI-gated, with known-miss cases visible. Every competitor makes claims.
+      <em>Olive has numbers.</em></div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--purple)">4</span>
+      <div><strong>The full loop.</strong> Detect → Contain → Reproduce → Repair → Verify → Learn.
+      Nobody else closes this loop. <em>Every incident makes the system harder to attack.</em></div>
+    </li>
+    <li>
+      <span class="bul-icon" style="color:var(--red)">5</span>
+      <div><strong>Deterministic enforcement, LLM advisory.</strong> The architectural law that makes
+      the system trustworthy even when the intelligence is wrong.
+      <em>The wall holds even if a sentinel is fooled.</em></div>
+    </li>
+  </ul>
+</div>
+
+<!-- ─── 15. CLOSING ───────────────────────────────────────────────────────── -->
+<div class="slide" id="s15">
+  <div class="label green">Olive</div>
+  <div class="title-glow" style="font-size:clamp(42px,6vw,80px)">The Agent Wall</div>
+  <div class="title-sub" style="margin-top:20px;font-size:18px;color:var(--muted)">
+    The trusted security layer that lets companies adopt autonomous agents safely,<br>
+    recover intelligently from attacks, and become stronger after every incident.
+  </div>
+  <div class="stats" style="margin-top:40px;max-width:700px">
+    <div class="stat">
+      <div class="stat-num" style="font-size:28px">5 min</div>
+      <div class="stat-lbl">to protected</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="font-size:28px">57/57</div>
+      <div class="stat-lbl">attacks caught</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="font-size:28px">0</div>
+      <div class="stat-lbl">false positives</div>
+    </div>
+  </div>
+  <div class="code" style="margin-top:36px;text-align:center;font-size:14px;max-width:500px">
+    <span class="c-muted"># See it live</span><br>
+    <span class="c-green">./quickstart.sh</span> &nbsp;&nbsp;<span class="c-muted"># or</span>&nbsp;&nbsp; <span class="c-green">quickstart.bat</span><br>
+    <span class="c-muted"># Dashboard → http://127.0.0.1:7799</span>
+  </div>
+  <div style="margin-top:28px;font-size:13px;color:var(--muted)">
+    github.com/NimrodNetzer/olive &nbsp;·&nbsp; DEMO.md &nbsp;·&nbsp; docs/ARCHITECTURE.md
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<div class="nav">
+  <button id="btn-prev" onclick="go(-1)" disabled>← Prev</button>
+  <span id="slide-counter">1 / 15</span>
+  <button id="btn-next" onclick="go(1)">Next →</button>
+</div>
+
+<div class="dots" id="dots"></div>
+
+<script>
+const slides = Array.from(document.querySelectorAll('.slide'));
+const total  = slides.length;
+let   cur    = 0;
+
+const progress = document.getElementById('progress');
+const counter  = document.getElementById('slide-counter');
+const label    = document.getElementById('slide-num-label');
+const btnPrev  = document.getElementById('btn-prev');
+const btnNext  = document.getElementById('btn-next');
+const dotsEl   = document.getElementById('dots');
+
+// Build dots
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+
+function goTo(n) {
+  if (n < 0 || n >= total) return;
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('exit');
+  setTimeout(() => slides[cur - (cur > n ? -1 : 0)].classList.remove('exit'), 400);
+  // clean up exit class
+  const prev = cur;
+  cur = n;
+  slides[prev].classList.remove('active');
+  setTimeout(() => slides[prev].classList.remove('exit'), 400);
+  slides[cur].classList.add('active');
+
+  // update UI
+  const pct = ((cur + 1) / total * 100).toFixed(1);
+  progress.style.width = pct + '%';
+  counter.textContent  = `${cur + 1} / ${total}`;
+  label.textContent    = `OLIVE  ${cur + 1}/${total}`;
+  btnPrev.disabled = cur === 0;
+  btnNext.disabled = cur === total - 1;
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i === cur);
+  });
+}
+
+function go(dir) { goTo(cur + dir); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); go(1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); go(-1); }
+  if (e.key === 'Home') goTo(0);
+  if (e.key === 'End')  goTo(total - 1);
+});
+
+// touch swipe
+let tx = 0;
+document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend',   e => {
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+});
+
+// init
+goTo(0);
+progress.style.width = (1/total*100).toFixed(1) + '%';
+</script>
+</body>
+</html>
