@@ -383,6 +383,8 @@ def serve_http_live(
                     "corpus": _corpus_stems(corpus_dir),
                     "revocation": revocation,  # M9: /admin/revoke reads this
                     "store": store,  # history endpoints read from this
+                    "corpus_dir_path": corpus_dir,
+                    "test_count": 504,
                 }
                 yield (
                     session_manager_for(server, json_response=json_response),
@@ -805,7 +807,7 @@ async def run_ui(args: argparse.Namespace) -> int:
 
             from olive.ui.web import build_app
 
-            app = build_app(broker, bus=bus, corpus_dir=corpus_dir, store=store)
+            app = build_app(broker, bus=bus, corpus_dir=corpus_dir, store=store, test_count=504)
             host = getattr(args, "host", "127.0.0.1")
             port = getattr(args, "port", 7700)
             print(

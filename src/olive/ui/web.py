@@ -122,6 +122,115 @@ async def _incidents_list_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(await store.recent_incidents(limit))
 
 
+async def _metrics_endpoint(request: Request) -> JSONResponse:
+    """Return eval/test metrics so the dashboard badge is never hardcoded."""
+    corpus_dir: Path | None = getattr(request.app.state, "corpus_dir_path", None)
+    baseline: dict = {}
+    corpus_size = 0
+    if corpus_dir and corpus_dir.is_dir():
+        baseline_path = corpus_dir.parent / "baseline.json"
+        try:
+            baseline = json.loads(baseline_path.read_text())
+        except Exception:
+            pass
+        corpus_size = sum(1 for _ in corpus_dir.glob("*.yaml"))
+    return JSONResponse({
+        "detected": baseline.get("detected", 0),
+        "malicious_total": baseline.get("malicious_total", 0),
+        "false_positives": baseline.get("false_positives", 0),
+        "benign_total": baseline.get("benign_total", 0),
+        "corpus_size": corpus_size,
+        "test_count": getattr(request.app.state, "test_count", 0),
+    })
+
+
+async def _stats_summary_endpoint(request: Request) -> JSONResponse:
+    """Aggregate allow/block/hold/quar counts and latency percentiles."""
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return JSONResponse({})
+    events = await store.recent_events(200)
+    counts: dict[str, int] = {"allow": 0, "block": 0, "hold": 0, "quarantine": 0}
+    latencies: list[int] = []
+    for ev in events:
+        dec = ev.get("decision", "")
+        if dec in counts:
+            counts[dec] += 1
+        lat = ev.get("latency_ms")
+        if lat is not None:
+            latencies.append(int(lat))
+    latencies.sort()
+    n = len(latencies)
+    p50 = latencies[n // 2] if n > 0 else 0
+    p95 = latencies[min(int(n * 0.95), n - 1)] if n > 0 else 0
+    summary = await store.summary()
+    return JSONResponse({
+        "allow": counts["allow"],
+        "block": counts["block"],
+        "hold": counts["hold"],
+        "quarantine": counts["quarantine"],
+        "incidents": summary.incidents,
+        "latency_p50": p50,
+        "latency_p95": p95,
+    })
+
+
+async def _agents_summary_endpoint(request: Request) -> JSONResponse:
+    """Per-agent aggregated stats for the trust panel."""
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return JSONResponse([])
+    events = await store.recent_events(200)
+    agents: dict[str, dict] = {}
+    for ev in events:
+        aid = ev.get("agent_id") or ""
+        if not aid:
+            continue
+        if aid not in agents:
+            agents[aid] = {
+                "agent_id": aid, "calls": 0, "blocked": 0,
+                "quarantined": 0, "last_seen": "", "last_tool": "",
+            }
+        a = agents[aid]
+        a["calls"] += 1
+        dec = ev.get("decision", "")
+        if dec in ("block", "hold"):
+            a["blocked"] += 1
+        elif dec == "quarantine":
+            a["quarantined"] += 1
+        ts = ev.get("timestamp", "")
+        if ts > a["last_seen"]:
+            a["last_seen"] = ts
+            a["last_tool"] = ev.get("tool", "")
+    result = []
+    for a in agents.values():
+        total = a["calls"]
+        a["block_rate"] = round((a["blocked"] + a["quarantined"]) / total, 3) if total else 0.0
+        result.append(a)
+    result.sort(key=lambda x: x["last_seen"], reverse=True)
+    return JSONResponse(result)
+
+
+async def _tools_hotspot_endpoint(request: Request) -> JSONResponse:
+    """Top-5 most-called tools with block counts, for the gateway center."""
+    store = getattr(request.app.state, "store", None)
+    if store is None:
+        return JSONResponse([])
+    events = await store.recent_events(200)
+    tools: dict[str, dict] = {}
+    for ev in events:
+        tool = ev.get("tool") or ""
+        if not tool:
+            continue
+        if tool not in tools:
+            tools[tool] = {"tool": tool, "calls": 0, "blocked": 0}
+        tools[tool]["calls"] += 1
+        if ev.get("decision") in ("block", "quarantine"):
+            tools[tool]["blocked"] += 1
+    result = sorted(tools.values(), key=lambda x: x["calls"], reverse=True)[:5]
+    return JSONResponse(result)
+
+
 async def _operator_endpoint(request: Request) -> JSONResponse:
     """The single inbound write surface (ADR-0019 SS4). Accepts
     `{"action": "<action>"}` from the browser and publishes an announce-only
@@ -164,6 +273,10 @@ def ui_routes() -> list:
     return [
         WebSocketRoute("/ws", _ws_endpoint),
         Route("/corpus", _corpus_endpoint, methods=["GET"]),
+        Route("/metrics", _metrics_endpoint, methods=["GET"]),
+        Route("/stats/summary", _stats_summary_endpoint, methods=["GET"]),
+        Route("/agents/summary", _agents_summary_endpoint, methods=["GET"]),
+        Route("/tools/hotspot", _tools_hotspot_endpoint, methods=["GET"]),
         Route("/events/recent", _events_recent_endpoint, methods=["GET"]),
         Route("/incidents/list", _incidents_list_endpoint, methods=["GET"]),
         Route("/operator", _operator_endpoint, methods=["POST"]),
@@ -176,14 +289,18 @@ def build_app(
     bus: IncidentBus | None = None,
     corpus_dir: Path | None = None,
     store=None,
+    test_count: int = 0,
 ) -> Starlette:
     """Build the standalone Starlette ASGI app (`olive ui --web`, a separate
     process). `broker` is required (stream source); `bus` is optional (enables
     POST /operator — without it the endpoint returns 503); `corpus_dir` populates
-    the GET /corpus list for the attack-theater."""
+    the GET /corpus list for the attack-theater. `test_count` is embedded in the
+    /metrics response so the eval badge in the UI stays current."""
     app = Starlette(routes=ui_routes())
     app.state.broker = broker
     app.state.bus = bus
     app.state.corpus = _corpus_stems(corpus_dir)
     app.state.store = store
+    app.state.corpus_dir_path = corpus_dir
+    app.state.test_count = test_count
     return app

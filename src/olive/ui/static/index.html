@@ -371,9 +371,53 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 .tab-badge.show{display:inline-block}
 /* historical feed entries */
 .fe-hist{opacity:.4}
+
+/* ── Sparkline + calls/min ── */
+#sparkline-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;width:100%;max-width:300px;padding:0 12px}
+#sparkline{width:100%;height:26px;border-radius:3px;opacity:.9}
+#calls-min{font-size:9px;color:var(--muted);letter-spacing:.5px}
+#calls-min b{color:var(--green);font-weight:bold}
+
+/* ── Latency chip ── */
+#latency-chip{font-size:9px;padding:2px 8px;border-radius:3px;background:rgba(57,211,195,.06);border:1px solid rgba(57,211,195,.18);color:var(--cyan);letter-spacing:.5px;flex-shrink:0;transition:border-color .3s}
+#latency-chip.warn{border-color:rgba(210,153,34,.4);color:var(--yellow)}
+
+/* ── Tool chips ── */
+#tool-chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:14px;max-width:380px}
+.tc{font-size:8px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;color:var(--dim);background:var(--surf2);white-space:nowrap;overflow:hidden;max-width:140px;text-overflow:ellipsis}
+.tc.tc-hot{border-color:rgba(248,81,73,.35);color:rgba(248,81,73,.8)}
+
+/* ── Quarantine wall ── */
+#qwall{display:none;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 14px;background:rgba(248,81,73,.05);border:1px solid rgba(248,81,73,.28);border-radius:5px;flex-shrink:0}
+#qwall-label{font-size:9px;font-weight:bold;color:var(--red);letter-spacing:1.5px;flex-shrink:0;white-space:nowrap}
+.qpill{font-size:8px;padding:1px 7px;border-radius:3px;background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.3);color:var(--red);letter-spacing:.5px;white-space:nowrap;overflow:hidden;max-width:120px;text-overflow:ellipsis}
+
+/* ── SIEGE escalation banner ── */
+@keyframes siege-banner-in{0%{opacity:0;transform:scale(.87)}12%{opacity:1;transform:scale(1)}88%{opacity:1;transform:scale(1)}100%{opacity:0}}
+#siege-banner{position:fixed;inset:0;z-index:9998;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(0,0,0,.78);pointer-events:none}
+#siege-banner.show{display:flex;animation:siege-banner-in 2.9s ease forwards}
+#siege-title{font-size:38px;font-weight:bold;letter-spacing:7px;color:var(--red);text-shadow:0 0 50px rgba(248,81,73,.7),0 0 100px rgba(248,81,73,.35)}
+#siege-sub{font-size:11px;letter-spacing:4px;color:rgba(248,81,73,.65)}
+
+/* ── Incident severity bar ── */
+#sev-bar{display:flex;gap:10px;align-items:center;flex-shrink:0;padding:3px 0 6px}
+.sev-seg{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted)}
+.sev-fill{height:5px;border-radius:2px;transition:width .4s;min-width:3px}
+.sev-H .sev-fill{background:var(--red)}.sev-M .sev-fill{background:var(--yellow)}.sev-L .sev-fill{background:var(--cyan)}
+.sev-n{font-weight:bold}
+
+/* ── Feed timeline gutter ── */
+#feed-log{padding-left:16px;position:relative}
+#feed-log::before{content:'';position:absolute;left:6px;top:4px;bottom:4px;width:1px;background:var(--border);border-radius:1px}
 </style>
 </head>
 <body>
+
+<!-- ── SIEGE escalation banner ── -->
+<div id="siege-banner">
+  <div id="siege-title">⚠ SIEGE MODE ⚠</div>
+  <div id="siege-sub">ZERO-TRUST LOCKDOWN &mdash; ALL SESSIONS UNDER MAXIMUM SCRUTINY</div>
+</div>
 
 <header>
   <span style="font-size:17px">🫒</span>
@@ -382,6 +426,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   <span id="eval-badge">57/57 CAUGHT &middot; 0/24 FP &middot; 432 TESTS</span>
   <div id="mode-badge">NORMAL</div>
   <div class="hcounts">
+    <div class="hc">sessions:<span class="hcv" id="hc-sess">0</span></div>
     <div class="hc">detections:<span class="hcv" id="hc-det">0</span></div>
     <div class="hc">findings:<span class="hcv" id="hc-rt">0</span></div>
     <div class="hc">proposals:<span class="hcv" id="hc-fp">0</span></div>
@@ -609,6 +654,18 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   <div id="gw-last">
     <span class="gwc" id="gw-await" style="color:var(--dim)">awaiting events&hellip;</span>
   </div>
+
+  <!-- live sparkline + calls/min -->
+  <div id="sparkline-wrap">
+    <canvas id="sparkline" height="26"></canvas>
+    <div id="calls-min"><b id="calls-min-val">0</b> calls/min</div>
+  </div>
+
+  <!-- latency + top tools -->
+  <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+    <span id="latency-chip">⚡ p50: —ms</span>
+  </div>
+  <div id="tool-chips"></div>
 </div>
 
 <!-- ── Attack Theater + tabs ── -->
@@ -688,6 +745,11 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   <!-- INCIDENTS pane -->
   <div class="pane hidden" id="pane-incidents">
     <div class="log-hdr">DETECTED INCIDENTS &nbsp;<span id="inc-count" style="color:var(--dim)">(—)</span>&nbsp;<span style="font-size:8px;color:var(--dim)">&mdash; click for detail</span></div>
+    <div id="sev-bar">
+      <div class="sev-seg sev-H"><span class="sev-fill" id="sev-fill-H" style="width:0px"></span><span style="font-size:8px;color:var(--muted)">HIGH</span><span class="sev-n" id="sev-n-H" style="color:var(--red)">0</span></div>
+      <div class="sev-seg sev-M"><span class="sev-fill" id="sev-fill-M" style="width:0px"></span><span style="font-size:8px;color:var(--muted)">MED</span><span class="sev-n" id="sev-n-M" style="color:var(--yellow)">0</span></div>
+      <div class="sev-seg sev-L"><span class="sev-fill" id="sev-fill-L" style="width:0px"></span><span style="font-size:8px;color:var(--muted)">LOW</span><span class="sev-n" id="sev-n-L" style="color:var(--cyan)">0</span></div>
+    </div>
     <div id="inc-list"><div style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">loading&hellip;</div></div>
   </div>
 
@@ -764,6 +826,12 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 
 </main>
 
+<!-- ── Quarantine wall ── -->
+<div id="qwall" style="margin:0 7px 5px">
+  <span id="qwall-label">&#128274; QUARANTINE WALL</span>
+  <div id="qwall-agents" style="display:contents"></div>
+</div>
+
 <!-- ── Event detail overlay ── -->
 <div id="overlay" onclick="ovClick(event)">
   <div id="ov-box">
@@ -782,9 +850,17 @@ const dce={def:0,rem:0,rt:0};
 let selCat='inj', corpusByCat={}, findCnt=0, propCnt=0, detCnt=0, neuCnt=0;
 let busMsgs=0, cmdDirs=0, curMode='normal';
 const dtimers={};
+// agents[id] = {allow,block,hold,quar, calls,last_tool,last_seen}
 const agents={};
+const quarantinedAgents=new Set();
 let pendingDrill=null; // {ts, caseName, cat, findings:[]}
 let drillTimer=null;
+// rolling windows for live metrics
+const eventTimes=[]; // epoch ms, last 300 events
+const latencyHistory=[]; // ms values, last 100
+const toolCounts={}; // tool -> {calls, blocked}
+let siegeBannerShown=false;
+let callsMinTimer=null;
 
 const DEPT_CARD={defense:'dc-def',remediation:'dc-rem',redteam:'dc-rt'};
 const DEPT_EV  ={defense:'ev-def',remediation:'ev-rem',redteam:'ev-rt'};
@@ -886,9 +962,12 @@ async function loadIncidents(){
     list.innerHTML='';
     if(!incidents.length){
       list.innerHTML='<div style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">no incidents recorded</div>';
+      renderSevBar({H:0,M:0,L:0});
       return;
     }
-    incidents.forEach(inc=>list.appendChild(renderIncidentRow(inc)));
+    const sev={H:0,M:0,L:0};
+    incidents.forEach(inc=>{sev[sevLvl(inc.confidence)]++;list.appendChild(renderIncidentRow(inc));});
+    renderSevBar(sev);
   }catch(_){}
 }
 
@@ -909,8 +988,13 @@ async function loadHistory(){
       if(d==='block'||d==='quarantine'){detCnt++;neuCnt++;}
       const aid=ev.agent_id;
       if(aid){
-        if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0};
-        if(agents[aid][d]!==undefined) agents[aid][d]++;
+        if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0,calls:0,last_tool:'',last_seen:''};
+        const a=agents[aid];
+        if(a[d]!==undefined) a[d]++;
+        a.calls=(a.calls||0)+1;
+        if(ev.tool) a.last_tool=ev.tool;
+        if((ev.timestamp||'')>=(a.last_seen||'')) a.last_seen=ev.timestamp||'';
+        if(d==='quarantine') quarantinedAgents.add(aid);
       }
       // add dimmed historical entry to feed
       const clsMap={allow:'da',block:'db',hold:'dh',quarantine:'dq'};
@@ -934,6 +1018,8 @@ async function loadHistory(){
     renderTrust();
     updateSummary();
     updateOrgCounts();
+    document.getElementById('hc-sess').textContent=Object.keys(agents).length;
+    renderQwall();
   }catch(_){}
 }
 
@@ -1005,10 +1091,42 @@ function onDecision(ev){
 
   const aid=ev.agent_id;
   if(aid){
-    if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0};
-    if(agents[aid][d]!==undefined) agents[aid][d]++;
+    if(!agents[aid]) agents[aid]={allow:0,block:0,hold:0,quar:0,calls:0,last_tool:'',last_seen:''};
+    const a=agents[aid];
+    if(a[d]!==undefined) a[d]++;
+    a.calls=(a.calls||0)+1;
+    if(ev.tool) a.last_tool=ev.tool;
+    if(ev.timestamp>=(a.last_seen||'')) a.last_seen=ev.timestamp||'';
     renderTrust();
+    // session counter
+    document.getElementById('hc-sess').textContent=Object.keys(agents).length;
   }
+
+  // quarantine tracking
+  if(d==='quarantine'&&aid){
+    quarantinedAgents.add(aid);
+    renderQwall();
+  }
+
+  // rolling event times + latency
+  eventTimes.push(Date.now());
+  if(eventTimes.length>300) eventTimes.shift();
+  if(ev.latency_ms!=null){
+    latencyHistory.push(Number(ev.latency_ms));
+    if(latencyHistory.length>100) latencyHistory.shift();
+    updateLatencyChip();
+  }
+
+  // tool hotspot tracking
+  const tool=ev.tool||'';
+  if(tool){
+    if(!toolCounts[tool]) toolCounts[tool]={calls:0,blocked:0};
+    toolCounts[tool].calls++;
+    if(d==='block'||d==='quarantine') toolCounts[tool].blocked++;
+    if((toolCounts[tool].calls%5)===1) renderToolChips();
+  }
+
+  pushSparkline(d==='block'||d==='quarantine');
 
   showToast(d, ev.rule||'', ev.agent_id||'');
   updateLastEvent(ev);
@@ -1019,11 +1137,13 @@ function onDecision(ev){
 function onIntel(ev){
   if(ev.kind==='mode-change'){
     const e=(ev.evidence||'').toLowerCase();
+    const prevMode=curMode;
     curMode=e.includes('siege')?'siege':e.includes('suspicious')?'suspicious':'normal';
     modeBadge.textContent=curMode.toUpperCase();
     modeBadge.className=curMode==='normal'?'':curMode;
     document.body.className=curMode==='normal'?'':curMode;
     updateCmdrStatus();
+    if(curMode==='siege'&&prevMode!=='siege') showSiegeBanner();
   }
   if(ev.kind==='siege-declared'){
     // Extract frozen session count from evidence: "SIEGE declared: N session(s) frozen; ..."
@@ -1161,9 +1281,27 @@ function renderTrust(){
     const score=total?Math.round((1-bad/total)*100):100;
     const tc=score>=85?'ta-trust':score>=50?'ta-warn':'ta-danger';
     const tl=score>=85?'TRUSTED':score>=50?'SUSPECT':'HOSTILE';
+    const blockPct=total?Math.round(bad/total*100):0;
+    const calls=a.calls||total;
+    const lastTool=a.last_tool||'';
     const row=document.createElement('div');
     row.className=`ta-row ${tc}`;
-    row.innerHTML=`<div class="ta-name" title="${id}">${id}</div><div class="ta-bar-bg"><div class="ta-bar" style="width:${Math.max(4,score)}%"></div></div><div class="ta-score">${score}%</div><div class="ta-badge">${tl}</div>`;
+    row.style.flexDirection='column';
+    row.style.alignItems='stretch';
+    row.style.gap='3px';
+    row.innerHTML=`
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="ta-name" title="${id}">${id}</div>
+        <div class="ta-bar-bg"><div class="ta-bar" style="width:${Math.max(4,score)}%"></div></div>
+        <div class="ta-score">${score}%</div>
+        <div class="ta-badge">${tl}</div>
+      </div>
+      <div style="display:flex;gap:8px;font-size:8px;color:var(--dim);padding-left:2px">
+        <span>${calls} calls</span>
+        ${bad>0?`<span style="color:var(--red)">${blockPct}% blocked</span>`:'<span style="color:var(--green)">clean</span>'}
+        ${lastTool?`<span title="${lastTool}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px">${lastTool}</span>`:''}
+      </div>
+    `;
     list.appendChild(row);
   });
 }
@@ -1240,16 +1378,21 @@ const KIND_CLS={
   'decision:allow':'da','decision:block':'db','decision:hold':'dh','decision:quarantine':'dq',
   'redteam-finding':'rt','fix-proposed':'fp','operator-request':'op','mode-change':'mc',
 };
+const FEED_ICON={
+  da:'✓',db:'✗',dh:'⏸',dq:'⛔',rt:'⚡',fp:'🔧',op:'▶',mc:'⚠',df:'·',
+};
 function addFeed(ev){
   const el=document.createElement('div');
-  let cls='fe '+(ev.kind==='decision'?KIND_CLS['decision:'+ev.decision]:KIND_CLS[ev.kind])||'df';
-  el.className=cls;
+  const clsKey=ev.kind==='decision'?('decision:'+ev.decision):ev.kind;
+  const cls=KIND_CLS[clsKey]||'df';
+  el.className='fe '+cls;
   const ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
   const dept=ev.source_dept?` [${ev.source_dept}]`:'';
+  const icon=FEED_ICON[cls]||'·';
   const detail=ev.kind==='decision'
-    ?`${(ev.decision||'').toUpperCase()} rule=${ev.rule||'-'} ${ev.evidence||''}`
-    :`${ev.kind}${dept} ${ev.object_id||''} ${ev.evidence||''}`;
-  el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${ev.kind}</span>${detail}`;
+    ?`${(ev.decision||'').toUpperCase()} ${ev.tool||''} ${ev.rule||'-'}`
+    :`${ev.kind}${dept} ${ev.evidence?ev.evidence.substring(0,55):''}`;
+  el.innerHTML=`<span class="fts">${ts}</span><span class="fk">${icon}</span>${detail}`;
   el.addEventListener('click',()=>showOverlay(ev));
   feedLog.prepend(el);
   while(feedLog.children.length>50) feedLog.removeChild(feedLog.lastChild);
@@ -1440,14 +1583,39 @@ function stopDemo(finished=false){
   if(finished){
     demoSteps.forEach(s=>s.className='dp-step done');
     demoProgEl.classList.add('show');
-    document.getElementById('demo-label').textContent='demo complete ✓';
-    setTimeout(()=>demoProgEl.classList.remove('show'),3000);
+    document.getElementById('demo-label').textContent='escalating…';
     updateSummary();
-    // Auto-switch to ORG/summary tab so investor sees the results
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
-    const orgTab=document.querySelector('.tab[data-pane="org"]');
-    if(orgTab){orgTab.classList.add('active');document.getElementById('pane-org').classList.remove('hidden');}
+    // Demo story: escalate to suspicious after 4 drills, then push to siege with one more exf
+    setTimeout(async()=>{
+      try{
+        await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'force-mode-request',evidence:'SUSPICIOUS — threshold exceeded, elevated monitoring'})});
+        addFeed({kind:'mode-change',source_dept:'ui',evidence:'[DEMO] escalating to SUSPICIOUS'});
+      }catch(e){}
+    },800);
+    setTimeout(async()=>{
+      const cases=corpusByCat['exf']||corpusByCat['inj']||[];
+      if(cases.length){
+        const chosen=cases[Math.floor(Math.random()*cases.length)];
+        pendingDrill={ts:Date.now(),caseName:chosen,cat:'exf',findings:[]};
+        renderDrillCard(); launchAnim();
+        try{
+          const r=await fetch('/operator',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'run-campaign-request',evidence:`category:exf case:${chosen}`})});
+          const d=await r.json();
+          addFeed({kind:'operator-request',source_dept:'ui',object_id:d.object_id,evidence:`[DEMO FINALE] exfil cascade — ${chosen}`});
+        }catch(e){}
+      }
+    },3500);
+    setTimeout(()=>{
+      document.getElementById('demo-label').textContent='demo complete ✓';
+      setTimeout(()=>demoProgEl.classList.remove('show'),3000);
+      // Switch to INCIDENTS tab to show the full picture
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.pane').forEach(p=>p.classList.add('hidden'));
+      const incTab=document.querySelector('.tab[data-pane="incidents"]');
+      if(incTab){incTab.classList.add('active');document.getElementById('pane-incidents').classList.remove('hidden');loadIncidents();}
+    },7000);
   }
   setTimeout(()=>{fireBtn.disabled=(corpusByCat[selCat]||[]).length===0;},500);
 }
@@ -1495,9 +1663,184 @@ async function triggerSchedDrill(){
   }catch(e){}
 }
 
+// ── Metrics + stats on connect ────────────────────────────────────────────────
+async function loadMetrics(){
+  try{
+    const r=await fetch('/metrics'); if(!r.ok) return;
+    const m=await r.json();
+    const badge=document.getElementById('eval-badge');
+    if(badge&&m.detected!=null){
+      const tests=m.test_count>0?` &middot; ${m.test_count} TESTS`:'';
+      badge.innerHTML=`${m.detected}/${m.malicious_total} CAUGHT &middot; ${m.false_positives}/${m.benign_total} FP${tests}`;
+    }
+  }catch(_){}
+}
+
+async function loadStatsSummary(){
+  try{
+    const r=await fetch('/stats/summary'); if(!r.ok) return;
+    const s=await r.json();
+    if(s.latency_p50>0) updateLatencyChipVal(s.latency_p50, s.latency_p95);
+  }catch(_){}
+}
+
+async function loadAgentsSummaryData(){
+  try{
+    const r=await fetch('/agents/summary'); if(!r.ok) return;
+    const list=await r.json();
+    list.forEach(a=>{
+      const id=a.agent_id;
+      if(!agents[id]) agents[id]={allow:0,block:0,hold:0,quar:0,calls:0,last_tool:'',last_seen:''};
+      const ag=agents[id];
+      if(!ag.calls) ag.calls=a.calls||0;
+      if(!ag.last_tool) ag.last_tool=a.last_tool||'';
+      if(!ag.last_seen) ag.last_seen=a.last_seen||'';
+    });
+    if(list.length){renderTrust();document.getElementById('hc-sess').textContent=Object.keys(agents).length;}
+  }catch(_){}
+}
+
+async function loadToolsHotspot(){
+  try{
+    const r=await fetch('/tools/hotspot'); if(!r.ok) return;
+    const list=await r.json();
+    list.forEach(t=>{toolCounts[t.tool]={calls:t.calls,blocked:t.blocked};});
+    renderToolChips();
+  }catch(_){}
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+const SPARKLINE_BUCKETS=60;
+const sparkBuckets=new Array(SPARKLINE_BUCKETS).fill(0);
+const sparkBlocked=new Array(SPARKLINE_BUCKETS).fill(false);
+let sparkPtr=0, sparkLastSec=0;
+
+function pushSparkline(isBlock){
+  const nowSec=Math.floor(Date.now()/1000);
+  if(nowSec!==sparkLastSec){
+    sparkPtr=(sparkPtr+1)%SPARKLINE_BUCKETS;
+    sparkBuckets[sparkPtr]=0;
+    sparkBlocked[sparkPtr]=false;
+    sparkLastSec=nowSec;
+  }
+  sparkBuckets[sparkPtr]++;
+  if(isBlock) sparkBlocked[sparkPtr]=true;
+  drawSparkline();
+}
+
+function drawSparkline(){
+  const canvas=document.getElementById('sparkline');
+  if(!canvas) return;
+  const w=canvas.offsetWidth||300; const h=26;
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+  const buckets=[];
+  for(let i=1;i<=SPARKLINE_BUCKETS;i++) buckets.push({v:sparkBuckets[(sparkPtr+i)%SPARKLINE_BUCKETS],b:sparkBlocked[(sparkPtr+i)%SPARKLINE_BUCKETS]});
+  const mx=Math.max(...buckets.map(b=>b.v),1);
+  const bw=w/SPARKLINE_BUCKETS;
+  // filled area
+  ctx.beginPath();
+  ctx.moveTo(0,h);
+  buckets.forEach((b,i)=>{const y=h-Math.round(b.v/mx*(h-4));ctx.lineTo(i*bw,y);});
+  ctx.lineTo(w,h);
+  ctx.closePath();
+  const grad=ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'rgba(63,185,80,0.35)');
+  grad.addColorStop(1,'rgba(63,185,80,0.04)');
+  ctx.fillStyle=grad;
+  ctx.fill();
+  // line
+  ctx.beginPath();
+  buckets.forEach((b,i)=>{const y=h-Math.round(b.v/mx*(h-4));i===0?ctx.moveTo(i*bw,y):ctx.lineTo(i*bw,y);});
+  ctx.strokeStyle='rgba(63,185,80,0.7)';
+  ctx.lineWidth=1.2;
+  ctx.stroke();
+  // blocked buckets: red dot
+  buckets.forEach((b,i)=>{
+    if(b.b&&b.v>0){
+      const y=h-Math.round(b.v/mx*(h-4));
+      ctx.beginPath();ctx.arc(i*bw+bw/2,y,2.5,0,2*Math.PI);
+      ctx.fillStyle='rgba(248,81,73,0.8)';ctx.fill();
+    }
+  });
+}
+
+// ── Calls/min ─────────────────────────────────────────────────────────────────
+function updateCallsMin(){
+  const now=Date.now(); const cutoff=now-60000;
+  while(eventTimes.length&&eventTimes[0]<cutoff) eventTimes.shift();
+  const el=document.getElementById('calls-min-val');
+  if(el) el.textContent=eventTimes.length;
+}
+if(callsMinTimer) clearInterval(callsMinTimer);
+callsMinTimer=setInterval(updateCallsMin,5000);
+
+// ── Latency chip ──────────────────────────────────────────────────────────────
+function updateLatencyChip(){
+  if(!latencyHistory.length) return;
+  const sorted=[...latencyHistory].sort((a,b)=>a-b);
+  const p50=sorted[Math.floor(sorted.length/2)];
+  updateLatencyChipVal(p50);
+}
+function updateLatencyChipVal(p50,p95){
+  const el=document.getElementById('latency-chip');
+  if(!el) return;
+  const txt=p95?`⚡ p50:${p50}ms p95:${p95}ms`:`⚡ p50:${p50}ms`;
+  el.textContent=txt;
+  el.classList.toggle('warn',p50>200);
+}
+
+// ── Tool chips ────────────────────────────────────────────────────────────────
+function renderToolChips(){
+  const el=document.getElementById('tool-chips');
+  if(!el) return;
+  const sorted=Object.entries(toolCounts).sort((a,b)=>b[1].calls-a[1].calls).slice(0,4);
+  el.innerHTML=sorted.map(([t,c])=>{
+    const hot=c.blocked>0;
+    const label=t.length>18?t.substring(0,16)+'…':t;
+    return `<span class="tc${hot?' tc-hot':''}" title="${t}: ${c.calls} calls, ${c.blocked} blocked">${label} ×${c.calls}${hot?` ✗${c.blocked}`:''}</span>`;
+  }).join('');
+}
+
+// ── Quarantine wall ───────────────────────────────────────────────────────────
+function renderQwall(){
+  const wall=document.getElementById('qwall');
+  const container=document.getElementById('qwall-agents');
+  if(!wall||!container) return;
+  if(!quarantinedAgents.size){wall.style.display='none';return;}
+  wall.style.display='flex';
+  container.innerHTML=[...quarantinedAgents].map(id=>`<span class="qpill">&#128274; ${id}</span>`).join('');
+}
+
+// ── SIEGE banner ──────────────────────────────────────────────────────────────
+function showSiegeBanner(){
+  if(siegeBannerShown) return; // only once per session
+  siegeBannerShown=true;
+  const el=document.getElementById('siege-banner');
+  if(!el) return;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  el.addEventListener('animationend',()=>{el.classList.remove('show');},{ once:true });
+}
+
+// ── Incident severity bar ──────────────────────────────────────────────────────
+function renderSevBar(sev){
+  const max=Math.max(sev.H,sev.M,sev.L,1);
+  ['H','M','L'].forEach(k=>{
+    const fill=document.getElementById('sev-fill-'+k);
+    const n=document.getElementById('sev-n-'+k);
+    if(fill) fill.style.width=Math.max(3,Math.round(sev[k]/max*60))+'px';
+    if(n) n.textContent=sev[k];
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 connect();
 loadCorpus();
+loadMetrics();
+loadStatsSummary();
+loadAgentsSummaryData();
+loadToolsHotspot();
 </script>
 </body>
 </html>
