@@ -87,6 +87,11 @@ async def _traffic_loop(priv_pem: bytes) -> None:
 
     priv_key = load_pem_private_key(priv_pem, password=None)
 
+    # Fresh session ID each run so a previously quarantined session from the
+    # DB does not trip the circuit breaker before Scene 1 even starts.
+    _run_ts = int(datetime.now(timezone.utc).timestamp())
+    _session_id = f"sess-demo-{_run_ts}"
+
     def _token() -> str:
         now = datetime.now(timezone.utc)
         return pyjwt.encode(
@@ -94,7 +99,7 @@ async def _traffic_loop(priv_pem: bytes) -> None:
                 "sub": "support-agent-7f3a",
                 "org": "demo-company",
                 "role": "customer-support",   # matches default.yaml
-                "session_id": "sess-live-demo",
+                "session_id": _session_id,
                 "capabilities": [],
                 "task_resources": [],
                 "aud": "olive-gateway",
