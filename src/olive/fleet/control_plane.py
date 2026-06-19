@@ -140,6 +140,25 @@ def build_control_plane_app(
         return await fleet_mode_set(request)
 
     @_auth
+    async def fleet_mode_gateway(request: Request) -> Response:
+        gateway_id = request.path_params["gateway_id"].strip()
+        if not gateway_id:
+            return JSONResponse({"error": "gateway_id required"}, status_code=400)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid JSON"}, status_code=400)
+        mode = body.get("mode", "").lower()
+        if mode not in ("normal", "suspicious", "siege"):
+            return JSONResponse({"error": f"invalid mode {mode!r}"}, status_code=400)
+        found = await registry.set_gateway_mode(
+            gateway_id, mode, issued_by=request.state.caller
+        )
+        if not found:
+            return JSONResponse({"error": f"gateway '{gateway_id}' not found"}, status_code=404)
+        return JSONResponse({"gateway_id": gateway_id, "mode": mode, "status": "commanded"})
+
+    @_auth
     async def policy(request: Request) -> Response:
         role = request.path_params["role"]
         # Reject anything that isn't a safe identifier — no path traversal.
@@ -157,5 +176,6 @@ def build_control_plane_app(
         Route("/fleet/events", fleet_events, methods=["GET"]),
         Route("/fleet/incidents", fleet_incidents, methods=["GET"]),
         Route("/fleet/mode", fleet_mode_router, methods=["GET", "POST"]),
+        Route("/fleet/mode/{gateway_id}", fleet_mode_gateway, methods=["POST"]),
         Route("/fleet/policy/{role}", policy, methods=["GET"]),
     ])

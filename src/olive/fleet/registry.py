@@ -156,6 +156,27 @@ class GatewayRegistry:
         )
         await self._db.commit()
 
+    async def set_gateway_mode(self, gateway_id: str, mode: str, issued_by: str) -> bool:
+        """Set commanded_mode for a single gateway. Returns False if gateway_id unknown."""
+        assert self._db is not None
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._db.execute(
+            "SELECT 1 FROM gateway_instances WHERE gateway_id = ?", (gateway_id,)
+        ) as cur:
+            if await cur.fetchone() is None:
+                return False
+        await self._db.execute(
+            "UPDATE gateway_instances SET commanded_mode = ? WHERE gateway_id = ?",
+            (mode, gateway_id),
+        )
+        await self._db.execute(
+            """INSERT INTO fleet_mode_commands (target, mode, issued_by, issued_at)
+               VALUES (?, ?, ?, ?)""",
+            (gateway_id, mode, issued_by, now),
+        )
+        await self._db.commit()
+        return True
+
     async def list_gateways(self) -> list[dict]:
         assert self._db is not None
         async with self._db.execute(

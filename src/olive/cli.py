@@ -24,6 +24,7 @@ from olive.config import ConfigError, GatewayConfig, load_config
 from olive.gateway.pipeline import InspectorPipeline
 from olive.gateway.proxy import OliveGateway
 from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
+from olive.inspectors.capability import CapabilityInspector
 from olive.inspectors.context_policy import ContextPolicyInspector
 from olive.inspectors.decode import DecodeInspector
 from olive.inspectors.patterns import PatternInspector
@@ -54,6 +55,7 @@ def build_pipeline(config: GatewayConfig) -> InspectorPipeline:
             # zero), then the decode layer (0.5) which defeats deterministic
             # obfuscation.
             PolicyInspector(config.roles),
+            CapabilityInspector(config.tool_capabilities),
             ContextPolicyInspector(config.context_rules),
             SelfProtectInspector(),
             PatternInspector(config.injection_patterns),

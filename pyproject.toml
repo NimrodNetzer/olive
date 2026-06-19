@@ -28,6 +28,9 @@ intelligence = [
 ui = [
     "textual>=0.60",
 ]
+langchain = [
+    "langchain-core>=0.2",  # LangChain adapter (ADR-0028); optional open-core seam
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

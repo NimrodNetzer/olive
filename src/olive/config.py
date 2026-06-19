@@ -48,6 +48,9 @@ class GatewayConfig:
     # Contextual authorization rules (ADR-0010), keyed by role. A role with no
     # rules behaves exactly as before - coarse allowlist only.
     context_rules: dict[str, tuple[ContextRule, ...]] = field(default_factory=dict)
+    # Per-tool capability requirements (ADR-0028), keyed by tool name. Empty
+    # means no capability enforcement — fully backward-compatible.
+    tool_capabilities: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 def load_config(path: str | Path) -> GatewayConfig:
@@ -101,6 +104,7 @@ def load_config(path: str | Path) -> GatewayConfig:
 
     upstreams = _parse_upstreams(raw.get("upstreams", []))
     resource_extractors = _parse_resources(raw.get("resources", {}))
+    tool_capabilities = _parse_capability_requirements(raw.get("capability_requirements", {}))
 
     return GatewayConfig(
         agent_id=gateway["agent_id"],
@@ -115,6 +119,7 @@ def load_config(path: str | Path) -> GatewayConfig:
         upstreams=upstreams,
         resource_extractors=resource_extractors,
         context_rules=context_rules,
+        tool_capabilities=tool_capabilities,
     )
 
 
@@ -188,6 +193,25 @@ def _parse_resources(raw: object) -> dict[str, ResourceExtractor]:
             type=rtype, id_arg=id_arg, classification=classification, hash_id=hash_id
         )
     return extractors
+
+
+def _parse_capability_requirements(raw: object) -> dict[str, frozenset[str]]:
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'capability_requirements' must be a mapping of tool -> spec")
+    result: dict[str, frozenset[str]] = {}
+    for tool, spec in raw.items():
+        if not isinstance(spec, dict):
+            raise ConfigError(f"capability_requirements for '{tool}' must be a mapping")
+        caps = spec.get("required_capabilities", [])
+        if not isinstance(caps, list) or not all(isinstance(c, str) for c in caps):
+            raise ConfigError(
+                f"capability_requirements for '{tool}' required_capabilities must be a list of strings"
+            )
+        if caps:
+            result[tool] = frozenset(caps)
+    return result
 
 
 def _parse_upstreams(raw: object) -> tuple[UpstreamSpec, ...]:

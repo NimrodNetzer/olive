@@ -60,6 +60,9 @@ class SecurityContext:
     # contextual resource predicates simply do not match, and authorization
     # falls back to the coarse allowlist. Never carries raw argument payloads.
     requested_resource: ResourceRef | None = None
+    # Capabilities carried in the agent's identity token (ADR-0007, ADR-0028).
+    # CapabilityInspector enforces per-tool required_capabilities against this set.
+    capabilities: tuple[str, ...] = ()
     # Resource ids the current task is scoped to (from the attested identity,
     # ADR-0010). Explicit task binding: a resource rule checks the requested
     # resource id against this set.
