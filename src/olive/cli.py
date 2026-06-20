@@ -197,6 +197,7 @@ def serve_http(
     dashboard_token: str | None = None,
     webhook_url: str | None = None,
     webhook_token: str | None = None,
+    llm_agents: bool = False,
 ) -> None:
     """Serve over streamable HTTP with bearer-token identity enforcement.
 
@@ -239,6 +240,7 @@ def serve_http(
             dashboard_token=dashboard_token,
             webhook_url=webhook_url,
             webhook_token=webhook_token,
+            llm_agents=llm_agents,
         )
         return
 
@@ -271,6 +273,7 @@ def serve_http_live(
     dashboard_token: str | None = None,
     webhook_url: str | None = None,
     webhook_token: str | None = None,
+    llm_agents: bool = False,
 ) -> None:
     """The `olive serve --ui` assembly (ADR-0020): one process, one event loop,
     sharing ONE breaker + bus + UIBroker between the gateway and the co-mounted
@@ -386,6 +389,7 @@ def serve_http_live(
                     revocations=revocation,
                     proposal_ledger=proposals,
                     operator_bridge=True,
+                    llm_agents=llm_agents,
                 )
 
                 # Wire the heartbeat now that we have the commander reference.
@@ -1044,6 +1048,12 @@ def main() -> None:
         help="bearer token for --webhook-url authentication (sent as Authorization header).",
     )
     serve.add_argument(
+        "--llm-agents",
+        action="store_true",
+        help="activate LLM reasoning agents for defense, red-team, and builder "
+             "departments (ADR-0029). Requires GROQ_API_KEY or ANTHROPIC_API_KEY.",
+    )
+    serve.add_argument(
         "upstream",
         nargs=argparse.REMAINDER,
         help="upstream MCP server command (prefix with --)",
@@ -1255,6 +1265,7 @@ def main() -> None:
                 dashboard_token=getattr(args, "dashboard_token", None),
                 webhook_url=getattr(args, "webhook_url", None),
                 webhook_token=getattr(args, "webhook_token", None),
+                llm_agents=getattr(args, "llm_agents", False),
             )
         else:
             asyncio.run(run_gateway(args.config, upstream, args.db))

@@ -34,7 +34,9 @@ class Sentinel(Protocol):
 class PromptInjectionSentinel:
     """Deterministic-first prompt-injection detection. A known trigger (plain or
     obfuscated) yields a high-confidence signal with no LLM call; only otherwise
-    is the Claude semantic analyzer consulted, and its verdict is still advisory."""
+    is the Claude semantic analyzer consulted, and its verdict is still advisory.
+    When an LLMContextSentinel is wired (ADR-0029), it runs after SemanticAnalyzer
+    and reasons about the full session window rather than a single call."""
 
     name = "prompt-injection"
     directions: frozenset[Direction] = frozenset({"inbound"})
@@ -48,6 +50,7 @@ class PromptInjectionSentinel:
         self._patterns = [normalize(p) for p in patterns if p.strip()]
         self._analyzer = analyzer or SemanticAnalyzer()
         self._min_confidence = min_confidence
+        self._llm_sentinel = None  # LLMContextSentinel | None; wired by departments.py
 
     @property
     def llm_enabled(self) -> bool:
@@ -84,6 +87,23 @@ class PromptInjectionSentinel:
                 evidence=f"semantic: {rationale}",
                 attack_type="prompt-injection",
             )
+        # Session-window LLM reasoning (ADR-0029): only when no deterministic or
+        # per-call semantic signal fired. Advisory only — fail-safe on any error.
+        if self._llm_sentinel is not None:
+            excerpt = (content[:200] if content else "")
+            ctx_det, ctx_conf, ctx_type, ctx_rat = await self._llm_sentinel.score(
+                event.ctx.session_id,
+                event.ctx.role,
+                event.ctx.tool,
+                excerpt,
+            )
+            if ctx_det and ctx_conf >= self._min_confidence:
+                return Signal.fire(
+                    self.name,
+                    confidence=ctx_conf,
+                    evidence=f"llm-context ({ctx_type}): {ctx_rat}",
+                    attack_type=ctx_type or "prompt-injection",
+                )
         return Signal.none(self.name)
 
 
