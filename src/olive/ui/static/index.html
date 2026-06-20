@@ -1872,18 +1872,20 @@ async function loadLlmStatus(){
     const state=document.getElementById('llm-state');
     const hint=document.getElementById('llm-hint');
     if(!chip||!state) return;
+    const prov=s.provider||'';
+    const provLabel=prov==='groq'?'Groq llama-3.3':prov==='anthropic'?'Claude Opus':'LLM';
     if(!s.available){
       chip.className='unavailable';
       state.textContent='UNAVAILABLE';
-      if(hint) hint.textContent='set ANTHROPIC_API_KEY to enable';
+      if(hint) hint.textContent='set ANTHROPIC_API_KEY or GROQ_API_KEY in .env to enable';
     } else if(s.enabled){
       chip.className='on';
       state.textContent='ON';
-      if(hint) hint.textContent='Claude Opus · semantic analysis active';
+      if(hint) hint.textContent=`${provLabel} · semantic analysis active · click to disable`;
     } else {
       chip.className='';
       state.textContent='OFF';
-      if(hint) hint.textContent='deterministic only · click to activate Claude';
+      if(hint) hint.textContent=`${provLabel} ready · click to activate`;
     }
   }catch(_){}
 }

@@ -205,6 +205,12 @@ class OperatorBridge:
     def llm_available(self) -> bool:
         return self._injection_sentinel.llm_available if self._injection_sentinel else False
 
+    @property
+    def llm_provider(self) -> str | None:
+        if self._injection_sentinel is None:
+            return None
+        return self._injection_sentinel._analyzer.provider
+
     async def handle(self, obj: IncidentObject) -> None:
         action = obj.report.action
         if action == "toggle-llm-request":

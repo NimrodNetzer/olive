@@ -232,11 +232,12 @@ async def _tools_hotspot_endpoint(request: Request) -> JSONResponse:
 
 
 async def _llm_status_endpoint(request: Request) -> JSONResponse:
-    """Return current LLM (SemanticAnalyzer) enabled/available state."""
+    """Return current LLM (SemanticAnalyzer) enabled/available/provider state."""
     bridge = getattr(request.app.state, "operator_bridge", None)
     return JSONResponse({
         "available": bridge.llm_available if bridge else False,
         "enabled": bridge.llm_enabled if bridge else False,
+        "provider": bridge.llm_provider if bridge else None,
     })
 
 

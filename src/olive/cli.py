@@ -12,9 +12,33 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import os
 import sys
 from contextlib import AsyncExitStack
 from pathlib import Path
+
+
+def _load_dotenv(path: Path | None = None) -> None:
+    """Load key=value pairs from a .env file into os.environ.
+
+    Keys already present in the environment are NOT overridden (explicit env
+    vars take precedence over .env). Lines starting with # and blank lines are
+    skipped. Values may be optionally quoted with single or double quotes.
+    No new dependency — intentionally hand-rolled to keep the core dep-free.
+    """
+    env_file = path or (Path.cwd() / ".env")
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except FileNotFoundError:
+        pass
 
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -914,6 +938,7 @@ def run_ca(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
+    _load_dotenv()  # load .env before any command reads env vars
     parser = argparse.ArgumentParser(prog="olive")
     sub = parser.add_subparsers(dest="command", required=True)
 
