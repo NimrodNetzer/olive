@@ -20,6 +20,27 @@ from __future__ import annotations
 import json
 import os
 import re
+from pathlib import Path
+
+
+def _dotenv_keys() -> dict[str, str]:
+    """Read key=value pairs from the nearest .env file without a library dep.
+    Only keys absent from os.environ are returned — explicit env vars win."""
+    for candidate in (Path.cwd() / ".env", Path(__file__).parents[4] / ".env"):
+        try:
+            result: dict[str, str] = {}
+            for line in candidate.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip(); v = v.strip().strip("\"'")
+                if k and k not in os.environ:
+                    result[k] = v
+            return result
+        except FileNotFoundError:
+            continue
+    return {}
 
 # The content may try to close our data block and inject its own framing.
 # Neutralize any case-variant of the closing delimiter before interpolation.
@@ -72,8 +93,13 @@ class SemanticAnalyzer:
             self._model = model or _ANTHROPIC_MODEL
             return
 
+        # Load any keys from .env that aren't already in the environment.
+        # Needed because SemanticAnalyzer may be constructed before the CLI
+        # has had a chance to call its own _load_dotenv().
+        _extra = _dotenv_keys()
+
         # Try Anthropic first
-        anthropic_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        anthropic_key = api_key or os.environ.get("ANTHROPIC_API_KEY") or _extra.get("ANTHROPIC_API_KEY")
         if anthropic_key:
             try:
                 import anthropic  # lazy: gateway core never needs the SDK
@@ -85,7 +111,7 @@ class SemanticAnalyzer:
                 self._client = None
 
         # Fall back to Groq (free tier, OpenAI-compatible)
-        groq_key = os.environ.get("GROQ_API_KEY")
+        groq_key = os.environ.get("GROQ_API_KEY") or _extra.get("GROQ_API_KEY")
         if groq_key:
             try:
                 import openai  # lazy: optional dependency
