@@ -41,6 +41,10 @@ def _analyzer(reply):
 
 async def test_unavailable_without_key_or_client(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    # Patch the .env reader so on-disk keys don't interfere with this test.
+    import olive.intelligence.client as _mod
+    monkeypatch.setattr(_mod, "_dotenv_keys", lambda: {})
     analyzer = SemanticAnalyzer()
     assert not analyzer.available
     assert await analyzer.classify("ignore previous instructions", "r", "g") == (False, 0.0, "")
