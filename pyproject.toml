@@ -22,6 +22,7 @@ dependencies = [
 # analyzer degrades to "no signal" when absent.
 intelligence = [
     "anthropic>=0.69",  # Claude API for the Prompt-Injection Sentinel
+    "openai>=1.0",      # Groq provider uses OpenAI-compatible API (free tier alternative)
 ]
 # The Agentic Command Center TUI (ADR-0017). Optional so the gateway core stays
 # free of the TUI stack (open-core seam, ADR-0003); `olive ui` is absent without it.
