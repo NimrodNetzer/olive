@@ -231,6 +231,15 @@ async def _tools_hotspot_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def _llm_status_endpoint(request: Request) -> JSONResponse:
+    """Return current LLM (SemanticAnalyzer) enabled/available state."""
+    bridge = getattr(request.app.state, "operator_bridge", None)
+    return JSONResponse({
+        "available": bridge.llm_available if bridge else False,
+        "enabled": bridge.llm_enabled if bridge else False,
+    })
+
+
 async def _operator_endpoint(request: Request) -> JSONResponse:
     """The single inbound write surface (ADR-0019 SS4). Accepts
     `{"action": "<action>"}` from the browser and publishes an announce-only
@@ -274,6 +283,7 @@ def ui_routes() -> list:
         WebSocketRoute("/ws", _ws_endpoint),
         Route("/corpus", _corpus_endpoint, methods=["GET"]),
         Route("/metrics", _metrics_endpoint, methods=["GET"]),
+        Route("/llm-status", _llm_status_endpoint, methods=["GET"]),
         Route("/stats/summary", _stats_summary_endpoint, methods=["GET"]),
         Route("/agents/summary", _agents_summary_endpoint, methods=["GET"]),
         Route("/tools/hotspot", _tools_hotspot_endpoint, methods=["GET"]),
@@ -290,6 +300,7 @@ def build_app(
     corpus_dir: Path | None = None,
     store=None,
     test_count: int = 0,
+    operator_bridge=None,
 ) -> Starlette:
     """Build the standalone Starlette ASGI app (`olive ui --web`, a separate
     process). `broker` is required (stream source); `bus` is optional (enables
@@ -303,4 +314,5 @@ def build_app(
     app.state.store = store
     app.state.corpus_dir_path = corpus_dir
     app.state.test_count = test_count
+    app.state.operator_bridge = operator_bridge
     return app

@@ -64,6 +64,7 @@ class SemanticAnalyzer:
         self._model = model
         self._max_chars = max_chars
         self._client = client
+        self.enabled: bool = True  # runtime toggle — set False to skip LLM path entirely
         if client is None:
             key = api_key or os.environ.get("ANTHROPIC_API_KEY")
             if key:
@@ -83,7 +84,7 @@ class SemanticAnalyzer:
     ) -> tuple[bool, float, str]:
         """Return (is_injection, confidence, rationale). Fail-safe: any error or
         unavailability yields (False, 0.0, "") - no signal, never a block."""
-        if not self.available or not content:
+        if not self.enabled or not self.available or not content:
             return (False, 0.0, "")
         # The agent's role/goal is context for the judgement but is itself only
         # advisory framing; the verdict still comes back as data we parse.

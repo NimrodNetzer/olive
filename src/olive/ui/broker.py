@@ -39,7 +39,8 @@ from olive.intelligence.reporter import IncidentReport
 # The closed set of UI-initiated requests (ADR-0017 SS5). force-mode-request is
 # announce-only; the other two target authorities with no enforcement-write path.
 OPERATOR_ACTIONS = frozenset(
-    {"force-mode-request", "run-campaign-request", "toggle-redteam-dept-request"}
+    {"force-mode-request", "run-campaign-request", "toggle-redteam-dept-request",
+     "toggle-llm-request"}
 )
 
 
