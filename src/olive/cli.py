@@ -385,6 +385,7 @@ def serve_http_live(
                     "store": store,  # history endpoints read from this
                     "corpus_dir_path": corpus_dir,
                     "test_count": 504,
+                    "operator_bridge": org.operator_bridge,
                 }
                 yield (
                     session_manager_for(server, json_response=json_response),

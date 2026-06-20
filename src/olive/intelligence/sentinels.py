@@ -49,6 +49,18 @@ class PromptInjectionSentinel:
         self._analyzer = analyzer or SemanticAnalyzer()
         self._min_confidence = min_confidence
 
+    @property
+    def llm_enabled(self) -> bool:
+        return self._analyzer.enabled
+
+    @llm_enabled.setter
+    def llm_enabled(self, value: bool) -> None:
+        self._analyzer.enabled = value
+
+    @property
+    def llm_available(self) -> bool:
+        return self._analyzer.available
+
     async def analyze(self, event: TelemetryEvent) -> Signal:
         content = event.content
         if not content:

@@ -181,16 +181,38 @@ class OperatorBridge:
     compete with `/mcp` enforcement on the shared event loop. A request inside the
     cooldown is counted and dropped, never queued."""
 
-    def __init__(self, bus: IncidentBus, redteam: RedTeamDepartment, *, cooldown: float = 10.0):
+    def __init__(
+        self,
+        bus: IncidentBus,
+        redteam: RedTeamDepartment,
+        *,
+        cooldown: float = 10.0,
+        injection_sentinel: PromptInjectionSentinel | None = None,
+    ):
         self._bus = bus
         self._redteam = redteam
         self._cooldown = cooldown
         self._last_drill = float("-inf")  # loop time of the last accepted drill
+        self._injection_sentinel = injection_sentinel
         self.campaigns_triggered = 0
         self.campaigns_throttled = 0
 
+    @property
+    def llm_enabled(self) -> bool:
+        return self._injection_sentinel.llm_enabled if self._injection_sentinel else False
+
+    @property
+    def llm_available(self) -> bool:
+        return self._injection_sentinel.llm_available if self._injection_sentinel else False
+
     async def handle(self, obj: IncidentObject) -> None:
-        if obj.report.action != "run-campaign-request":
+        action = obj.report.action
+        if action == "toggle-llm-request":
+            if self._injection_sentinel is not None:
+                self._injection_sentinel.llm_enabled = not self._injection_sentinel.llm_enabled
+                _log.info("llm-toggle: llm_enabled=%s", self._injection_sentinel.llm_enabled)
+            return
+        if action != "run-campaign-request":
             return
         now = asyncio.get_running_loop().time()
         if now - self._last_drill < self._cooldown:
@@ -311,7 +333,10 @@ def build_runtime_org(
         builder.subscribe()
     bridge: OperatorBridge | None = None
     if operator_bridge:
-        bridge = OperatorBridge(bus, redteam)
+        inj_sentinel = next(
+            (s for s in sentinels if isinstance(s, PromptInjectionSentinel)), None
+        )
+        bridge = OperatorBridge(bus, redteam, injection_sentinel=inj_sentinel)
         bridge.subscribe()
     sup = None
     if include_supervisor:
