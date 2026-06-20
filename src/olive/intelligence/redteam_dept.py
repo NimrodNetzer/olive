@@ -57,10 +57,36 @@ def _finding_report(bypass: Bypass) -> IncidentReport:
     )
 
 
+def _hypothesis_report(sketch: str, strategy: str) -> IncidentReport:
+    """A rule-3 envelope for an LLM-generated hypothesis (ADR-0029).
+    confidence is 0.0 — a hypothesis is advisory, not a validated bypass."""
+    return IncidentReport(
+        session_key="",
+        agent_id="redteam",
+        organization_id="",
+        confidence=0.0,
+        attack_types=["llm-hypothesis"],
+        action="redteam-finding",
+        signals=[
+            {
+                "sentinel": "llm-redteam",
+                "confidence": 0.0,
+                "evidence": f"llm-hypothesis [{strategy}]: {sketch}"[:200],
+            }
+        ],
+        incident_id=None,
+    )
+
+
 class RedTeamDepartment:
     """Trigger-and-publish wrapper around the offline engine. Publishes
     `redteam-finding` objects; subscribes to NOTHING (so a finding can never
-    re-trigger a campaign - the feedback loop is structurally absent)."""
+    re-trigger a campaign - the feedback loop is structurally absent).
+
+    When an LLMRedTeamAgent is wired (ADR-0029), its hypotheses are published
+    as additional advisory redteam-finding objects alongside the deterministic
+    campaign results. The LLM expands the attack surface; all findings go
+    through the same human-triage pipeline unchanged."""
 
     def __init__(
         self,
@@ -69,6 +95,7 @@ class RedTeamDepartment:
         policy: str = "default.yaml",
         corpus_dir: str | Path | None = None,
         interval: float | None = None,
+        llm_agent=None,  # LLMRedTeamAgent | None (ADR-0029); default off
     ) -> None:
         self._bus = bus
         self._policy = policy
@@ -77,6 +104,7 @@ class RedTeamDepartment:
         self._interval = max(interval, _MIN_INTERVAL_SECONDS) if interval else None
         self._task: asyncio.Task | None = None
         self._running = False  # single-flight: no overlapping campaigns
+        self._llm_agent = llm_agent
         self.campaigns_run = 0
         self.findings_published = 0
         self.campaign_failures = 0
@@ -86,7 +114,10 @@ class RedTeamDepartment:
         against the corpus) as `redteam-finding` objects. Returns the count
         published, or None if skipped because a campaign was already in flight
         (single-flight) - distinct from 0, which means a campaign ran and found
-        nothing novel."""
+        nothing novel.
+
+        When an LLMRedTeamAgent is wired, generates novel hypotheses and
+        publishes them as additional advisory findings (ADR-0029)."""
         if self._running:
             return None
         self._running = True
@@ -103,6 +134,27 @@ class RedTeamDepartment:
                 )
                 await self._bus.publish(obj)
                 published += 1
+
+            # LLM hypothesis generation (ADR-0029): advisory only, fail-safe.
+            if self._llm_agent is not None:
+                try:
+                    hypotheses = await self._llm_agent.generate_hypotheses()
+                    for hyp in hypotheses:
+                        sketch = str(hyp.get("payload_sketch", ""))[:100]
+                        strategy = str(hyp.get("strategy", "llm-hypothesis"))[:100]
+                        if not sketch:
+                            continue
+                        hyp_report = _hypothesis_report(sketch, strategy)
+                        obj = self._bus.make_object(
+                            kind="redteam-finding",
+                            source_dept="redteam",
+                            report=hyp_report,
+                        )
+                        await self._bus.publish(obj)
+                        published += 1
+                except Exception:  # noqa: BLE001 — LLM failure must not abort campaign
+                    pass
+
             self.findings_published += published
             return published
         finally:

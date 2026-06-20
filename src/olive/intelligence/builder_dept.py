@@ -208,11 +208,21 @@ class ProposalLedger:
 class BuilderDepartment:
     """Reacts to confirmed weaknesses and emits bounded fix-proposals. PUBLISHES
     `fix-proposed`; subscribes ONLY to `redteam-finding`/`reproduced` (never to its
-    own output - the feedback loop is structurally absent, ADR-0018 §6)."""
+    own output - the feedback loop is structurally absent, ADR-0018 §6).
 
-    def __init__(self, bus: IncidentBus, ledger: ProposalLedger) -> None:
+    When an LLMBuilderAgent is wired (ADR-0029), its patch proposal is appended
+    to the `fix-proposed` signal as the `llm_proposal` field — advisory only,
+    never auto-applied."""
+
+    def __init__(
+        self,
+        bus: IncidentBus,
+        ledger: ProposalLedger,
+        llm_builder=None,  # LLMBuilderAgent | None (ADR-0029); default off
+    ) -> None:
         self._bus = bus
         self._ledger = ledger
+        self._llm_builder = llm_builder
         self._running = False  # single-flight guard for the on-demand replay
         self.proposals_published = 0
 
@@ -274,7 +284,10 @@ class BuilderDepartment:
         """Record a novel proposal and publish a `fix-proposed` object. Returns the
         proposal, or None if this weakness was already proposed (dedup). No
         enforcement happens here (ADR-0018 §2): the only writes are the ledger row
-        and the bus object."""
+        and the bus object.
+
+        When LLMBuilderAgent is wired (ADR-0029), its patch proposal is appended
+        to the bus signal as `llm_proposal`. Fail-safe: LLM error → no field."""
         key = _finding_key(
             corpus_case_id=corpus_case_id, incident_id=incident_id, evidence=evidence
         )
@@ -288,10 +301,27 @@ class BuilderDepartment:
         )
         if proposal is None:
             return None
+
+        # LLM patch proposal (ADR-0029): advisory, never auto-applied.
+        llm_proposal: dict | None = None
+        if self._llm_builder is not None:
+            try:
+                llm_proposal = await self._llm_builder.propose(
+                    evidence_excerpt=evidence[:200],
+                    attack_type=attack_types[0] if attack_types else kind,
+                    corpus_case_id=corpus_case_id or "",
+                )
+            except Exception:  # noqa: BLE001 — fail-safe
+                llm_proposal = None
+
+        report = _proposal_report(summary, attack_types)
+        if llm_proposal is not None:
+            report.signals[0]["llm_proposal"] = llm_proposal
+
         obj = self._bus.make_object(
             kind="fix-proposed",
             source_dept="builder",
-            report=_proposal_report(summary, attack_types),
+            report=report,
             incident_id=incident_id,
             corpus_case_id=corpus_case_id,
         )

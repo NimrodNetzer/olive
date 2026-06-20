@@ -280,9 +280,12 @@ _DEPT_FORBIDDEN = (
 
 # Runtime sandbox checks (ADR-0027): called before each dept is wired.
 _SANDBOX_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("olive.intelligence.redteam_dept", _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
-    ("olive.intelligence.builder_dept", _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
-    ("olive.intelligence.supervisor",   _DEPT_FORBIDDEN),
+    ("olive.intelligence.redteam_dept",  _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.builder_dept",  _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.supervisor",    _DEPT_FORBIDDEN),
+    ("olive.intelligence.llm_sentinel",  _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.llm_redteam",   _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
+    ("olive.intelligence.llm_builder",   _DEPT_FORBIDDEN + ("olive.gateway.breaker",)),
 )
 
 
@@ -305,6 +308,8 @@ def build_runtime_org(
     include_supervisor: bool = False,  # ADR-0027; off by default
     supervisor_silence_threshold: float = 120.0,
     supervisor_poll_interval: float = 30.0,
+    llm_agents: bool = False,           # ADR-0029: activates all three LLM agents
+    llm_tokens_per_day: int = 50000,    # daily token budget cap
 ) -> RuntimeOrg:
     """Wire one runtime org sharing a single breaker. The Defense adapter is
     installed as the runner's `on_report` hook; the Commander and Remediation
@@ -322,6 +327,32 @@ def build_runtime_org(
     for module_name, forbidden in _SANDBOX_CHECKS:
         _assert_sandbox(module_name, forbidden)
 
+    # LLM reasoning agents (ADR-0029): optional, default-off.
+    # All three share one AgentLLMClient and communicate only through the bus
+    # or as advisory signals. No agent has an enforcement path.
+    if llm_agents:
+        from olive.intelligence.agent_client import AgentLLMClient
+        from olive.intelligence.llm_builder import LLMBuilderAgent
+        from olive.intelligence.llm_redteam import LLMRedTeamAgent
+        from olive.intelligence.llm_sentinel import LLMContextSentinel
+        from pathlib import Path as _Path
+        _agent_client = AgentLLMClient(max_tokens_per_day=llm_tokens_per_day)
+        _corpus_path = _Path(redteam_corpus_dir) if redteam_corpus_dir else None
+        _llm_sentinel = LLMContextSentinel(_agent_client, store=store)
+        _llm_rt_agent = LLMRedTeamAgent(
+            _agent_client,
+            policy_path=redteam_policy,
+            corpus_dir=_corpus_path,
+        )
+        _llm_builder_agent = LLMBuilderAgent(_agent_client)
+        # Inject LLMContextSentinel into PromptInjectionSentinel
+        _inj = next((s for s in sentinels if isinstance(s, PromptInjectionSentinel)), None)
+        if _inj is not None:
+            _inj._llm_sentinel = _llm_sentinel
+    else:
+        _llm_rt_agent = None
+        _llm_builder_agent = None
+
     defense = DefenseDepartment(bus)
     remediation = RemediationDepartment(ledger)
     commander = SecurityCommander(breaker, bus, store=store, revocations=revocations)
@@ -331,11 +362,15 @@ def build_runtime_org(
         queue, breaker, sentinels, threshold=threshold, store=store, on_report=defense.on_report
     )
     redteam = RedTeamDepartment(
-        bus, policy=redteam_policy, corpus_dir=redteam_corpus_dir, interval=redteam_interval
+        bus,
+        policy=redteam_policy,
+        corpus_dir=redteam_corpus_dir,
+        interval=redteam_interval,
+        llm_agent=_llm_rt_agent,
     )
     builder: BuilderDepartment | None = None
     if proposal_ledger is not None:
-        builder = BuilderDepartment(bus, proposal_ledger)
+        builder = BuilderDepartment(bus, proposal_ledger, llm_builder=_llm_builder_agent)
         builder.subscribe()
     bridge: OperatorBridge | None = None
     if operator_bridge:
