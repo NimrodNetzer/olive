@@ -21,7 +21,7 @@ _ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 def _dotenv_keys() -> dict[str, str]:
     """Read key=value pairs from the nearest .env file without a library dep.
     Only keys absent from os.environ are returned — explicit env vars win."""
-    for candidate in (Path.cwd() / ".env", Path(__file__).parents[4] / ".env"):
+    for candidate in (Path.cwd() / ".env", Path(__file__).parents[3] / ".env"):
         try:
             result: dict[str, str] = {}
             for line in candidate.read_text(encoding="utf-8").splitlines():
