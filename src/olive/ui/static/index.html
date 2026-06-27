@@ -269,28 +269,23 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
 .sum-divider{font-size:9px;color:var(--dim);letter-spacing:.5px;flex-shrink:0;border-top:1px solid var(--border);padding-top:5px}
 .atk-bolt{position:fixed;height:3px;border-radius:2px;background:linear-gradient(to left,transparent,var(--bolt-clr));box-shadow:0 0 8px var(--bolt-clr),0 0 2px var(--bolt-clr);pointer-events:none;z-index:9999;animation:bolt-fly .7s ease-in forwards}
 
-/* Log pane */
+/* Log pane header (shared with chat pane) */
 .log-hdr{font-size:9px;color:var(--muted);letter-spacing:.5px;flex-shrink:0}
-#log-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-#log-list::-webkit-scrollbar{width:2px}
-#log-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:1px}
-.le{display:grid;grid-template-columns:46px 52px 1fr;gap:4px;align-items:start;padding:4px 6px;border-radius:3px;border-left:2px solid transparent;cursor:pointer;transition:background .15s;animation:fadein .3s ease}
-.le:hover{background:rgba(255,255,255,.03)}
-.le.le-block    {border-left-color:rgba(248,81,73,.7)}
-.le.le-allow    {border-left-color:rgba(63,185,80,.6)}
-.le.le-quarantine{border-left-color:rgba(188,140,255,.7)}
-.le.le-hold     {border-left-color:rgba(210,153,34,.6)}
-.le.le-rt       {border-left-color:rgba(227,179,65,.5)}
-.le-ts{color:var(--dim);font-size:9px;padding-top:1px}
-.le-dec{font-weight:bold;font-size:9px;letter-spacing:.5px;padding-top:1px}
-.le-dec.block   {color:var(--red)}
-.le-dec.allow   {color:var(--green)}
-.le-dec.quarantine{color:var(--purple)}
-.le-dec.hold    {color:var(--yellow)}
-.le-dec.rt      {color:var(--orange)}
-.le-body{display:flex;flex-direction:column;gap:1px;min-width:0}
-.le-main{color:var(--text);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.le-sub{color:var(--dim);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Chat pane */
+#chat-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-top:4px}
+#chat-list::-webkit-scrollbar{width:2px}
+#chat-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:1px}
+.chat-msg{max-width:88%;padding:6px 9px;border-radius:6px;font-size:10px;line-height:1.4;white-space:pre-wrap;word-break:break-word;animation:fadein .25s ease}
+.chat-msg.chat-user{align-self:flex-end;background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.3);color:var(--text)}
+.chat-msg.chat-assistant{align-self:flex-start;background:var(--surf2);border:1px solid var(--border);color:var(--text)}
+.chat-msg.chat-pending{color:var(--muted)}
+#chat-row{display:flex;gap:6px;flex-shrink:0;padding-top:6px;border-top:1px solid var(--border)}
+#chat-input{flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10px;padding:6px 8px;font-family:inherit}
+#chat-input:focus{outline:none;border-color:var(--cyan)}
+#chat-send{background:var(--surf2);border:1px solid var(--border);border-radius:4px;color:var(--cyan);font-size:9px;letter-spacing:.5px;padding:6px 10px;cursor:pointer}
+#chat-send:hover{background:rgba(88,166,255,.1)}
+#chat-send:disabled{opacity:.5;cursor:default}
 
 /* Org pane */
 #org-svg{flex:1;width:100%;min-height:0;overflow:visible}
@@ -699,7 +694,7 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
   <div class="tab-bar">
     <button class="tab active" data-pane="theater">THEATER</button>
     <button class="tab" data-pane="incidents">INCIDENTS<span class="tab-badge" id="inc-badge">0</span></button>
-    <button class="tab" data-pane="log">LOG</button>
+    <button class="tab" data-pane="chat">CHAT</button>
     <button class="tab" data-pane="org">ORG</button>
   </div>
 
@@ -777,10 +772,14 @@ body.siege #gw::before{background:radial-gradient(ellipse 55% 45% at 50% 50%,rgb
     <div id="inc-list"><div style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">loading&hellip;</div></div>
   </div>
 
-  <!-- LOG pane -->
-  <div class="pane hidden" id="pane-log">
-    <div class="log-hdr">ALL GATEWAY DECISIONS &amp; FINDINGS &nbsp;<span style="font-size:8px;color:var(--dim)">(click for detail)</span></div>
-    <div id="log-list"></div>
+  <!-- CHAT pane -->
+  <div class="pane hidden" id="pane-chat">
+    <div class="log-hdr">ASK THE SECURITY ASSISTANT &nbsp;<span style="font-size:8px;color:var(--dim)">(advisory only &mdash; read-only over recent events/incidents)</span></div>
+    <div id="chat-list"><div id="chat-empty-hint" style="font-size:10px;color:var(--muted);padding:14px 0;text-align:center">ask about recent incidents or decisions&hellip;</div></div>
+    <div id="chat-row">
+      <input id="chat-input" type="text" maxlength="1000" placeholder="why was incident #3 blocked?" autocomplete="off">
+      <button id="chat-send">SEND</button>
+    </div>
   </div>
 
   <!-- ORG pane -->
@@ -999,6 +998,52 @@ async function loadIncidents(){
     renderSevBar(sev);
   }catch(_){}
 }
+
+// ── Chat (advisory-only security assistant) ──────────────────────────────────
+let chatHistory=[];
+function appendChatMsg(role,text,pending){
+  const list=document.getElementById('chat-list');
+  if(!list) return null;
+  if(list.children.length===1 && list.children[0].id==='chat-empty-hint') list.innerHTML='';
+  const el=document.createElement('div');
+  el.className=`chat-msg chat-${role}${pending?' chat-pending':''}`;
+  el.textContent=text;
+  list.appendChild(el);
+  list.scrollTop=list.scrollHeight;
+  return el;
+}
+async function sendChatMessage(){
+  const input=document.getElementById('chat-input');
+  const sendBtn=document.getElementById('chat-send');
+  const message=(input.value||'').trim();
+  if(!message) return;
+  input.value='';
+  appendChatMsg('user',message);
+  const pendingEl=appendChatMsg('assistant','thinking…',true);
+  input.disabled=true; sendBtn.disabled=true;
+  try{
+    const r=await fetch('/chat/ask',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({message,history:chatHistory}),
+    });
+    const body=await r.json();
+    const answer=r.ok?(body.answer||'(no answer)'):(body.error||'request failed');
+    pendingEl.textContent=answer;
+    pendingEl.classList.remove('chat-pending');
+    chatHistory.push({role:'user',content:message},{role:'assistant',content:answer});
+    if(chatHistory.length>10) chatHistory=chatHistory.slice(-10);
+  }catch(_){
+    pendingEl.textContent='assistant unavailable right now';
+    pendingEl.classList.remove('chat-pending');
+  }finally{
+    input.disabled=false; sendBtn.disabled=false; input.focus();
+  }
+}
+document.getElementById('chat-send').addEventListener('click',sendChatMessage);
+document.getElementById('chat-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter') sendChatMessage();
+});
 
 async function loadHistory(){
   try{
@@ -1329,6 +1374,7 @@ function renderTrust(){
 // ── Incident log ──────────────────────────────────────────────────────────────
 function addLogEntry(ev,type){
   const list=document.getElementById('log-list');
+  if(!list) return; // LOG tab was replaced by CHAT; kept as a no-op call site
   const el=document.createElement('div');
   let ts=ev.timestamp?String(ev.timestamp).substring(11,19):'';
   if(type==='decision'){

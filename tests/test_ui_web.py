@@ -121,3 +121,92 @@ def test_ws_accepts_connection(app):
     client = TestClient(app, raise_server_exceptions=True)
     with client.websocket_connect("/ws"):
         pass  # connection established — no exception = success
+
+
+# ── POST /chat/ask ─────────────────────────────────────────────────────────────
+
+
+class _FakeLLMClient:
+    """Stand-in for AgentLLMClient that records the prompt it was called with."""
+
+    def __init__(self, answer: str | None = '{"answer": "fake answer"}'):
+        self.available = True
+        self.last_system: str | None = None
+        self.last_user: str | None = None
+        self._answer = answer
+
+    async def complete(self, system, user, *, max_tokens=512):
+        self.last_system = system
+        self.last_user = user
+        return self._answer
+
+
+def test_chat_rejects_invalid_json(app):
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", content=b"not json", headers={"content-type": "application/json"})
+    assert r.status_code == 400
+
+
+def test_chat_rejects_empty_message(app):
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "   "})
+    assert r.status_code == 400
+
+
+def test_chat_rejects_overlong_message(app):
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "x" * 1001})
+    assert r.status_code == 400
+    assert "too long" in r.json()["error"]
+
+
+def test_chat_unavailable_without_llm_client(app):
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "why was X blocked?"})
+    assert r.status_code == 200
+    assert "unavailable" in r.json()["answer"]
+
+
+def test_chat_answers_using_llm_client_and_includes_context(bus):
+    broker = UIBroker()
+    fake = _FakeLLMClient()
+    app = web_module.build_app(broker, bus=bus, llm_client=fake)
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "what happened recently?"})
+    assert r.status_code == 200
+    assert r.json()["answer"] == "fake answer"
+    assert "recent_events" in fake.last_system
+    assert "recent_incidents" in fake.last_system
+    assert "untrusted" in fake.last_system.lower()
+    assert fake.last_user == "what happened recently?"
+
+
+def test_chat_falls_back_when_llm_returns_none(bus):
+    broker = UIBroker()
+    fake = _FakeLLMClient(answer=None)
+    app = web_module.build_app(broker, bus=bus, llm_client=fake)
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "why was X blocked?"})
+    assert r.status_code == 200
+    assert "unavailable" in r.json()["answer"]
+
+
+def test_chat_falls_back_when_llm_returns_malformed_json(bus):
+    broker = UIBroker()
+    fake = _FakeLLMClient(answer="not json at all")
+    app = web_module.build_app(broker, bus=bus, llm_client=fake)
+    client = TestClient(app, raise_server_exceptions=True)
+    r = client.post("/chat/ask", json={"message": "why was X blocked?"})
+    assert r.status_code == 200
+    assert "unavailable" in r.json()["answer"]
+
+
+def test_chat_folds_history_into_user_prompt(bus):
+    broker = UIBroker()
+    fake = _FakeLLMClient()
+    app = web_module.build_app(broker, bus=bus, llm_client=fake)
+    client = TestClient(app, raise_server_exceptions=True)
+    history = [{"role": "user", "content": "first question"}, {"role": "assistant", "content": "first answer"}]
+    client.post("/chat/ask", json={"message": "follow up", "history": history})
+    assert "first question" in fake.last_user
+    assert "follow up" in fake.last_user

@@ -288,6 +288,7 @@ def serve_http_live(
     from olive.gateway.mode import OperatingMode
     from olive.gateway.telemetry import MultiSink, QueueSink
     from olive.identity.tokens import RevokedTokenCache
+    from olive.intelligence.agent_client import AgentLLMClient
     from olive.intelligence.builder_dept import ProposalLedger
     from olive.intelligence.bus import IncidentBus
     from olive.intelligence.departments import build_runtime_org, build_sentinels
@@ -334,6 +335,10 @@ def serve_http_live(
                 revocation.seed(await store.load_revoked_jtis())
                 queue_sink = QueueSink()
                 broker = UIBroker()
+                # Separate from the `llm_agents` runtime departments' client (those
+                # are enforcement-adjacent, advisory-only signals); this one only
+                # powers the read-only dashboard chat and is always available.
+                chat_llm_client = AgentLLMClient(max_tokens_per_day=20000)
 
                 # Fleet integration (ADR-0024): when --control-plane-url is set,
                 # build a FleetSink (event push) and HeartbeatLoop (mode piggyback).
@@ -414,6 +419,7 @@ def serve_http_live(
                     "corpus_dir_path": corpus_dir,
                     "test_count": 504,
                     "operator_bridge": org.operator_bridge,
+                    "llm_client": chat_llm_client,
                 }
                 yield (
                     session_manager_for(server, json_response=json_response),
@@ -834,9 +840,14 @@ async def run_ui(args: argparse.Namespace) -> int:
         if getattr(args, "web", False):
             import uvicorn
 
+            from olive.intelligence.agent_client import AgentLLMClient
             from olive.ui.web import build_app
 
-            app = build_app(broker, bus=bus, corpus_dir=corpus_dir, store=store, test_count=504)
+            llm_client = AgentLLMClient(max_tokens_per_day=20000)
+            app = build_app(
+                broker, bus=bus, corpus_dir=corpus_dir, store=store, test_count=504,
+                llm_client=llm_client,
+            )
             host = getattr(args, "host", "127.0.0.1")
             port = getattr(args, "port", 7700)
             print(
