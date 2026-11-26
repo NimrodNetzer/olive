@@ -23,6 +23,11 @@ src/olive/
   store/               SQLite event + incident audit log
   cli.py               `olive` entry point
 demo/                  Demo MCP tool server + scripted demo run (NOT the product)
+demo_project/          Standalone "victim project" integration demo: wraps an
+                       unprotected MCP tool server with Olive, compares
+                       attacks with/without protection, and benchmarks
+                       latency overhead / false positives / detection rate
+                       (NOT the product — same test-coverage rule as demo/)
 evals/                 Attack corpus + eval runner — detection is measured, not assumed
 tests/                 pytest unit + integration suites
 ```
@@ -50,8 +55,8 @@ These govern all code in this repo. Violating one is a bug even if tests pass.
 - Python ≥ 3.11, `src/` layout, async-first, full type hints.
 - `pytest` + `pytest-asyncio` for tests; `ruff` for lint + format.
 - No new dependency without a one-line justification in the commit message.
-- Demo scenarios are not tests. Every behavior demonstrated in `demo/` must
-  also be covered by a real test in `tests/`.
+- Demo scenarios are not tests. Every behavior demonstrated in `demo/` or
+  `demo_project/` must also be covered by a real test in `tests/`.
 - Detection logic changes must add or update cases in `evals/corpus/`.
 
 ## Workflow — the company process
