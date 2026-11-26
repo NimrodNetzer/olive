@@ -9,7 +9,6 @@ Three test groups:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -47,8 +46,8 @@ def _ctx(
 
 @pytest.mark.asyncio
 async def test_capability_inspector_blocks_missing_cap():
-    from olive.inspectors.capability import CapabilityInspector
     from olive.gateway.pipeline import Decision
+    from olive.inspectors.capability import CapabilityInspector
 
     inspector = CapabilityInspector({"transfer_funds": frozenset({"finance:transfer"})})
     ctx = _ctx("transfer_funds", capabilities=())
@@ -60,8 +59,8 @@ async def test_capability_inspector_blocks_missing_cap():
 
 @pytest.mark.asyncio
 async def test_capability_inspector_allows_with_correct_cap():
-    from olive.inspectors.capability import CapabilityInspector
     from olive.gateway.pipeline import Decision
+    from olive.inspectors.capability import CapabilityInspector
 
     inspector = CapabilityInspector({"transfer_funds": frozenset({"finance:transfer"})})
     ctx = _ctx("transfer_funds", capabilities=("finance:transfer",))
@@ -71,8 +70,8 @@ async def test_capability_inspector_allows_with_correct_cap():
 
 @pytest.mark.asyncio
 async def test_capability_inspector_allows_tool_without_requirement():
-    from olive.inspectors.capability import CapabilityInspector
     from olive.gateway.pipeline import Decision
+    from olive.inspectors.capability import CapabilityInspector
 
     inspector = CapabilityInspector({"transfer_funds": frozenset({"finance:transfer"})})
     ctx = _ctx("read_balance", capabilities=())
@@ -83,8 +82,8 @@ async def test_capability_inspector_allows_tool_without_requirement():
 @pytest.mark.asyncio
 async def test_capability_inspector_blocks_partial_caps():
     """AND semantics: all required capabilities must be present."""
-    from olive.inspectors.capability import CapabilityInspector
     from olive.gateway.pipeline import Decision
+    from olive.inspectors.capability import CapabilityInspector
 
     inspector = CapabilityInspector(
         {"transfer_funds": frozenset({"finance:transfer", "finance:approve"})}
@@ -96,8 +95,8 @@ async def test_capability_inspector_blocks_partial_caps():
 
 @pytest.mark.asyncio
 async def test_capability_inspector_empty_registry_allows_everything():
-    from olive.inspectors.capability import CapabilityInspector
     from olive.gateway.pipeline import Decision
+    from olive.inspectors.capability import CapabilityInspector
 
     inspector = CapabilityInspector({})
     ctx = _ctx("transfer_funds", capabilities=())
@@ -280,8 +279,9 @@ async def test_registry_set_fleet_mode_broadcast_unaffected_by_gateway_mode(tmp_
 async def test_control_plane_per_gateway_mode_endpoint(tmp_path):
     """POST /fleet/mode/{gateway_id} commands a single gateway via the HTTP layer."""
     import httpx
-    from olive.fleet.registry import GatewayRegistry
+
     from olive.fleet.control_plane import build_control_plane_app
+    from olive.fleet.registry import GatewayRegistry
     from olive.identity.tokens import MockCA
 
     ca = MockCA()
@@ -323,8 +323,9 @@ async def test_control_plane_per_gateway_mode_endpoint(tmp_path):
 @pytest.mark.asyncio
 async def test_control_plane_per_gateway_mode_404_on_unknown(tmp_path):
     import httpx
-    from olive.fleet.registry import GatewayRegistry
+
     from olive.fleet.control_plane import build_control_plane_app
+    from olive.fleet.registry import GatewayRegistry
     from olive.identity.tokens import MockCA
 
     ca = MockCA()

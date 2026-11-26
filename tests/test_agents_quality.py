@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 import olive.intelligence.supervisor as _sup_module
+from olive.gateway.breaker import CircuitBreaker
 from olive.intelligence.bus import (
     PERMITTED_KINDS,
     BusError,
@@ -39,8 +40,7 @@ from olive.intelligence.departments import (
 )
 from olive.intelligence.remediation import RemediationLedger
 from olive.intelligence.reporter import IncidentReport
-from olive.intelligence.supervisor import DefenseSupervisor, SupervisorHealth
-from olive.gateway.breaker import CircuitBreaker
+from olive.intelligence.supervisor import DefenseSupervisor
 
 _KEY = b"test-process-key"
 
@@ -160,7 +160,6 @@ async def test_dept_a_cannot_forge_dept_b_object(bus):
 
 async def test_correct_dept_key_accepted(bus):
     """Auto-sign path uses the correct dept key and verifies cleanly."""
-    obj = bus.make_object(kind="commander", source_dept="commander", report=_report())
     # Publish a real commander kind (mode-change).
     mc = bus.make_object(kind="mode-change", source_dept="commander", report=_report())
     persisted = await bus.publish(mc)

@@ -72,7 +72,8 @@ async def test_committed_corpus_carries_redteam_keys():
     assert "instruction-override:encode.base32" in keys    # promoted to active; key still present
     assert "system-override:homoglyph.capital" in keys     # promoted to active; key still present
     assert "instruction-override:encode.rot47" in keys     # promoted to active; key still present
-    assert "instruction-override:encode.caesar3" in keys   # promoted to active (inj-0042); key still present
+    # promoted to active (inj-0042); key still present
+    assert "instruction-override:encode.caesar3" in keys
     assert "instruction-override:encode.atbash" in keys    # current active known-miss (inj-0043)
 
 

@@ -297,7 +297,7 @@ async def app_with_dashboard_token(tmp_path, ca):
     """App built with --dashboard-token set. Adds a minimal GET / route for testing."""
     from starlette.responses import PlainTextResponse
     from starlette.routing import Route
-    from olive.transport.http import DashboardAuthMiddleware
+
 
     store = EventStore(tmp_path / "events.db")
     await store.open()

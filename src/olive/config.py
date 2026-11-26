@@ -207,7 +207,8 @@ def _parse_capability_requirements(raw: object) -> dict[str, frozenset[str]]:
         caps = spec.get("required_capabilities", [])
         if not isinstance(caps, list) or not all(isinstance(c, str) for c in caps):
             raise ConfigError(
-                f"capability_requirements for '{tool}' required_capabilities must be a list of strings"
+                f"capability_requirements for '{tool}' required_capabilities "
+                "must be a list of strings"
             )
         if caps:
             result[tool] = frozenset(caps)

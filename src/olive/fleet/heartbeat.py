@@ -23,11 +23,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from olive.fleet.client import FleetClient
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.mode import OperatingMode
 from olive.intelligence.commander import SecurityCommander
-
-from olive.fleet.client import FleetClient
 
 _log = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ access parameterized. Never writes to any gateway's local audit DB.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
@@ -73,7 +73,7 @@ class GatewayRegistry:
         self, gateway_id: str, org_id: str, reported_mode: str
     ) -> str:
         """Record a heartbeat and return the commanded_mode for this gateway."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         assert self._db is not None
         async with self._db.execute(
             "SELECT commanded_mode FROM gateway_instances WHERE gateway_id = ?",
@@ -116,7 +116,7 @@ class GatewayRegistry:
                     ev.get("tool", ""),
                     ev.get("decision", ""),
                     ev.get("policy_rule"),
-                    ev.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                    ev.get("timestamp") or datetime.now(UTC).isoformat(),
                 ),
             )
         await self._db.commit()
@@ -137,7 +137,7 @@ class GatewayRegistry:
                     inc.get("confidence"),
                     inc.get("decision", ""),
                     inc.get("status", "open"),
-                    inc.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                    inc.get("timestamp") or datetime.now(UTC).isoformat(),
                 ),
             )
         await self._db.commit()
@@ -145,7 +145,7 @@ class GatewayRegistry:
     async def set_fleet_mode(self, mode: str, issued_by: str) -> None:
         """Set commanded_mode for ALL gateways; each picks it up on next heartbeat."""
         assert self._db is not None
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         await self._db.execute(
             "UPDATE gateway_instances SET commanded_mode = ?", (mode,)
         )
@@ -159,7 +159,7 @@ class GatewayRegistry:
     async def set_gateway_mode(self, gateway_id: str, mode: str, issued_by: str) -> bool:
         """Set commanded_mode for a single gateway. Returns False if gateway_id unknown."""
         assert self._db is not None
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._db.execute(
             "SELECT 1 FROM gateway_instances WHERE gateway_id = ?", (gateway_id,)
         ) as cur:

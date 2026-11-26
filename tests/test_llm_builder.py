@@ -1,11 +1,10 @@
 """Tests for LLMBuilderAgent (ADR-0029). All LLM calls are mocked — no real API."""
 
 import json
+
 import pytest
 
-from olive.intelligence.agent_client import AgentLLMClient
 from olive.intelligence.llm_builder import LLMBuilderAgent, _parse_proposal
-
 
 # ── _parse_proposal unit tests ────────────────────────────────────────────────
 

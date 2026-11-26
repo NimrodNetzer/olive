@@ -15,12 +15,11 @@ Properties under test:
 from __future__ import annotations
 
 import asyncio
-import importlib
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import httpx
+import pytest
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -28,7 +27,6 @@ import httpx
 def _make_commander(breaker=None):
     """Minimal SecurityCommander stand-in with force_mode_fleet tracked."""
     from olive.gateway.breaker import CircuitBreaker
-    from olive.gateway.mode import OperatingMode
     from olive.intelligence.bus import IncidentBus
 
     if breaker is None:
@@ -92,9 +90,9 @@ def test_fleet_client_enqueue_drop_on_full():
 @pytest.mark.asyncio
 async def test_heartbeat_applies_commanded_mode():
     """A heartbeat response with a new mode calls force_mode_fleet."""
-    from olive.gateway.mode import OperatingMode
     from olive.fleet.client import FleetClient
     from olive.fleet.heartbeat import HeartbeatLoop
+    from olive.gateway.mode import OperatingMode
 
     commander, breaker = _make_commander()
 
@@ -105,7 +103,6 @@ async def test_heartbeat_applies_commanded_mode():
     loop = HeartbeatLoop(client=client, commander=commander, breaker=breaker, interval=5.0)
 
     called = []
-    original = commander.force_mode_fleet
 
     async def mock_force(mode, *, gateway_id):
         called.append((mode, gateway_id))
@@ -151,9 +148,9 @@ async def test_heartbeat_fail_closed_mode_retained():
 @pytest.mark.asyncio
 async def test_heartbeat_three_failure_escalation():
     """Three consecutive failures → force_mode_fleet(SUSPICIOUS) escalation."""
-    from olive.gateway.mode import OperatingMode
     from olive.fleet.client import FleetClient
-    from olive.fleet.heartbeat import HeartbeatLoop, _FAILURE_ESCALATION_COUNT
+    from olive.fleet.heartbeat import _FAILURE_ESCALATION_COUNT, HeartbeatLoop
+    from olive.gateway.mode import OperatingMode
 
     commander, breaker = _make_commander()
     client = MagicMock(spec=FleetClient)
@@ -268,8 +265,8 @@ async def test_registry_records_events_and_incidents(tmp_path):
 
 async def _cp_client(tmp_path: Path, policies_dir: Path | None = None):
     """Async factory: open registry, return (AsyncClient, token, registry)."""
-    from olive.fleet.registry import GatewayRegistry
     from olive.fleet.control_plane import build_control_plane_app
+    from olive.fleet.registry import GatewayRegistry
     from olive.identity.tokens import MockCA
 
     ca = MockCA()
@@ -437,7 +434,9 @@ async def test_fleet_sink_never_sends_raw_content():
     ctx.organization_id = "org-1"
 
     verdict = Verdict(decision=Decision.ALLOW, rule="policy.allow", evidence="")
-    event = TelemetryEvent(ctx=ctx, verdict=verdict, content="SECRET DATA", arguments={"key": "val"})
+    event = TelemetryEvent(
+        ctx=ctx, verdict=verdict, content="SECRET DATA", arguments={"key": "val"}
+    )
 
     await sink.publish(event)
 

@@ -206,7 +206,10 @@ def test_chat_folds_history_into_user_prompt(bus):
     fake = _FakeLLMClient()
     app = web_module.build_app(broker, bus=bus, llm_client=fake)
     client = TestClient(app, raise_server_exceptions=True)
-    history = [{"role": "user", "content": "first question"}, {"role": "assistant", "content": "first answer"}]
+    history = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+    ]
     client.post("/chat/ask", json={"message": "follow up", "history": history})
     assert "first question" in fake.last_user
     assert "follow up" in fake.last_user

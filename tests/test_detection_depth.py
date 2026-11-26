@@ -21,7 +21,6 @@ from olive.gateway.telemetry import TelemetryEvent
 from olive.intelligence.sentinels import BehaviorSentinel
 from olive.store.events import EventStore
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
