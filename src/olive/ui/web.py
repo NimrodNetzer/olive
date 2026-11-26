@@ -171,9 +171,8 @@ async def _incidents_list_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(await store.recent_incidents(limit))
 
 
-async def _metrics_endpoint(request: Request) -> JSONResponse:
-    """Return eval/test metrics so the dashboard badge is never hardcoded."""
-    corpus_dir: Path | None = getattr(request.app.state, "corpus_dir_path", None)
+def _read_corpus_metrics(corpus_dir: Path | None) -> tuple[dict, int]:
+    """Blocking filesystem reads for the metrics badge (run off the event loop)."""
     baseline: dict = {}
     corpus_size = 0
     if corpus_dir and corpus_dir.is_dir():
@@ -183,6 +182,13 @@ async def _metrics_endpoint(request: Request) -> JSONResponse:
         except Exception:
             pass
         corpus_size = sum(1 for _ in corpus_dir.glob("*.yaml"))
+    return baseline, corpus_size
+
+
+async def _metrics_endpoint(request: Request) -> JSONResponse:
+    """Return eval/test metrics so the dashboard badge is never hardcoded."""
+    corpus_dir: Path | None = getattr(request.app.state, "corpus_dir_path", None)
+    baseline, corpus_size = await asyncio.to_thread(_read_corpus_metrics, corpus_dir)
     return JSONResponse({
         "detected": baseline.get("detected", 0),
         "malicious_total": baseline.get("malicious_total", 0),

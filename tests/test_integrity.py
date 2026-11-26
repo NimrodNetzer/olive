@@ -7,7 +7,7 @@ import sqlite3
 import pytest
 
 from olive.gateway.pipeline import ALLOW, Decision, Verdict
-from olive.security.integrity import PolicyIntegrityStatus, compute_file_hash
+from olive.security.integrity import compute_file_hash
 from olive.store.events import AuditChainStatus, EventStore
 
 

@@ -13,11 +13,10 @@ never backpressures the fast path.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-
-from olive.gateway.telemetry import TelemetryEvent
+from datetime import UTC, datetime
 
 from olive.fleet.client import FleetClient
+from olive.gateway.telemetry import TelemetryEvent
 
 
 class FleetSink:
@@ -38,7 +37,7 @@ class FleetSink:
             "decision": event.verdict.decision.value,
             "policy_rule": event.verdict.rule,
             "arguments_hash": ctx.arguments_hash,  # already SHA-256, never raw
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             # content and arguments are NEVER included (rule 3)
         }
         self._client.enqueue_event(summary)

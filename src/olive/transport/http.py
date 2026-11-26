@@ -12,6 +12,7 @@ The auth plumbing reuses the MCP SDK's bearer middleware; the verifier is ours
 from __future__ import annotations
 
 import contextlib
+import hmac
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -29,8 +30,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
-
-import hmac
 
 from olive.identity.claims import IdentityClaims, claims_from_token, session_key
 from olive.identity.tokens import IdentityError, RevokedTokenCache
@@ -215,7 +214,9 @@ async def _revoke(request: Request) -> JSONResponse:
         agent = body.get("agent_id", "")
         reason = str(body.get("reason", ""))[:200]
     except (KeyError, TypeError, ValueError):
-        return JSONResponse({"error": "body must be {jti, organization?, agent_id?, reason?}"}, status_code=400)
+        return JSONResponse(
+            {"error": "body must be {jti, organization?, agent_id?, reason?}"}, status_code=400
+        )
     revocation: RevokedTokenCache | None = getattr(request.app.state, "revocation", None)
     store = getattr(request.app.state.gateway, "_store", None)
     if revocation is not None:

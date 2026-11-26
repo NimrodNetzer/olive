@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,15 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from olive.bridge.spec import BridgeConfig, BridgeToolSpec, load_bridge_config
 from olive.bridge.server import (
     _call_http,
     _input_schema,
-    build_bridge_server,
     call_tool_handler,
     list_tools_handler,
 )
-
+from olive.bridge.spec import BridgeConfig, BridgeToolSpec, load_bridge_config
 
 # ---- spec: load_bridge_config -----------------------------------------------
 
@@ -280,14 +277,10 @@ def test_bridge_does_not_import_gateway_core():
         if mod_name.startswith("olive.bridge"):
             importlib.reload(sys.modules[mod_name])
 
-    bridge_imports = {
-        k for k in sys.modules
-        if k.startswith("olive.bridge")
-    }
     # Collect all modules that bridge modules import transitively
     # (checking directly imported modules is sufficient for the layering rule)
-    import olive.bridge.spec as spec_mod
     import olive.bridge.server as server_mod
+    import olive.bridge.spec as spec_mod
 
     for mod in (spec_mod, server_mod):
         for attr in vars(mod).values():

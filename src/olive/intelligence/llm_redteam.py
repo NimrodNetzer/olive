@@ -65,7 +65,9 @@ class LLMRedTeamAgent:
             import yaml  # lazy: optional
             data = yaml.safe_load(Path(self._policy_path).read_text(encoding="utf-8"))
             roles = list(data.get("roles", {}).keys()) if isinstance(data, dict) else []
-            patterns_count = len(data.get("injection_patterns", [])) if isinstance(data, dict) else 0
+            patterns_count = (
+                len(data.get("injection_patterns", [])) if isinstance(data, dict) else 0
+            )
             summary = f"Roles: {roles} | injection_patterns: {patterns_count}"
             return summary[:500]
         except Exception:  # noqa: BLE001

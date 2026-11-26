@@ -412,7 +412,9 @@ async def test_no_revocation_without_jti(store):
         task_resources=(),
         jti="",  # no JTI — stdio mode
     )
-    await gw.handle_call_tool(upstream=StubUpstream(), name="access_payroll", arguments={}, identity=identity)
+    await gw.handle_call_tool(
+        upstream=StubUpstream(), name="access_payroll", arguments={}, identity=identity
+    )
     # No JTI to revoke; revocation set stays empty
     assert len(revocations._revoked) == 0
 

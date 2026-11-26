@@ -22,12 +22,16 @@ import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
-
-_LOG = logging.getLogger(__name__)
+from datetime import UTC
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from olive.gateway.context import SecurityContext
 from olive.gateway.pipeline import Verdict
+
+if TYPE_CHECKING:
+    import httpx
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,10 +118,10 @@ class WebhookSink:
         self._headers = {"Content-Type": "application/json"}
         if token:
             self._headers["Authorization"] = f"Bearer {token}"
-        self._client: "httpx.AsyncClient | None" = None
+        self._client: httpx.AsyncClient | None = None
         self.errors = 0
 
-    def _get_client(self) -> "httpx.AsyncClient":
+    def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             import httpx
             self._client = httpx.AsyncClient(timeout=5.0)
@@ -151,7 +155,7 @@ class WebhookSink:
         session_hash: str,
     ) -> None:
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         payload = {
             "tool": tool,
@@ -159,11 +163,13 @@ class WebhookSink:
             "rule": rule,
             "evidence_hash": hashlib.sha256(evidence.encode()).hexdigest(),
             "session_hash": session_hash,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         try:
             client = self._get_client()
-            resp = await client.post(self._url, content=json.dumps(payload).encode(), headers=self._headers)
+            resp = await client.post(
+                self._url, content=json.dumps(payload).encode(), headers=self._headers
+            )
             if resp.status_code >= 400:
                 _LOG.warning("webhook POST returned %d", resp.status_code)
                 self.errors += 1

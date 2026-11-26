@@ -14,15 +14,13 @@ Directory layout (default: ~/.olive/ca/):
 
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-
-import jwt
 
 _ALGORITHM = "RS256"
 _AUDIENCE = "olive-gateway"
@@ -46,7 +44,7 @@ class CertificateAuthority:
         self._ca_dir = ca_dir
 
     @classmethod
-    def init(cls, ca_dir: Path | None = None) -> "CertificateAuthority":
+    def init(cls, ca_dir: Path | None = None) -> CertificateAuthority:
         """Generate a new RSA-2048 keypair and save to ca_dir.
         Raises FileExistsError if a keypair already exists there."""
         d = Path(ca_dir or _DEFAULT_CA_DIR)
@@ -73,7 +71,7 @@ class CertificateAuthority:
         return cls(private_key, d)
 
     @classmethod
-    def load(cls, ca_dir: Path | None = None) -> "CertificateAuthority":
+    def load(cls, ca_dir: Path | None = None) -> CertificateAuthority:
         """Load an existing keypair from ca_dir.
         Raises FileNotFoundError if not initialised yet."""
         d = Path(ca_dir or _DEFAULT_CA_DIR)

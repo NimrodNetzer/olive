@@ -22,8 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-import types
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.intelligence.builder_dept import BuilderDepartment, ProposalLedger
@@ -331,11 +330,12 @@ def build_runtime_org(
     # All three share one AgentLLMClient and communicate only through the bus
     # or as advisory signals. No agent has an enforcement path.
     if llm_agents:
+        from pathlib import Path as _Path
+
         from olive.intelligence.agent_client import AgentLLMClient
         from olive.intelligence.llm_builder import LLMBuilderAgent
         from olive.intelligence.llm_redteam import LLMRedTeamAgent
         from olive.intelligence.llm_sentinel import LLMContextSentinel
-        from pathlib import Path as _Path
         _agent_client = AgentLLMClient(max_tokens_per_day=llm_tokens_per_day)
         _corpus_path = _Path(redteam_corpus_dir) if redteam_corpus_dir else None
         _llm_sentinel = LLMContextSentinel(_agent_client, store=store)

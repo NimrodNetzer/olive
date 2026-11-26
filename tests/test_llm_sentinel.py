@@ -1,17 +1,15 @@
 """Tests for LLMContextSentinel (ADR-0029). All LLM calls are mocked — no real API."""
 
 import pytest
-import pytest_asyncio
 
-from olive.intelligence.agent_client import AgentLLMClient
 from olive.intelligence.llm_sentinel import LLMContextSentinel, _parse
-
 
 # ── _parse unit tests ─────────────────────────────────────────────────────────
 
 def test_parse_valid_attack():
     det, conf, atype, rat = _parse(
-        '{"is_attack": true, "confidence": 0.92, "attack_type": "role-override", "rationale": "test"}'
+        '{"is_attack": true, "confidence": 0.92, '
+        '"attack_type": "role-override", "rationale": "test"}'
     )
     assert det is True
     assert conf == pytest.approx(0.92)
@@ -41,19 +39,22 @@ def test_parse_malformed_json():
 
 def test_parse_missing_required_key():
     # Missing is_attack
-    assert _parse('{"confidence": 0.9, "attack_type": "x", "rationale": "y"}') == (False, 0.0, "", "")
+    parsed = _parse('{"confidence": 0.9, "attack_type": "x", "rationale": "y"}')
+    assert parsed == (False, 0.0, "", "")
 
 
 def test_parse_wrong_types():
     # confidence is a string
-    assert _parse('{"is_attack": true, "confidence": "high", "attack_type": "x", "rationale": "y"}') == (
+    raw = '{"is_attack": true, "confidence": "high", "attack_type": "x", "rationale": "y"}'
+    assert _parse(raw) == (
         False, 0.0, "", ""
     )
 
 
 def test_parse_confidence_out_of_range():
     # confidence > 1.0
-    assert _parse('{"is_attack": true, "confidence": 1.5, "attack_type": "x", "rationale": "y"}') == (
+    raw = '{"is_attack": true, "confidence": 1.5, "attack_type": "x", "rationale": "y"}'
+    assert _parse(raw) == (
         False, 0.0, "", ""
     )
 
@@ -102,7 +103,10 @@ async def test_injection_detected_from_llm_signal():
         provider = "groq"
 
         async def complete(self, system, user, **kw):
-            return '{"is_attack": true, "confidence": 0.92, "attack_type": "role-override", "rationale": "test"}'
+            return (
+                '{"is_attack": true, "confidence": 0.92, '
+                '"attack_type": "role-override", "rationale": "test"}'
+            )
 
     sentinel = LLMContextSentinel(FakeClient())  # type: ignore[arg-type]
     det, conf, atype, rat = await sentinel.score("s", "support", "read_file", "excerpt")
@@ -184,7 +188,6 @@ async def test_store_history_used_in_context():
 # ── Import sandbox test (ADR-0027) ───────────────────────────────────────────
 
 def test_llm_sentinel_does_not_import_gateway():
-    import sys
     import olive.intelligence.llm_sentinel as m
     # The module must not have pulled in the gateway enforcement layer
     mod_vars = {k: getattr(v, "__module__", "") for k, v in vars(m).items()}

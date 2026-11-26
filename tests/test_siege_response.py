@@ -11,16 +11,14 @@ Tests verify:
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.mode import OperatingMode
-from olive.identity.claims import IdentityClaims, claims_from_token
-from olive.identity.tokens import IdentityError, MockCA, RevokedTokenCache
+from olive.identity.claims import claims_from_token
+from olive.identity.tokens import MockCA, RevokedTokenCache
 from olive.store.events import EventStore
 
 
@@ -186,10 +184,10 @@ async def test_store_quarantined_count(store):
 
 @pytest.mark.asyncio
 async def test_commander_publishes_siege_declared_on_siege():
+    import os
+
     from olive.intelligence.bus import IncidentBus
     from olive.intelligence.commander import SecurityCommander
-
-    import os
     hmac_key = os.urandom(32)
 
     bus = IncidentBus(":memory:", hmac_key)
@@ -225,10 +223,10 @@ async def test_commander_publishes_siege_declared_on_siege():
 
 @pytest.mark.asyncio
 async def test_commander_does_not_publish_siege_declared_for_suspicious():
+    import os
+
     from olive.intelligence.bus import IncidentBus
     from olive.intelligence.commander import SecurityCommander
-
-    import os
     hmac_key = os.urandom(32)
 
     bus = IncidentBus(":memory:", hmac_key)

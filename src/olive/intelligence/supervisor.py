@@ -19,12 +19,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
-    from olive.intelligence.departments import DefenseDepartment
+    pass
 
 from olive.intelligence.bus import IncidentBus
 from olive.intelligence.reporter import IncidentReport

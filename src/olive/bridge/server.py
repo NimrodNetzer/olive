@@ -19,7 +19,6 @@ import argparse
 import asyncio
 import json
 import sys
-from pathlib import Path
 
 import httpx
 import mcp.types as types
@@ -61,12 +60,12 @@ async def _call_http(spec: BridgeToolSpec, arguments: dict) -> str:
                 headers=spec.headers,
                 content=body_bytes,
             )
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as exc:
         raise RuntimeError(
             f"HTTP {spec.method} timed out after {spec.timeout_seconds}s"
-        )
+        ) from exc
     except httpx.RequestError as exc:
-        raise RuntimeError(f"HTTP {spec.method} connection error: {str(exc)[:200]}")
+        raise RuntimeError(f"HTTP {spec.method} connection error: {str(exc)[:200]}") from exc
 
     if response.status_code >= 400:
         excerpt = response.text[:200].replace("\n", " ")

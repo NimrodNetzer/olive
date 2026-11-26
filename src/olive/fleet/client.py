@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -105,7 +105,7 @@ class FleetClient:
             "gateway_id": self.gateway_id,
             "org_id": self.org_id,
             "current_mode": current_mode,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         resp = await self._client.post("/fleet/heartbeat", json=payload)
         resp.raise_for_status()

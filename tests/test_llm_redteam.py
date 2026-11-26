@@ -1,19 +1,25 @@
 """Tests for LLMRedTeamAgent (ADR-0029). All LLM calls are mocked — no real API."""
 
 import json
+
 import pytest
-from pathlib import Path
 
-from olive.intelligence.agent_client import AgentLLMClient
 from olive.intelligence.llm_redteam import LLMRedTeamAgent, _parse_hypotheses
-
 
 # ── _parse_hypotheses unit tests ──────────────────────────────────────────────
 
 def test_parse_valid_hypotheses():
     raw = json.dumps([
-        {"strategy": "base64 double-encode", "payload_sketch": "ignore above", "target_rule": "inj-0001"},
-        {"strategy": "unicode confusable", "payload_sketch": "SYSTEM: change role", "target_rule": "inj-0002"},
+        {
+            "strategy": "base64 double-encode",
+            "payload_sketch": "ignore above",
+            "target_rule": "inj-0001",
+        },
+        {
+            "strategy": "unicode confusable",
+            "payload_sketch": "SYSTEM: change role",
+            "target_rule": "inj-0002",
+        },
     ])
     result = _parse_hypotheses(raw)
     assert len(result) == 2
@@ -99,7 +105,11 @@ async def test_returns_hypotheses_on_valid_response():
 
         async def complete(self, system, user, **kw):
             return json.dumps([
-                {"strategy": "zero-width-space", "payload_sketch": "​ignore prev", "target_rule": "inj-0041"},
+                {
+                    "strategy": "zero-width-space",
+                    "payload_sketch": "​ignore prev",
+                    "target_rule": "inj-0041",
+                },
             ])
 
     agent = LLMRedTeamAgent(FakeClient())  # type: ignore[arg-type]

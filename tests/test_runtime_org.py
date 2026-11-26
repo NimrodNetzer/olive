@@ -18,7 +18,6 @@ import pytest
 
 from olive.gateway.breaker import CircuitBreaker
 from olive.gateway.mode import OperatingMode
-from olive.gateway.session import SessionStatus
 from olive.identity.tokens import RevokedTokenCache
 from olive.intelligence.bus import BusError, IncidentBus, IncidentObject
 from olive.intelligence.commander import (

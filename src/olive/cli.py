@@ -17,6 +17,23 @@ import sys
 from contextlib import AsyncExitStack
 from pathlib import Path
 
+from mcp.client.session import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.server.stdio import stdio_server
+
+from olive.config import ConfigError, GatewayConfig, load_config
+from olive.gateway.pipeline import InspectorPipeline
+from olive.gateway.proxy import OliveGateway
+from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
+from olive.inspectors.capability import CapabilityInspector
+from olive.inspectors.context_policy import ContextPolicyInspector
+from olive.inspectors.decode import DecodeInspector
+from olive.inspectors.patterns import PatternInspector
+from olive.inspectors.policy import PolicyInspector
+from olive.inspectors.self_protect import SelfProtectInspector
+from olive.security.integrity import PolicyIntegrityStatus, compute_file_hash
+from olive.store.events import EventStore
+
 
 def _load_dotenv(path: Path | None = None) -> None:
     """Load key=value pairs from a .env file into os.environ.
@@ -40,22 +57,6 @@ def _load_dotenv(path: Path | None = None) -> None:
     except FileNotFoundError:
         pass
 
-from mcp.client.session import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.server.stdio import stdio_server
-
-from olive.config import ConfigError, GatewayConfig, load_config
-from olive.gateway.pipeline import InspectorPipeline
-from olive.gateway.proxy import OliveGateway
-from olive.gateway.upstreams import MultiplexUpstream, NamedUpstream
-from olive.inspectors.capability import CapabilityInspector
-from olive.inspectors.context_policy import ContextPolicyInspector
-from olive.inspectors.decode import DecodeInspector
-from olive.inspectors.patterns import PatternInspector
-from olive.inspectors.policy import PolicyInspector
-from olive.inspectors.self_protect import SelfProtectInspector
-from olive.security.integrity import PolicyIntegrityStatus, compute_file_hash
-from olive.store.events import EventStore
 
 # Capability a token must carry to approve a remediation fix (ADR-0013). Distinct
 # from olive:approve (release one held call) - approving a security fix to ship is
@@ -122,7 +123,7 @@ async def _check_policy_integrity(store: EventStore, config_path: str) -> None:
     """Compare the policy file's current SHA-256 to the stored hash (ADR-0026).
     Warns on stderr if the file changed since the last recorded startup. On first
     run, records the hash silently. Never blocks startup — detection, not prevention."""
-    abs_path = str(Path(config_path).resolve())
+    abs_path = str(Path(config_path).resolve())  # noqa: ASYNC240 - one-shot at startup
     current_hash = compute_file_hash(abs_path)
     status, stored_hash = await store.check_policy_hash(abs_path, current_hash)
     if status == PolicyIntegrityStatus.NEW:
@@ -377,7 +378,6 @@ def serve_http_live(
 
                 if fleet_client is not None:
                     from olive.fleet.heartbeat import HeartbeatLoop
-                    from olive.intelligence.commander import SecurityCommander
                     # Commander is built inside build_runtime_org; we build it here
                     # first so the HeartbeatLoop can reference it. build_runtime_org
                     # accepts an externally-built commander via the heartbeat_loop arg.
@@ -491,7 +491,7 @@ async def verify_integrity(
     exit_code = 0
     try:
         # Policy file integrity
-        abs_path = str(Path(config_path).resolve())
+        abs_path = str(Path(config_path).resolve())  # noqa: ASYNC240 - one-shot CLI check
         current_hash = compute_file_hash(abs_path)
         status, stored_hash = await store.check_policy_hash(abs_path, current_hash)
         if status == PolicyIntegrityStatus.NEW:
@@ -877,7 +877,7 @@ async def _run_control_plane(args: argparse.Namespace) -> None:
     from olive.fleet.control_plane import build_control_plane_app
     from olive.fleet.registry import GatewayRegistry
 
-    ca_pubkey = Path(args.ca_pubkey).read_bytes()
+    ca_pubkey = Path(args.ca_pubkey).read_bytes()  # noqa: ASYNC240 - startup, before serving
     policies_dir = Path(args.policies_dir) if args.policies_dir else Path("policies")
     db_path = args.db
 
@@ -899,7 +899,7 @@ async def _run_control_plane(args: argparse.Namespace) -> None:
 
 def run_ca(args: argparse.Namespace) -> int:
     """Drive the `olive ca` subcommands — CA key management and token issuance."""
-    from olive.identity.ca import CertificateAuthority, default_ca_dir
+    from olive.identity.ca import CertificateAuthority
 
     ca_dir = Path(args.ca_dir) if getattr(args, "ca_dir", None) else None
 
@@ -967,7 +967,9 @@ def main() -> None:
     ca_init = ca_sub.add_parser("init", help="generate a new RSA-2048 CA keypair")
     ca_init.add_argument("--dir", **_ca_dir_kwargs)
 
-    ca_pubkey = ca_sub.add_parser("pubkey", help="print the path to the CA public key (for --ca-pubkey)")
+    ca_pubkey = ca_sub.add_parser(
+        "pubkey", help="print the path to the CA public key (for --ca-pubkey)"
+    )
     ca_pubkey.add_argument("--dir", **_ca_dir_kwargs)
 
     ca_issue = ca_sub.add_parser("issue", help="issue a signed RS256 bearer token for an agent")
