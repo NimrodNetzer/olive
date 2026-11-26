@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 # license intentionally unset - business posture deferred, see ADR-0003
 dependencies = [
-    "mcp>=1.2.0",          # official MCP SDK - the protocol we proxy (ADR-0001)
+    "mcp>=1.2.0,<2",       # official MCP SDK - the protocol we proxy (ADR-0001); 2.x renames result fields
     "aiosqlite>=0.20",     # async audit store (ADR-0004)
     "pyyaml>=6.0",         # policy-as-code files
     "pyjwt[crypto]>=2.8",  # mock-CA RS256 agent identity tokens
